@@ -9,7 +9,7 @@ RUN npm ci
 
 COPY . .
 RUN npx prisma generate
-RUN npm run build
+RUN npm run build && test -f dist/main.js || (echo "ERROR: dist/main.js not produced by build" && exit 1)
 
 # ---- runtime ----
 FROM node:20-alpine
