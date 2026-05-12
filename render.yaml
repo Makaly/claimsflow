@@ -120,6 +120,10 @@ services:
         source: /*
         destination: /index.html
     envVars:
+      # Pin the Node runtime — lockfileVersion 3 requires npm >=7 (Node >=16)
+      # Using Node 20 LTS to match local dev and Dockerfile.
+      - key: NODE_VERSION
+        value: 20.19.4
       # Points the React app at the backend — baked in at build time
       - key: VITE_API_URL
         value: https://claimsflow-backend.onrender.com/api
