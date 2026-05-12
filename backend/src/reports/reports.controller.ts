@@ -71,4 +71,42 @@ export class ReportsController {
   ) {
     return this.reportsService.getProviderPerformance(dateFrom, dateTo);
   }
+
+  @Get('provider-scorecard')
+  getProviderScorecard(
+    @Query('providerId') providerId?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.reportsService.getProviderScorecard(providerId, dateFrom, dateTo);
+  }
+
+  @Get('aging')
+  getAgingReport(@Query('stage') stage?: string) {
+    return this.reportsService.getAgingReport(stage);
+  }
+
+  @Get('cross-provider-duplicates')
+  getCrossProviderDuplicates(
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.reportsService.getCrossProviderDuplicates(dateFrom, dateTo);
+  }
+
+  @Get('fraud-summary')
+  getFraudSummary(
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.reportsService.getFraudSummary(dateFrom, dateTo);
+  }
+
+  @Get('processing-time')
+  getProcessingTime(
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.reportsService.getProcessingTime(dateFrom, dateTo);
+  }
 }

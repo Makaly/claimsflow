@@ -1,9 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
+import { EmailService } from '../notifications/email.service';
 
 @Injectable()
 export class ReportsService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(ReportsService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private emailService: EmailService,
+  ) {}
 
   // ── Claims Volume ──────────────────────────────────────────────
   async getClaimsVolume(dateFrom?: string, dateTo?: string, groupBy: string = 'day') {
@@ -223,6 +230,264 @@ export class ReportsService {
       if (dateTo) where[field].lte = new Date(dateTo + 'T23:59:59');
     }
     return where;
+  }
+
+  // ── Provider Performance Scorecard ────────────────────────────
+  async getProviderScorecard(providerId?: string, dateFrom?: string, dateTo?: string) {
+    const where = this.buildDateFilter(dateFrom, dateTo);
+    const providerFilter = providerId ? { id: providerId } : { isActive: true };
+
+    const providers = await this.prisma.provider.findMany({
+      where: providerFilter,
+      select: {
+        id: true, name: true, type: true,
+        claims: {
+          where,
+          select: {
+            status: true, invoiceAmount: true, ocrConfidence: true,
+            isComplete: true, resubmissionCount: true,
+            fraudSignals: true, submittedAt: true, approvedAt: true,
+          },
+        },
+      },
+    });
+
+    return providers.map((p) => {
+      const claims = p.claims;
+      const total = claims.length;
+      if (total === 0) return null;
+      const approved = claims.filter(c => c.status === 'approved' || c.status === 'paid').length;
+      const rejected = claims.filter(c => c.status === 'rejected').length;
+      const decided = approved + rejected;
+      const incomplete = claims.filter(c => !c.isComplete).length;
+      const resubmitted = claims.filter(c => c.resubmissionCount > 0).length;
+      const withFraud = claims.filter(c => Array.isArray(c.fraudSignals) && (c.fraudSignals as any[]).length > 0).length;
+      const totalAmount = claims.reduce((s, c) => s + (c.invoiceAmount || 0), 0);
+      const approvalRate = decided > 0 ? +(approved / decided * 100).toFixed(1) : 0;
+      const fraudRate = total > 0 ? +(withFraud / total * 100).toFixed(1) : 0;
+      const incompleteRate = total > 0 ? +(incomplete / total * 100).toFixed(1) : 0;
+      const resubmissionRate = total > 0 ? +(resubmitted / total * 100).toFixed(1) : 0;
+      // Score: 0-100; penalise fraud and incompleteness, reward approval rate
+      const score = Math.max(0, Math.min(100, Math.round(
+        approvalRate * 0.5 - fraudRate * 2 - incompleteRate * 0.3 - resubmissionRate * 0.2 + 50,
+      )));
+      return {
+        providerId: p.id, providerName: p.name, providerType: p.type,
+        totalClaims: total, approved, rejected, approvalRate, totalAmount: +totalAmount.toFixed(2),
+        fraudRate, incompleteRate, resubmissionRate, score,
+        riskLevel: fraudRate > 15 ? 'high' : fraudRate > 8 ? 'medium' : 'low',
+      };
+    }).filter(Boolean).sort((a, b) => b!.score - a!.score);
+  }
+
+  // ── Aging Report ───────────────────────────────────────────────
+  async getAgingReport(stage?: string) {
+    const now = new Date();
+    const where: any = { status: { notIn: ['approved', 'paid', 'rejected'] } };
+    if (stage) where.workflowStage = stage;
+
+    const claims = await this.prisma.claim.findMany({
+      where,
+      include: {
+        provider: { select: { name: true } },
+        assignedUser: { select: { name: true } },
+      },
+      orderBy: { submittedAt: 'asc' },
+    });
+
+    const buckets: Record<string, number> = { '0-24h': 0, '1-2d': 0, '2-5d': 0, '5d+': 0 };
+    const stageBreakdown: Record<string, { count: number; breached: number }> = {};
+
+    const rows = claims.map((c) => {
+      const hours = (now.getTime() - new Date(c.submittedAt).getTime()) / 3_600_000;
+      const days = hours / 24;
+      if (hours < 24) buckets['0-24h']++;
+      else if (days < 2) buckets['1-2d']++;
+      else if (days < 5) buckets['2-5d']++;
+      else buckets['5d+']++;
+
+      if (!stageBreakdown[c.workflowStage]) stageBreakdown[c.workflowStage] = { count: 0, breached: 0 };
+      stageBreakdown[c.workflowStage].count++;
+      if (c.slaBreached) stageBreakdown[c.workflowStage].breached++;
+
+      return {
+        claimId: c.id, claimNumber: c.claimNumber,
+        providerName: c.provider?.name ?? 'Unknown',
+        assignedTo: c.assignedUser?.name ?? 'Unassigned',
+        workflowStage: c.workflowStage,
+        hoursElapsed: Math.round(hours),
+        daysElapsed: +days.toFixed(1),
+        slaBreached: c.slaBreached,
+        submittedAt: c.submittedAt,
+        invoiceAmount: c.invoiceAmount,
+      };
+    });
+
+    return { buckets, stageBreakdown, claims: rows, total: rows.length };
+  }
+
+  // ── Cross-Provider Duplicate Detection ────────────────────────
+  async getCrossProviderDuplicates(dateFrom?: string, dateTo?: string) {
+    const where = this.buildDateFilter(dateFrom, dateTo);
+    const claims = await this.prisma.claim.findMany({
+      where: { ...where, invoiceNumber: { not: null } },
+      select: {
+        id: true, claimNumber: true, invoiceNumber: true,
+        memberNumber: true, invoiceAmount: true, dateOfService: true,
+        providerId: true, provider: { select: { name: true } },
+        status: true, submittedAt: true,
+      },
+    });
+
+    const groups: Record<string, typeof claims> = {};
+    for (const c of claims) {
+      const key = `${c.invoiceNumber}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(c);
+    }
+
+    const duplicates = Object.values(groups)
+      .filter(g => g.length > 1 && new Set(g.map(c => c.providerId)).size > 1)
+      .map(g => ({
+        invoiceNumber: g[0].invoiceNumber,
+        count: g.length,
+        providerCount: new Set(g.map(c => c.providerId)).size,
+        totalAmount: g.reduce((s, c) => s + (c.invoiceAmount ?? 0), 0),
+        claims: g,
+      }));
+
+    return { duplicates, total: duplicates.length };
+  }
+
+  // ── Data Retention Automation (G23/G24) ───────────────────────
+  @Cron('0 2 * * *') // daily at 02:00
+  async runRetentionCleanup() {
+    // ── G23: Activity log purge ──────────────────────────────────
+    const logRetentionCfg = await this.prisma.systemConfig.findUnique({ where: { key: 'log_retention_days' } });
+    const logRetentionDays = logRetentionCfg ? parseInt(logRetentionCfg.value, 10) : 730;
+    const logCutoff = new Date(Date.now() - logRetentionDays * 86_400_000);
+
+    const { count: deletedLogs } = await this.prisma.activityLog.deleteMany({
+      where: { createdAt: { lt: logCutoff } },
+    });
+
+    // ── G24: Claim purge-request flagging ────────────────────────
+    const claimRetentionCfg = await this.prisma.systemConfig.findUnique({ where: { key: 'claim_retention_days' } });
+    const claimRetentionDays = claimRetentionCfg ? parseInt(claimRetentionCfg.value, 10) : 2555; // 7 years
+    const claimCutoff = new Date(Date.now() - claimRetentionDays * 86_400_000);
+
+    const agingClaims = await this.prisma.claim.findMany({
+      where: {
+        createdAt: { lt: claimCutoff },
+        status: { in: ['paid', 'rejected'] },
+      },
+      select: { id: true },
+    });
+
+    let purgeRequestsCreated = 0;
+    for (const claim of agingClaims) {
+      // Only create if no existing purge request for this claim
+      const existing = await this.prisma.purgeRequest.findFirst({
+        where: {
+          sourceDocumentIds: { array_contains: claim.id },
+        },
+      });
+      if (!existing) {
+        await this.prisma.purgeRequest.create({
+          data: {
+            sourceDocumentIds: [claim.id],
+            reason: `Automated: claim older than ${claimRetentionDays} days`,
+            requestedBy: 'system',
+            status: 'pending',
+          },
+        });
+        purgeRequestsCreated++;
+      }
+    }
+
+    this.logger.log(
+      `Retention cleanup: deleted ${deletedLogs} activity log(s) older than ${logRetentionDays}d; created ${purgeRequestsCreated} purge request(s) for claims older than ${claimRetentionDays}d`,
+    );
+  }
+
+  // ── Scheduled Report Delivery ──────────────────────────────────
+  @Cron('0 6 * * *') // daily at 06:00
+  async runScheduledReports() {
+    const reports = await this.prisma.report.findMany({
+      where: { isScheduled: true, isActive: true },
+    });
+
+    for (const report of reports) {
+      try {
+        const data = await this.executeReport(report.type, report.parameters as any);
+        const execution = await this.prisma.reportExecution.create({
+          data: { reportId: report.id, status: 'running', executedBy: 'system' },
+        });
+        await this.prisma.reportExecution.update({
+          where: { id: execution.id },
+          data: { status: 'completed', completedAt: new Date(), rowCount: Array.isArray(data) ? data.length : 0 },
+        });
+        await this.prisma.report.update({ where: { id: report.id }, data: { lastRunAt: new Date() } });
+
+        // Email recipients
+        for (const email of (report.recipients || [])) {
+          this.emailService.sendEmail(
+            email,
+            `Scheduled Report: ${report.name}`,
+            `Your scheduled report "${report.name}" has been generated. Summary:\n${JSON.stringify(data, null, 2).slice(0, 500)}...`,
+          ).catch(() => {});
+        }
+      } catch (e: any) {
+        this.logger.error(`Scheduled report ${report.id} failed: ${e.message}`);
+        await this.prisma.reportExecution.create({
+          data: { reportId: report.id, status: 'failed', completedAt: new Date(), error: e.message, executedBy: 'system' },
+        });
+      }
+    }
+  }
+
+  private async executeReport(type: string, params?: any) {
+    switch (type) {
+      case 'claims_volume': return this.getClaimsVolume(params?.dateFrom, params?.dateTo);
+      case 'approvals_rejections': return this.getApprovalsRejections(params?.dateFrom, params?.dateTo);
+      case 'provider_performance': return this.getProviderPerformance(params?.dateFrom, params?.dateTo);
+      case 'fraud_summary': return this.getFraudSummary(params?.dateFrom, params?.dateTo);
+      case 'aging': return this.getAgingReport();
+      default: return [];
+    }
+  }
+
+  async getFraudSummary(dateFrom?: string, dateTo?: string) {
+    const where: any = { status: { in: ['fraud_hold', 'fraud_confirmed'] } };
+    if (dateFrom || dateTo) {
+      where.createdAt = {};
+      if (dateFrom) where.createdAt.gte = new Date(dateFrom);
+      if (dateTo)   where.createdAt.lte = new Date(dateTo);
+    }
+    const [total, confirmed, onHold] = await Promise.all([
+      this.prisma.claim.count({ where }),
+      this.prisma.claim.count({ where: { ...where, status: 'fraud_confirmed' } }),
+      this.prisma.claim.count({ where: { ...where, status: 'fraud_hold' } }),
+    ]);
+    return { total, confirmed, onHold };
+  }
+
+  async getProcessingTime(dateFrom?: string, dateTo?: string) {
+    const where: any = { status: 'approved' };
+    if (dateFrom || dateTo) {
+      where.createdAt = {};
+      if (dateFrom) where.createdAt.gte = new Date(dateFrom);
+      if (dateTo)   where.createdAt.lte = new Date(dateTo);
+    }
+    const claims = await this.prisma.claim.findMany({
+      where,
+      select: { createdAt: true, updatedAt: true },
+      take: 500,
+    });
+    const avgMs = claims.length
+      ? claims.reduce((s, c) => s + (c.updatedAt.getTime() - c.createdAt.getTime()), 0) / claims.length
+      : 0;
+    return { averageDays: +(avgMs / 86_400_000).toFixed(1), sampleSize: claims.length };
   }
 
   private formatDateKey(date: Date, groupBy: string): string {
