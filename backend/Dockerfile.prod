@@ -5,7 +5,7 @@ WORKDIR /app
 RUN apk add --no-cache python3 make g++ tesseract-ocr openssl
 
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --legacy-peer-deps
 
 COPY . .
 RUN npx prisma generate
@@ -22,7 +22,7 @@ WORKDIR /app
 RUN apk add --no-cache tesseract-ocr openssl
 
 COPY package*.json ./
-RUN npm install --omit=dev
+RUN npm install --omit=dev --legacy-peer-deps
 
 # Copy compiled output and generated Prisma client from builder
 COPY --from=builder /app/dist ./dist
