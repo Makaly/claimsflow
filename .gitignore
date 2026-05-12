@@ -13,6 +13,9 @@ build/
 dist/
 dist-ssr/
 
+# TypeScript incremental build cache
+*.tsbuildinfo
+
 # Misc
 .DS_Store
 *.pem
@@ -35,3 +38,6 @@ uploaded_files/
 # Database
 *.db
 *.sqlite
+
+# Local Claude/agent harness state
+.claude/
