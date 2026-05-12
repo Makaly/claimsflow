@@ -7,6 +7,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-05-12
+
 ### Added
 
 - **CODEOWNERS** (`.github/CODEOWNERS`) for default-reviewer routing.
@@ -28,6 +30,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - README badges now reflect live CI / CodeQL status and the latest
   release tag instead of hard-coded shields.
+- **Redis eviction policy** changed from `allkeys-lru` to `noeviction`
+  in `render.yaml`. BullMQ requires `noeviction` — any other policy
+  risks silently discarding queued jobs under memory pressure, which
+  causes batch submissions and email notifications to vanish without
+  error traces.
 
 ### Fixed
 
@@ -308,7 +315,9 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Completeness validation.
 - 15 frontend pages and 50+ API endpoints.
 
-[Unreleased]: https://github.com/Makaly/claimsflow/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/Makaly/claimsflow/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/Makaly/claimsflow/compare/v1.4.0...v1.5.0
+[1.4.0]: https://github.com/Makaly/claimsflow/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/Makaly/claimsflow/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/Makaly/claimsflow/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Makaly/claimsflow/compare/v1.0.0...v1.1.0

@@ -9,7 +9,7 @@ services:
   - type: redis
     name: claimsflow-redis
     plan: free
-    maxmemoryPolicy: allkeys-lru
+    maxmemoryPolicy: noeviction
 
   # ── Backend API (NestJS) ───────────────────────────────────────────────────
   - type: web
