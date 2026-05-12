@@ -41,3 +41,4 @@ uploaded_files/
 
 # Local Claude/agent harness state
 .claude/
+site/
