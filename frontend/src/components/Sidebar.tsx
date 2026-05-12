@@ -5,7 +5,7 @@ import {
   UserCheck, UserCog, Users, Activity, BarChart3, Shield,
   Settings, ChevronLeft, ChevronRight, Network, AlertOctagon,
   KeyRound, ShieldCheck, FileQuestion, Scale, CreditCard, Clock, SlidersHorizontal,
-  ScanLine,
+  ScanLine, Database,
 } from 'lucide-react'
 import { useUnknownDocCount } from '@/hooks/useUnknownDocCount'
 import { cn } from '@/lib/utils'
@@ -59,6 +59,7 @@ const navigation: NavItem[] = [
   { name: 'Permissions', href: '/permissions', icon: KeyRound, roles: ['admin', 'supervisor'] },
   { name: 'Policy Plans', href: '/policy-plans', icon: Shield, roles: ['admin', 'supervisor'] },
   { name: 'Activity Logs', href: '/activity-logs', icon: Activity, roles: ['admin', 'supervisor'] },
+  { name: 'ML Labelling', href: '/ml-labelling', icon: Database, roles: ['admin', 'supervisor', 'fraud_officer'] },
   { name: 'Reports', href: '/reports', icon: BarChart3, roles: ['admin', 'supervisor'] },
   { name: 'Provider Scorecard', href: '/provider-scorecard', icon: BarChart3, roles: ['admin', 'supervisor'] },
   { name: 'Unknown Docs', href: '/unknown-documents', icon: FileQuestion, roles: ['admin', 'supervisor'] },

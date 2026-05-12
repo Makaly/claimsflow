@@ -39,6 +39,7 @@ import DocumentClassifierEditor from '@/pages/DocumentClassifierEditor'
 import UnknownDocuments from '@/pages/UnknownDocuments'
 import ScanStation from '@/pages/ScanStation'
 import PolicyPlans from '@/pages/PolicyPlans'
+import MLLabelling from '@/pages/MLLabelling'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -142,6 +143,7 @@ function AppRoutes() {
         <Route path="/pre-auth" element={<ProtectedRoute><PreAuth /></ProtectedRoute>} />
         <Route path="/scan-station" element={<ProtectedRoute allowedRoles={['admin','supervisor','claims_officer','checker']}><ScanStation /></ProtectedRoute>} />
         <Route path="/policy-plans" element={<ProtectedRoute allowedRoles={['admin','supervisor']}><PolicyPlans /></ProtectedRoute>} />
+        <Route path="/ml-labelling" element={<ProtectedRoute allowedRoles={['admin','supervisor','fraud_officer']}><MLLabelling /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
