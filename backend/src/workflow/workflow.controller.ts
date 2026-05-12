@@ -12,9 +12,11 @@ import { WorkflowService } from './workflow.service';
 import { MakerCheckerService } from './maker-checker.service';
 import { CompletenessValidationService } from './completeness-validation.service';
 import { AssignmentService } from './assignment.service';
+import { SlaService } from './sla.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Controller('workflow')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -25,6 +27,8 @@ export class WorkflowController {
     private makerCheckerService: MakerCheckerService,
     private completenessService: CompletenessValidationService,
     private assignmentService: AssignmentService,
+    private slaService: SlaService,
+    private prisma: PrismaService,
   ) {}
 
   // Workflow Statistics
@@ -230,5 +234,92 @@ export class WorkflowController {
       limit ? parseInt(limit, 10) : undefined,
       offset ? parseInt(offset, 10) : undefined,
     );
+  }
+
+  // SLA endpoints
+  @Get('sla/summary')
+  async getSlaSummary() {
+    return this.slaService.getSlaSummary();
+  }
+
+  @Get('sla/aging')
+  async getAgingReport() {
+    return this.slaService.getAgingReport();
+  }
+
+  // Bulk actions
+  @Post('bulk/assign')
+  @Roles('admin', 'supervisor')
+  async bulkAssign(@Body() body: { claimIds: string[]; assigneeId: string }, @Request() req) {
+    const results: any[] = [];
+    for (const claimId of body.claimIds) {
+      try {
+        const result = await this.makerCheckerService.assignToMaker(claimId, body.assigneeId, req.user.userId);
+        results.push({ claimId, success: true, claim: result });
+      } catch (e: any) {
+        results.push({ claimId, success: false, error: e.message });
+      }
+    }
+    return { results, succeeded: results.filter(r => r.success).length, failed: results.filter(r => !r.success).length };
+  }
+
+  @Post('bulk/approve-maker')
+  @Roles('admin', 'supervisor', 'claims_officer')
+  async bulkMakerApprove(@Body() body: { claimIds: string[]; comments?: string }, @Request() req) {
+    const results: any[] = [];
+    for (const claimId of body.claimIds) {
+      try {
+        const result = await this.makerCheckerService.makerApprove(claimId, req.user.userId, body.comments);
+        results.push({ claimId, success: true, claim: result });
+      } catch (e: any) {
+        results.push({ claimId, success: false, error: e.message });
+      }
+    }
+    return { results, succeeded: results.filter(r => r.success).length, failed: results.filter(r => !r.success).length };
+  }
+
+  @Post('bulk/approve-checker')
+  @Roles('admin', 'supervisor', 'checker')
+  async bulkCheckerApprove(@Body() body: { claimIds: string[]; comments?: string }, @Request() req) {
+    const results: any[] = [];
+    for (const claimId of body.claimIds) {
+      try {
+        const result = await this.makerCheckerService.checkerApprove(claimId, req.user.userId, body.comments);
+        results.push({ claimId, success: true, claim: result });
+      } catch (e: any) {
+        results.push({ claimId, success: false, error: e.message });
+      }
+    }
+    return { results, succeeded: results.filter(r => r.success).length, failed: results.filter(r => !r.success).length };
+  }
+
+  @Post('bulk/reject')
+  @Roles('admin', 'supervisor', 'claims_officer', 'checker')
+  async bulkReject(@Body() body: { claimIds: string[]; reason: string; stage: 'maker' | 'checker' }, @Request() req) {
+    const results: any[] = [];
+    for (const claimId of body.claimIds) {
+      try {
+        let result: any;
+        if (body.stage === 'checker') {
+          result = await this.makerCheckerService.checkerReject(claimId, req.user.userId, body.reason);
+        } else {
+          result = await this.makerCheckerService.makerReject(claimId, req.user.userId, body.reason);
+        }
+        results.push({ claimId, success: true, claim: result });
+      } catch (e: any) {
+        results.push({ claimId, success: false, error: e.message });
+      }
+    }
+    return { results, succeeded: results.filter(r => r.success).length, failed: results.filter(r => !r.success).length };
+  }
+
+  @Post('bulk/assign-to-me')
+  @Roles('admin', 'supervisor', 'claims_officer', 'checker')
+  async bulkAssignToMe(@Body() body: { claimIds: string[] }, @Request() req) {
+    const updates = await this.prisma.claim.updateMany({
+      where: { id: { in: body.claimIds } },
+      data: { assignedTo: req.user.userId },
+    });
+    return { assigned: updates.count };
   }
 }
