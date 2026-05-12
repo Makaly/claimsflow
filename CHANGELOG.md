@@ -59,6 +59,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **Swagger packages missing in production image** — `@nestjs/swagger`
+  and `swagger-ui-express` are imported at boot by `src/main.ts`, but
+  they were declared in `devDependencies`, so the runtime Docker stage
+  (`npm install --omit=dev`) dropped them and the container crashed
+  with `MODULE_NOT_FOUND`. Moved both to `dependencies` and refreshed
+  the lockfile.
 - **Production deploy failure** — `prisma` CLI was in `devDependencies` and
   the runtime Docker stage runs `npm install --omit=dev`, which dropped it.
   At startup `npx prisma migrate deploy` fell back to downloading the
