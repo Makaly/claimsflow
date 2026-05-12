@@ -1,0 +1,15 @@
+{
+  "name": "ClaimsFlow — CIC Insurance",
+  "short_name": "ClaimsFlow",
+  "description": "Medical claims automation platform for CIC Insurance Group",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#1a56db",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/favicon.ico", "sizes": "64x64", "type": "image/x-icon" },
+    { "src": "/favicon.ico", "sizes": "192x192", "type": "image/x-icon" },
+    { "src": "/favicon.ico", "sizes": "512x512", "type": "image/x-icon" }
+  ]
+}
