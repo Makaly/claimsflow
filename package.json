@@ -1,0 +1,8 @@
+{
+  "name": "claimsflow",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "cd frontend && npm ci && npm run build && cp -r dist .."
+  }
+}
