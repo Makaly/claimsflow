@@ -29,5 +29,6 @@ COPY prisma ./prisma
 
 EXPOSE 4000
 
-# Run migrations then start
-CMD npx prisma migrate deploy && node dist/main
+# Resolve any previously-failed migration marker, then apply all pending
+# migrations and start. The resolve is a no-op once the migration succeeds.
+CMD npx prisma migrate resolve --rolled-back 20260423220000_add_claim_branch 2>/dev/null || true && npx prisma migrate deploy && node dist/main
