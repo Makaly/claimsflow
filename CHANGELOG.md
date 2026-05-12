@@ -7,6 +7,18 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+
+- **Health-check 429 / cold-start oscillation** — `/api/health` is now
+  decorated with `@SkipThrottle()` so Render's edge probes don't count
+  against the 120 req/min global throttler. Symptom was alternating
+  "Instance failed (HTTP 429)" / "Service recovered" events on Render
+  every few minutes, with the browser seeing intermittent 502s during
+  the kill-and-replace window. Probes share a small egress IP pool with
+  the keep-warm workflow; together they trip the limiter, return 429,
+  and Render marks the instance unhealthy. Exempting the probe breaks
+  the cycle without weakening rate limits on real traffic.
+
 ## [1.5.0] - 2026-05-12
 
 ### Added
