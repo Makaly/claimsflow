@@ -76,7 +76,13 @@ export function useWebSocket() {
       window.location.origin
     const origin = rawApiBase.replace(/\/api\/?$/, '')
 
-    const socket = io(`${origin}/events`, {
+    // When VITE_API_URL is a relative path (e.g. "/api") the origin strip
+    // produces an empty string. io("") / io("/events") both connect to the
+    // current window origin, which is correct when a same-origin proxy is
+    // in place (Render static-site rewrites or Vite dev proxy).
+    const socketUrl = origin || window.location.origin
+
+    const socket = io(`${socketUrl}/events`, {
       auth: fallbackToken ? { token: fallbackToken } : undefined,
       withCredentials: true,
       // Start with polling (works through every proxy / free-tier edge) and
@@ -84,8 +90,14 @@ export function useWebSocket() {
       // order means a single WS upgrade failure breaks the entire socket
       // instead of silently degrading.
       transports: ['polling', 'websocket'],
-      reconnectionAttempts: 5,
-      reconnectionDelay: 2000,
+      // Render free-tier cold-start takes up to 60 s — use exponential
+      // backoff so a sleeping backend doesn't flood the console with 502s.
+      // Factor 1.5: 3 s → 4.5 s → 6.75 s … capped at 30 s.
+      reconnectionAttempts: 10,
+      reconnectionDelay: 3000,
+      reconnectionDelayMax: 30000,
+      randomizationFactor: 0.3,
+      timeout: 20000,
     })
 
     socketRef.current = socket
