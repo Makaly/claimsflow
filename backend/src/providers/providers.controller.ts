@@ -29,6 +29,21 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 
+/** MIME types accepted for provider proof and onboarding documents. */
+const ALLOWED_DOC_MIMES = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/tiff',
+]);
+
+function docFileFilter(_req: any, file: Express.Multer.File, cb: any) {
+  if (!ALLOWED_DOC_MIMES.has(file.mimetype)) {
+    return cb(new Error('Only PDF, JPEG, PNG and TIFF files are accepted'), false);
+  }
+  cb(null, true);
+}
+
 const proofStorage = diskStorage({
   destination: (_req, _file, cb) => {
     const dir = join(process.cwd(), 'uploads', 'provider-proofs');
@@ -174,7 +189,7 @@ export class ProvidersController {
   @Post('self-service/proof-document')
   @UseGuards(RolesGuard)
   @Roles('provider_admin')
-  @UseInterceptors(FileInterceptor('proofDocument', { storage: proofStorage }))
+  @UseInterceptors(FileInterceptor('proofDocument', { storage: proofStorage, fileFilter: docFileFilter }))
   async uploadSelfProofDocument(
     @Request() req,
     @UploadedFile() file: Express.Multer.File,
@@ -221,7 +236,7 @@ export class ProvidersController {
   @Post('self-service/onboarding-document')
   @UseGuards(RolesGuard)
   @Roles('provider_admin')
-  @UseInterceptors(FileInterceptor('file', { storage: onboardingStorage }))
+  @UseInterceptors(FileInterceptor('file', { storage: onboardingStorage, fileFilter: docFileFilter }))
   async uploadOnboardingDocument(
     @Request() req,
     @Body('category') category: string,
@@ -306,7 +321,7 @@ export class ProvidersController {
   @Post()
   @UseGuards(RolesGuard)
   @Roles('admin', 'supervisor')
-  @UseInterceptors(FileInterceptor('proofDocument', { storage: proofStorage }))
+  @UseInterceptors(FileInterceptor('proofDocument', { storage: proofStorage, fileFilter: docFileFilter }))
   create(
     @Body() body: CreateProviderDto,
     @UploadedFile() file?: Express.Multer.File,
@@ -363,7 +378,7 @@ export class ProvidersController {
   @Patch(':id')
   @UseGuards(RolesGuard)
   @Roles('admin', 'supervisor')
-  @UseInterceptors(FileInterceptor('proofDocument', { storage: proofStorage }))
+  @UseInterceptors(FileInterceptor('proofDocument', { storage: proofStorage, fileFilter: docFileFilter }))
   update(
     @Param('id') id: string,
     @Body() updateProviderDto: UpdateProviderDto,

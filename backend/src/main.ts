@@ -1,5 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import helmet from 'helmet';
+import * as cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 
 // Allow BigInt values in JSON responses (Prisma returns BigInt for size fields)
@@ -8,6 +10,26 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Security headers — must be applied before CORS and body parsers
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'blob:'],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+  }));
+
+  // Cookie parser — required for HttpOnly JWT cookie extraction
+  app.use(cookieParser());
+
   // Increase JSON body limit so profile updates with avatarUrl base64 don't 413
   app.use(require('express').json({ limit: '10mb' }))
   app.use(require('express').urlencoded({ limit: '10mb', extended: true }))
@@ -15,19 +37,16 @@ async function bootstrap() {
   // Global prefix
   app.setGlobalPrefix(process.env.API_PREFIX || 'api');
 
-  // CORS
-  const allowedOrigin = process.env.FRONTEND_URL; // e.g. https://claimsflow-frontend.onrender.com
+  // CORS — only allow explicitly whitelisted origins
+  const allowedOrigin = process.env.FRONTEND_URL;
+  const isDev = process.env.NODE_ENV !== 'production';
   app.enableCors({
     origin: (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => {
-      // Allow no-origin requests (curl/Postman), localhost (dev), and the
-      // configured production frontend URL.
-      if (
-        !origin ||
-        /^https?:\/\/localhost(:\d+)?$/.test(origin) ||
-        (allowedOrigin && origin === allowedOrigin)
-      ) {
-        return cb(null, true);
-      }
+      // In production: only allow the configured frontend URL.
+      // In development: also allow localhost on any port.
+      if (!origin) return cb(null, true); // curl/Postman/server-to-server
+      if (isDev && /^https?:\/\/localhost(:\d+)?$/.test(origin)) return cb(null, true);
+      if (allowedOrigin && origin === allowedOrigin) return cb(null, true);
       cb(new Error(`CORS: origin ${origin} not allowed`));
     },
     credentials: true,
@@ -49,6 +68,6 @@ async function bootstrap() {
   server.setTimeout(600_000);          // 10 min
   server.keepAliveTimeout = 610_000;
   server.headersTimeout   = 620_000;
-  console.log(`Application is running on: http://localhost:${port}`);
+  console.log(`Application is running on port ${port}`);
 }
 bootstrap();

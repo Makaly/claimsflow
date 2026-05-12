@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { getRedisConnection } from './config/redis.config';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_INTERCEPTOR, APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { CommonModule } from './common/common.module';
@@ -23,12 +24,21 @@ import { BranchesModule } from './branches/branches.module';
 import { ReportsModule } from './reports/reports.module';
 import { RbacModule } from './rbac/rbac.module';
 import { DocumentClassifierModule } from './document-classifier/document-classifier.module';
+import { AppealsModule } from './appeals/appeals.module';
+import { PaymentModule } from './payment/payment.module';
+import { SystemConfigModule } from './system-config/system-config.module';
+import { PreAuthModule } from './preauth/preauth.module';
+import { PolicyModule } from './policy/policy.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    ThrottlerModule.forRoot([
+      { name: 'global', ttl: 60_000, limit: 120 },   // 120 req/min baseline for all routes
+      { name: 'auth',   ttl: 60_000, limit: 10  },   // 10 req/min for auth endpoints
+    ]),
     ScheduleModule.forRoot(),
     BullModule.forRoot({
       connection: getRedisConnection(),
@@ -53,6 +63,11 @@ import { DocumentClassifierModule } from './document-classifier/document-classif
     ReportsModule,
     RbacModule,
     DocumentClassifierModule,
+    AppealsModule,
+    PaymentModule,
+    SystemConfigModule,
+    PreAuthModule,
+    PolicyModule,
   ],
   controllers: [AppController],
   providers: [
@@ -60,6 +75,10 @@ import { DocumentClassifierModule } from './document-classifier/document-classif
     {
       provide: APP_INTERCEPTOR,
       useClass: ActivityLoggingInterceptor,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
     },
   ],
 })

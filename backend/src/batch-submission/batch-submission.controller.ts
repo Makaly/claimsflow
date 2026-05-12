@@ -39,8 +39,10 @@ export class BatchSubmissionController {
         fileSize: parseInt(process.env.MAX_FILE_SIZE) || 10485760, // 10MB per file
         files: 100, // Max 100 files per batch
       },
-      fileFilter: (req, file, cb) => {
-        if (!file.originalname.match(/\.pdf$/i)) {
+      fileFilter: (_req, file, cb) => {
+        const extOk = /\.pdf$/i.test(file.originalname);
+        const mimeOk = file.mimetype === 'application/pdf';
+        if (!extOk || !mimeOk) {
           return cb(new BadRequestException('Only PDF files are allowed'), false);
         }
         cb(null, true);
@@ -139,8 +141,10 @@ export class BatchSubmissionController {
         fileSize: parseInt(process.env.MAX_FILE_SIZE) || 10485760,
         files: 100,
       },
-      fileFilter: (req, file, cb) => {
-        if (!file.originalname.match(/\.pdf$/i)) {
+      fileFilter: (_req, file, cb) => {
+        const extOk = /\.pdf$/i.test(file.originalname);
+        const mimeOk = file.mimetype === 'application/pdf';
+        if (!extOk || !mimeOk) {
           return cb(new BadRequestException('Only PDF files are allowed'), false);
         }
         cb(null, true);
