@@ -1,0 +1,125 @@
+databases:
+  - name: claimsflow-db
+    databaseName: cic_claims
+    user: claimsflow
+    plan: free
+
+services:
+  # ── Redis ──────────────────────────────────────────────────────────────────
+  - type: redis
+    name: claimsflow-redis
+    plan: free
+    maxmemoryPolicy: allkeys-lru
+
+  # ── Backend API (NestJS) ───────────────────────────────────────────────────
+  - type: web
+    name: claimsflow-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile.prod
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      - key: PORT
+        value: 4000
+
+      - key: API_PREFIX
+        value: api
+
+      # Database — auto-wired from managed Postgres
+      - key: DATABASE_URL
+        fromDatabase:
+          name: claimsflow-db
+          property: connectionString
+
+      # Redis — auto-wired from managed Redis
+      - key: REDIS_HOST
+        fromService:
+          name: claimsflow-redis
+          type: redis
+          property: host
+      - key: REDIS_PORT
+        fromService:
+          name: claimsflow-redis
+          type: redis
+          property: port
+      - key: REDIS_PASSWORD
+        fromService:
+          name: claimsflow-redis
+          type: redis
+          property: password
+
+      # Auth — Render generates a random value on first deploy
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+
+      # CORS — must match the frontend service URL
+      - key: FRONTEND_URL
+        value: https://claimsflow-frontend.onrender.com
+
+      # Email (fill in via Render dashboard)
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: 587
+      - key: SMTP_USER
+        sync: false       # set manually in Render dashboard
+      - key: SMTP_PASSWORD
+        sync: false
+      # SMTP_FROM — set to same value as SMTP_USER in Render dashboard
+      - key: SMTP_FROM
+        sync: false
+
+      # File uploads
+      - key: MAX_FILE_SIZE
+        value: 10485760
+      - key: UPLOAD_DIR
+        value: /tmp/uploads   # ephemeral — use object storage for persistence
+
+      # AI / OCR — non-secret config (set keys via Render dashboard)
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-4-6
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: VISION_DEFAULT_PROVIDER
+        value: claude
+      - key: CLASSIFIER_AI_PROVIDER
+        value: auto
+      - key: OCR_USE_PAGE_HINTS
+        value: "true"
+      - key: TESSERACT_LANG
+        value: eng
+      # ANTHROPIC_API_KEY — set manually in Render dashboard
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      # GEMINI_API_KEY — set manually in Render dashboard
+      - key: GEMINI_API_KEY
+        sync: false
+
+  # ── Frontend (React/Vite static site) ─────────────────────────────────────
+  - type: web
+    name: claimsflow-frontend
+    runtime: static
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    rootDir: frontend
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: no-cache
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      # Points the React app at the backend — baked in at build time
+      - key: VITE_API_URL
+        value: https://claimsflow-backend.onrender.com/api

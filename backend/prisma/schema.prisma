@@ -1,0 +1,787 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                    String          @id @default(uuid())
+  email                 String          @unique
+  password              String
+  name                  String
+  role                  String          @default("user")
+  isActive              Boolean         @default(true)
+  requirePasswordChange Boolean         @default(false)
+  lastLogin             DateTime?
+  failedLoginAttempts   Int             @default(0)
+  lockedUntil           DateTime?
+  twoFactorEnabled      Boolean         @default(false)
+  twoFactorSecret       String?
+  phone                 String?
+  jobTitle              String?
+  department            String?
+  location              String?
+  timezone              String?
+  language              String?
+  bio                   String?
+  avatarUrl             String?
+  savedSignatures       Json?           @default("[]")
+  providerId            String?
+  branchId              String?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  createdBy             String?
+  updatedBy             String?
+  activityLogs          ActivityLog[]
+  claimsApproved        ClaimApproval[]
+  claimsAssigned        Claim[]         @relation("ClaimAssignee")
+  claimsCreated         Claim[]         @relation("ClaimCreator")
+  notifications         Notification[]
+  userRoles             UserRole[]
+  provider              Provider?       @relation(fields: [providerId], references: [id])
+
+  @@index([providerId])
+  @@index([email])
+  @@map("users")
+}
+
+model Role {
+  id              String           @id @default(uuid())
+  name            String           @unique
+  displayName     String?
+  description     String?
+  isSystem        Boolean          @default(false)
+  isActive        Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  createdBy       String?
+  updatedBy       String?
+  rolePermissions RolePermission[]
+  userRoles       UserRole[]
+
+  @@index([name])
+  @@map("roles")
+}
+
+model Permission {
+  id              String           @id @default(uuid())
+  name            String           @unique
+  resource        String
+  action          String
+  description     String?
+  isSystem        Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  rolePermissions RolePermission[]
+
+  @@index([resource])
+  @@index([action])
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  roleId       String
+  permissionId String
+  grantedAt    DateTime   @default(now())
+  grantedBy    String?
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  id         String   @id @default(uuid())
+  userId     String
+  roleId     String
+  assignedAt DateTime @default(now())
+  assignedBy String?
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@index([userId])
+  @@index([roleId])
+  @@map("user_roles")
+}
+
+model Provider {
+  id                     String                       @id @default(uuid())
+  name                   String
+  type                   String
+  licenseNumber          String                       @unique
+  contactPerson          String
+  email                  String
+  phone                  String
+  alternatePhone         String?
+  physicalAddress        String
+  city                   String?
+  region                 String?
+  status                 String                       @default("pending")
+  approvalStatus         String                       @default("pending_approval")
+  approvedBy             String?
+  approvedAt             DateTime?
+  rejectionReason        String?
+  parentProviderId       String?
+  invoiceUploaderId      String?
+  companyStructure       String?
+  registrationNumber     String?
+  kraPin                 String?
+  incorporationDate      DateTime?
+  numberOfPartners       Int?
+  ownerName              String?
+  ownerIdNumber          String?
+  proofDocumentPath      String?
+  proofDocumentName      String?
+  isActive               Boolean                      @default(false)
+  canSubmitClaims        Boolean                      @default(false)
+  maxDailySubmissions    Int?                         @default(100)
+  createdAt              DateTime                     @default(now())
+  updatedAt              DateTime                     @updatedAt
+  onboardingSubmittedAt  DateTime?
+  programOfWorksText     String?
+  scopeUnderstanding     String?
+  yearsProvidingServices Int?
+  batchSubmissions       BatchSubmission[]
+  branches_rel           Branch[]
+  claims                 Claim[]
+  providerDocuments      Document[]                   @relation("ProviderDocuments")
+  onboardingDocuments    ProviderOnboardingDocument[]
+  references             ProviderReference[]
+  parentProvider         Provider?                    @relation("ProviderBranches", fields: [parentProviderId], references: [id])
+  branches               Provider[]                   @relation("ProviderBranches")
+  users                  User[]
+
+  @@index([status])
+  @@index([type])
+  @@index([licenseNumber])
+  @@map("providers")
+}
+
+/// Documents a provider uploads during onboarding to satisfy the procurement
+/// spec (items a, b, d, f). Each row is one file tagged with its purpose.
+model ProviderOnboardingDocument {
+  id         String   @id @default(uuid())
+  providerId String
+  category   String
+  fileName   String
+  filePath   String
+  fileSize   Int?
+  mimeType   String?
+  uploadedAt DateTime @default(now())
+  uploadedBy String?
+  provider   Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId])
+  @@index([providerId, category])
+  @@map("provider_onboarding_documents")
+}
+
+/// Reference engagements the provider is offering as proof of similar work
+/// within the last five years (procurement spec item e).
+model ProviderReference {
+  id                  String    @id @default(uuid())
+  providerId          String
+  clientName          String
+  contactPerson       String
+  contactEmail        String?
+  contactPhone        String?
+  servicesProvided    String
+  engagementStartDate DateTime
+  engagementEndDate   DateTime?
+  referenceLetterPath String?
+  referenceLetterName String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  provider            Provider  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId])
+  @@map("provider_references")
+}
+
+model Branch {
+  id                String   @id @default(uuid())
+  code              String   @unique
+  name              String
+  providerId        String
+  region            String?
+  county            String?
+  address           String?
+  phone             String?
+  email             String?
+  contactPerson     String?
+  invoiceUploaderId String?
+  branchManagerId   String?
+  isActive          Boolean  @default(true)
+  isApproved        Boolean  @default(false)
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  provider          Provider @relation(fields: [providerId], references: [id])
+
+  @@index([providerId])
+  @@index([isActive])
+  @@index([isApproved])
+  @@map("branches")
+}
+
+model BatchSubmission {
+  id               String    @id @default(uuid())
+  batchNumber      String    @unique
+  providerId       String
+  submissionMethod String
+  totalClaims      Int       @default(0)
+  totalSize        BigInt    @default(0)
+  status           String    @default("uploading")
+  processedClaims  Int       @default(0)
+  failedClaims     Int       @default(0)
+  uploadedBy       String?
+  ipAddress        String?
+  userAgent        String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  completedAt      DateTime?
+  branchId         String?
+  provider         Provider  @relation(fields: [providerId], references: [id])
+  claims           Claim[]
+
+  @@index([batchNumber])
+  @@index([providerId])
+  @@index([branchId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("batch_submissions")
+}
+
+model Claim {
+  id                    String               @id @default(uuid())
+  claimNumber           String               @unique
+  batchNumber           String?
+  folioNumber           String?
+  barcode               String               @unique
+  providerId            String
+  memberNumber          String?
+  memberName            String?
+  patientName           String?
+  patientId             String?
+  dateOfBirth           DateTime?
+  invoiceNumber         String?
+  invoiceDate           DateTime?
+  invoiceAmount         Float?
+  dateOfService         DateTime?
+  diagnosis             String?
+  treatment             String?
+  procedureCodes        String[]
+  status                String               @default("submitted")
+  workflowStage         String               @default("initial_review")
+  assignedTo            String?
+  priority              String               @default("normal")
+  isRejected            Boolean              @default(false)
+  rejectionReason       String?
+  rejectedAt            DateTime?
+  rejectedBy            String?
+  resubmissionCount     Int                  @default(0)
+  originalClaimId       String?
+  isComplete            Boolean              @default(false)
+  missingDocuments      String[]
+  completenessCheckedAt DateTime?
+  completenessCheckedBy String?
+  ocrStatus             String               @default("pending")
+  ocrConfidence         Float?
+  ocrProcessedAt        DateTime?
+  requiresManualReview  Boolean              @default(false)
+  batchId               String?
+  assignmentStrategy    String?
+  submittedAt           DateTime             @default(now())
+  reviewedAt            DateTime?
+  approvedAt            DateTime?
+  paidAt                DateTime?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  createdBy             String?
+  uploadedBy            String?
+  notes                 String?
+  internalNotes         String?
+  fraudSignals          Json?                @default("[]")
+  annotations           Json?                @default("[]")
+  branchId              String?
+  approvals             ClaimApproval[]
+  emails                ClaimEmail[]
+  statusHistory         ClaimStatusHistory[]
+  assignedUser          User?                @relation("ClaimAssignee", fields: [assignedTo], references: [id])
+  batch                 BatchSubmission?     @relation(fields: [batchId], references: [id])
+  creator               User?                @relation("ClaimCreator", fields: [createdBy], references: [id])
+  provider              Provider             @relation(fields: [providerId], references: [id])
+  documents             Document[]
+  edmsData              EdmsDocument?
+  ocrData               OcrExtraction?
+
+  @@index([claimNumber])
+  @@index([barcode])
+  @@index([providerId])
+  @@index([branchId])
+  @@index([status])
+  @@index([workflowStage])
+  @@index([assignedTo])
+  @@index([submittedAt])
+  @@index([memberNumber])
+  @@map("claims")
+}
+
+model ClaimApproval {
+  id            String   @id @default(uuid())
+  claimId       String
+  level         String
+  approvalStage String
+  approvedBy    String
+  decision      String
+  comments      String?
+  createdAt     DateTime @default(now())
+  approver      User     @relation(fields: [approvedBy], references: [id])
+  claim         Claim    @relation(fields: [claimId], references: [id])
+
+  @@index([claimId])
+  @@index([approvedBy])
+  @@map("claim_approvals")
+}
+
+model ClaimStatusHistory {
+  id         String   @id @default(uuid())
+  claimId    String
+  fromStatus String
+  toStatus   String
+  changedBy  String?
+  reason     String?
+  createdAt  DateTime @default(now())
+  claim      Claim    @relation(fields: [claimId], references: [id])
+
+  @@index([claimId])
+  @@index([createdAt])
+  @@map("claim_status_history")
+}
+
+model Document {
+  id               String               @id @default(uuid())
+  filename         String
+  originalName     String
+  mimetype         String
+  size             BigInt
+  path             String
+  documentType     String?
+  claimId          String?
+  providerId       String?
+  batchNumber      String?
+  folioNumber      String?
+  hasWatermark     Boolean              @default(false)
+  pageCount        Int?
+  isConverted      Boolean              @default(false)
+  originalFormat   String?
+  conversionStatus String?
+  ocrText          String?
+  ocrStatus        String               @default("pending")
+  ocrConfidence    Float?
+  ocrProcessedAt   DateTime?
+  version          Int                  @default(1)
+  parentDocumentId String?
+  isLatestVersion  Boolean              @default(true)
+  hasAnnotations   Boolean              @default(false)
+  annotationsCount Int                  @default(0)
+  metadata         Json?
+  tags             String[]
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  uploadedBy       String?
+  annotations      DocumentAnnotation[]
+  versions         DocumentVersion[]
+  claim            Claim?               @relation(fields: [claimId], references: [id])
+  provider         Provider?            @relation("ProviderDocuments", fields: [providerId], references: [id])
+
+  @@index([claimId])
+  @@index([batchNumber])
+  @@index([documentType])
+  @@index([ocrStatus])
+  @@index([providerId])
+  @@map("documents")
+}
+
+model DocumentAnnotation {
+  id            String    @id @default(uuid())
+  documentId    String
+  type          String
+  pageNumber    Int
+  x             Float
+  y             Float
+  width         Float?
+  height        Float?
+  content       String?
+  color         String?
+  signatureData String?
+  signerName    String?
+  signedAt      DateTime?
+  createdBy     String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  document      Document  @relation(fields: [documentId], references: [id])
+
+  @@index([documentId])
+  @@index([type])
+  @@map("document_annotations")
+}
+
+model DocumentVersion {
+  id                String   @id @default(uuid())
+  documentId        String
+  version           Int
+  changeType        String
+  changeDescription String?
+  filePath          String
+  fileSize          BigInt
+  createdBy         String
+  createdAt         DateTime @default(now())
+  document          Document @relation(fields: [documentId], references: [id])
+
+  @@index([documentId])
+  @@map("document_versions")
+}
+
+model OcrExtraction {
+  id                String    @id @default(uuid())
+  claimId           String    @unique
+  memberNumber      String?
+  memberName        String?
+  patientId         String?
+  providerName      String?
+  invoiceNumber     String?
+  invoiceDate       DateTime?
+  invoiceAmount     Float?
+  patientName       String?
+  dateOfService     DateTime?
+  diagnosis         String?
+  procedureCodes    String[]
+  overallConfidence Float?
+  fieldConfidences  Json?
+  ocrEngine         String?
+  ocrEngineVersion  String?
+  templateUsed      String?
+  documentType      String?
+  status            String    @default("pending")
+  requiresReview    Boolean   @default(false)
+  reviewedBy        String?
+  reviewedAt        DateTime?
+  rawText           String?
+  anomalyScore      Float?
+  possibleFraud     Boolean   @default(false)
+  anomalyReasons    String[]
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  processedAt       DateTime?
+  claim             Claim     @relation(fields: [claimId], references: [id])
+
+  @@index([claimId])
+  @@index([status])
+  @@index([requiresReview])
+  @@map("ocr_extractions")
+}
+
+model OcrTemplate {
+  id               String         @id @default(uuid())
+  name             String         @unique
+  description      String?
+  documentType     String
+  providerType     String?
+  specificProvider String?
+  fieldDefinitions Json
+  accuracy         Float?
+  usageCount       Int            @default(0)
+  successCount     Int            @default(0)
+  isActive         Boolean        @default(true)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  createdBy        String?
+  sampleFileName   String?
+  sampleFilePath   String?
+  zones            DocumentZone[]
+
+  @@index([documentType])
+  @@index([isActive])
+  @@map("ocr_templates")
+}
+
+model DocumentZone {
+  id              String         @id @default(uuid())
+  templateId      String
+  fieldName       String
+  fieldLabel      String
+  description     String?
+  xPercent        Float
+  yPercent        Float
+  widthPercent    Float
+  heightPercent   Float
+  createdAt       DateTime       @default(now())
+  searchPhrase    String?
+  pageNumber      Int?
+  claimField      String?
+  locationContext String?
+  parentZoneId    String?
+  updatedAt       DateTime?
+  updatedByName   String?
+  parent          DocumentZone?  @relation("ZoneHierarchy", fields: [parentZoneId], references: [id])
+  children        DocumentZone[] @relation("ZoneHierarchy")
+  template        OcrTemplate    @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+  @@index([parentZoneId])
+  @@map("document_zones")
+}
+
+model UnknownDocument {
+  id              String    @id @default(uuid())
+  filePath        String
+  fileName        String
+  mimeType        String    @default("application/pdf")
+  guessedType     String?
+  guessedProvider String?
+  rawExtract      Json?
+  status          String    @default("pending")
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  notes           String?
+  claimId         String?
+  uploadedBy      String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("unknown_documents")
+}
+
+model EdmsDocument {
+  id             String    @id @default(uuid())
+  claimId        String    @unique
+  edmsDocumentId String    @unique
+  edmsBarcode    String?
+  edmsIndexKey   String?
+  edmsMetadata   Json?
+  syncStatus     String    @default("pending")
+  lastSyncAt     DateTime?
+  syncError      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  claim          Claim     @relation(fields: [claimId], references: [id])
+
+  @@index([claimId])
+  @@index([edmsDocumentId])
+  @@index([syncStatus])
+  @@map("edms_documents")
+}
+
+model EOxegenData {
+  id               String    @id @default(uuid())
+  claimId          String    @unique
+  memberNumber     String?
+  memberName       String?
+  providerName     String?
+  invoiceNumber    String?
+  invoiceDate      DateTime?
+  invoiceAmount    Float?
+  syncStatus       String    @default("pending")
+  syncedAt         DateTime?
+  syncError        String?
+  smartClaimId     String?
+  smartClaimNumber String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([claimId])
+  @@index([syncStatus])
+  @@index([memberNumber])
+  @@map("eoxegen_data")
+}
+
+model PurgeRequest {
+  id                String    @id @default(uuid())
+  mergedDocumentId  String?
+  sourceDocumentIds Json
+  reason            String
+  requestedBy       String
+  status            String    @default("pending")
+  reviewedBy        String?
+  reviewedAt        DateTime?
+  reviewNotes       String?
+  executedAt        DateTime?
+  purgedCount       Int       @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([status])
+  @@index([requestedBy])
+  @@map("purge_requests")
+}
+
+model Notification {
+  id             String    @id @default(uuid())
+  type           String
+  channel        String
+  recipientId    String?
+  recipientEmail String?
+  recipientPhone String?
+  subject        String?
+  message        String
+  htmlContent    String?
+  templateName   String?
+  templateData   Json?
+  claimId        String?
+  providerId     String?
+  status         String    @default("pending")
+  sentAt         DateTime?
+  readAt         DateTime?
+  deliveredAt    DateTime?
+  error          String?
+  retryCount     Int       @default(0)
+  maxRetries     Int       @default(3)
+  priority       String    @default("normal")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  recipient      User?     @relation(fields: [recipientId], references: [id])
+
+  @@index([recipientId])
+  @@index([status])
+  @@index([type])
+  @@index([claimId])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model NotificationTemplate {
+  id           String   @id @default(uuid())
+  name         String   @unique
+  description  String?
+  type         String
+  eventType    String
+  subject      String?
+  bodyTemplate String
+  htmlTemplate String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([eventType])
+  @@index([isActive])
+  @@map("notification_templates")
+}
+
+model Report {
+  id          String            @id @default(uuid())
+  name        String
+  description String?
+  type        String
+  category    String?
+  parameters  Json?
+  filters     Json?
+  groupBy     String[]
+  isScheduled Boolean           @default(false)
+  schedule    String?
+  recipients  String[]
+  format      String[]
+  lastRunAt   DateTime?
+  nextRunAt   DateTime?
+  createdBy   String
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  isActive    Boolean           @default(true)
+  executions  ReportExecution[]
+
+  @@index([type])
+  @@index([isScheduled])
+  @@map("reports")
+}
+
+model ReportExecution {
+  id          String    @id @default(uuid())
+  reportId    String
+  status      String    @default("running")
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  resultPath  String?
+  resultSize  BigInt?
+  rowCount    Int?
+  error       String?
+  executedBy  String?
+  report      Report    @relation(fields: [reportId], references: [id])
+
+  @@index([reportId])
+  @@index([status])
+  @@index([startedAt])
+  @@map("report_executions")
+}
+
+model ActivityLog {
+  id           String   @id @default(uuid())
+  userId       String?
+  username     String?
+  userRole     String?
+  action       String
+  entity       String?
+  entityId     String?
+  ipAddress    String?
+  userAgent    String?
+  method       String?
+  endpoint     String?
+  oldValue     Json?
+  newValue     Json?
+  status       String
+  errorMessage String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  user         User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([action])
+  @@index([entity])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+model ClaimEmail {
+  id          String   @id @default(uuid())
+  claimId     String
+  sentBy      String?
+  sentByName  String?
+  sentTo      String
+  cc          String?
+  subject     String
+  body        String
+  htmlBody    String?
+  attachments Json?    @default("[]")
+  sentAt      DateTime @default(now())
+  status      String   @default("sent")
+  claim       Claim    @relation(fields: [claimId], references: [id])
+
+  @@index([claimId])
+  @@index([sentAt])
+  @@map("claim_emails")
+}
+
+model SystemConfig {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String
+  dataType    String   @default("string")
+  description String?
+  category    String?
+  isEditable  Boolean  @default(true)
+  updatedBy   String?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@index([category])
+  @@map("system_config")
+}

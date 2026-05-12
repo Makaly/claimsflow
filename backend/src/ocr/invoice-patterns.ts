@@ -1,0 +1,210 @@
+/**
+ * Invoice Pattern Knowledge Base
+ *
+ * Different healthcare providers use different invoice formats.
+ * This knowledge base helps the OCR parser recognize various patterns.
+ * Add new patterns as new invoice formats are encountered.
+ */
+
+// Invoice number patterns from different providers
+export const INVOICE_NUMBER_PATTERNS = [
+  // Standard formats
+  /Invoice\s*(?:No|Number|#|Ref)?\s*[:\-.]?\s*([A-Z]{2,5}[\-/]\d[\w\-/.]{3,25})/i,     // AAR-INV/2023570583
+  /Invoice\s*(?:No|Number|#|Ref)?\s*[:\-.]?\s*(CB[\-/][\d][\w\-/.]{3,20})/i,             // CB-126133-23
+  /Invoice\s*(?:No|Number|#|Ref)?\s*[:\-.]?\s*([A-Z]{2,5}\d{4}[\-/]\d{3,10})/i,          // ZMC2024/02432
+  /Invoice\s*(?:No|Number|#|Ref)?\s*[:\-.]?\s*([A-Z]{1,5}[\-/][\d][\w\-/.]{2,20})/i,     // Nyr/13277
+  /Invoice\s*(?:No|Number|#|Ref)?\s*[:\-.]?\s*(INV[\-/]?\d[\d\-/.]{3,15})/i,              // INV-2024-001
+  /Invoice\s*#\s*([A-Z]{1,4}\d{5,}(?:[_\-]\d+)?)/i,                                        // UH283059137_4 or UH283059137 (Aga Khan)
+  /Invoice\s*(?:No|Number|#|Ref)?\s*[:\-.]?\s*(\d{4,15})/i,                               // 123456789 (numeric only)
+  // Without "Invoice" label - standalone patterns
+  /(AAR[\-/]INV[\-/]?\d[\d\-/.]+)/i,
+  /(CB[\-/][\d][\d\-/.]+)/i,
+  /(ZMC\d{4}[\-/]\d{3,})/i,
+  /([A-Z]{2,4}\d{4}[\-/]\d{3,})/i,  // Any 2-4 letter prefix + year + number
+  /([A-Z][a-z]{1,4}\/\d{3,})/i,      // Nyr/13277
+];
+
+// Invoice date patterns
+export const INVOICE_DATE_PATTERNS = [
+  /Invoice\s*Date\s*[:\-]?\s*(\d{4}[\-/.]\d{1,2}[\-/.]\d{1,2})/i,                  // 2024-02-19
+  /Invoice\s*Date\s*[:\-]?\s*(\d{1,2}[\-/.]\d{1,2}[\-/.]\d{2,4})/i,                // 22/12/2023
+  /Invoice\s*Date\s*[:\-]?\s*(\d{1,2}[\-/]\w{3,9}[\-/]\d{2,4})/i,                  // 18/Dec/2023, 02-Mar-2024
+  /(?:Bill|Receipt)\s*Date\s*[:\-]?\s*(\d{1,2}[\-/.]\d{1,2}[\-/.]\d{2,4})/i,
+  /(?:Bill|Receipt)\s*Date\s*[:\-]?\s*(\d{4}[\-/.]\d{1,2}[\-/.]\d{1,2})/i,
+  /(?:Date)\s*[:\-]?\s*(\d{4}[\-/.]\d{1,2}[\-/.]\d{1,2})/i,                         // Date: 2024-02-19
+  /(?:Date)\s*[:\-]?\s*(\d{1,2}[\-/]\w{3,9}[\-/]\d{2,4})/i,
+  /(?:Date)\s*[:\-]?\s*(\d{1,2}[\-/.]\d{1,2}[\-/.]\d{2,4})/i,
+];
+
+// Amount patterns - total/balance/grand total
+// NOTE: Aga Khan FIRST — their "Sponsor Coverage" is the insurance amount, NOT "Your Amount Due" (patient co-pay)
+// "Grand Total / Amount Due" pattern would otherwise capture the patient's tiny co-pay (e.g. 0.02) instead of 990,000
+export const TOTAL_AMOUNT_PATTERNS = [
+  // Aga Khan University Hospital: "Sponsor Coverage:\nAAA Corporate   990,000.00"
+  /Sponsor\s*Coverage[\s\S]{0,80}?([\d,]{3,}\.\d{2})/i,
+  /(?:Grand\s*Total|Total\s*Amount|Balance\s*Due|Net\s*(?:Amount|Total|Payable)|Amount\s*(?:Due|Payable)|Total\s*(?:Due|Payable|Bill))\s*[:\-]?\s*(?:KES|Ksh|Kshs?)?\s*[:\-]?\s*([\d,]+(?:\.\d{1,2})?)/i,
+  /(?:Total)\s*[:\-]?\s*(?:KES|Ksh|Kshs?)?\s*[:\-]?\s*([\d,]+(?:\.\d{1,2})?)/i,
+];
+
+// Line item amount patterns (for summing when no total found)
+export const LINE_ITEM_PATTERNS = [
+  /(?:Consultation|Pharmacy|Lab|Radiology|Referral|Service|Dental|Surgery|Procedure|Theatre|Nursing|Bed|Ward|Drugs?|Medicine|Imaging|X[\-\s]?ray|Ultrasound|MRI|CT\s*Scan|ECG|Dialysis|Physiotherapy|Optical|Outpatient|Inpatient)\s*(?:Amount|Fee|Charge|Cost)?\s*[:\-]?\s*(?:KES|Ksh)?\s*([\d,]+(?:\.\d{1,2})?)/gi,
+];
+
+// Patient name patterns
+export const PATIENT_NAME_PATTERNS = [
+  // Aga Khan discharge summary: "Patient: NYIKA,DAVID" — stops at newline, not word boundary
+  /\bPatient\s*:\s*([A-Z][^\n\r]{3,40}?)(?=\s*[\n\r]|\s+DOB|\s+Age|\s+Reg|$)/,
+  // Standard single-line with stop lookahead
+  /(?:Patient\s*)?Name\s*[:\-]\s*([A-Z][A-Z\s.'-]{2,40}?)(?:\s*\n|\s+(?:Patient|Invoice|Reg|Date|Visit|No[.:\s]|Age|Sex|Gender))/i,
+  /(?:Patient\s*)?Name\s*[:\-]\s*([A-Z][A-Z\s.'-]{2,40})/i,
+  /(?:Mr\.|Mrs\.|Ms\.|Dr\.)\s+([A-Z][a-zA-Z\s.'-]{3,40})/i,
+  /Member\s*Name\s*[:\-]\s*([A-Z][a-zA-Z\s.'-]{2,40})/i,
+];
+
+// Patient ID / registration number patterns
+export const PATIENT_ID_PATTERNS = [
+  /Patient\s*No\.?\s*[:\-.]?\s*([A-Z]{2,5}[\-/][\w\-/.]{3,25})/i,     // AAR-PID/50340760
+  /Reg\s*(?:No|Number)\.?\s*[:\-.]?\s*([A-Z]{1,3}[\-]?\d[\w\-/.]{1,20})/i,  // GN-157616-23
+  /(?:OP|IP)\s*(?:No|Number)\.?\s*[:\-.]?\s*(\d[\w\-/.]{2,15})/i,
+  /Patient\s*(?:No|ID)\.?\s*[:\-.]?\s*(\d[\w\-/.]{1,15})/i,
+  /(?:Registration)\s*(?:No|Number)?\s*[:\-.]?\s*([A-Z0-9][\w\-/.]{2,20})/i,
+  /Account\s*Number\s*[:\-.]?\s*([A-Z]{1,4}\d{6,})/i,                  // Aga Khan: "Account Number: UH283003051"
+];
+
+// Membership number patterns
+export const MEMBERSHIP_PATTERNS = [
+  // Aga Khan / Nomad Dental — "HMN NO." label followed by AK value (e.g. AK119067-04)
+  /HMN\s*\.?\s*NO\.?\s*[:\-.]?\s*\n?\s*(AK[\d\-]{4,20})/i,                                  // "HMN NO. AK119067-04" (Nomad Dental Centre)
+  /HMN\s*\.?\s*NO\.?\s*[:\-.]?\s*([A-Z0-9][\w\-/.]{2,25})/i,                               // Generic HMN NO. fallback
+  // Aga Khan first — value may be many lines after "AK Number:" label (PDF multi-column OCR scramble)
+  /AK\s*Number\s*[:\-.]?[\s\S]{0,250}?\b(AK[\d\-]{4,20})\b/i,                              // "AK Number: ... AK00565303" or "AK119067-04"
+  // Standalone AK value anywhere in text — catches AK codes with or without dashes
+  /\b(AK\d{4,}(?:-\d{2,})?)\b/,
+  /(?:Membership|Member)\s+(?:No|Number|#|ID)\s*[:\-.]?\s*([A-Z0-9][\w\-/.]{2,25})/i,    // qualifier required — prevents matching casual "Member" text
+  /(?:Scheme|Policy)\s*(?:No|Number|#)?\s*[:\-.]?\s*([A-Z0-9][\w\-/.]{2,25})/i,
+  /(?:Card|Insurance)\s*(?:No|Number|#)?\s*[:\-.]?\s*([A-Z0-9][\w\-/.]{2,25})/i,
+];
+
+// Provider name patterns - institution keywords to look for in header
+export const PROVIDER_PATTERNS = [
+  /^([A-Z][A-Z\s&'.,-]+(?:HOSPITAL|CENTRE|CENTER|CLINIC|MEDICAL|DENTAL|PHARMACY|FOUNDATION|HEALTH)(?:\s+(?:LTD|LIMITED|PLC|BUNGOMA|NAIROBI|MOMBASA|KISUMU|ELDORET|NAKURU|THIKA|NYERI|MACHAKOS))?)/mi,
+  /([A-Z][A-Za-z\s&'.,-]{3,}(?:Hospital|Centre|Center|Clinic|Medical|Dental\s+Centre|Pharmacy|Foundation|Sikh\s+Hospital|Health\s+Centre)(?:\s+(?:Ltd|Limited|PLC|Bungoma|Nairobi))?)/i,
+];
+
+// Diagnosis patterns
+export const DIAGNOSIS_PATTERNS = [
+  /(?:Final\s*Diagnosis|Impression|Clinical\s*(?:Diagnosis|Notes?))\s*[:\-]?\s*\n?\s*(.{3,150}?)(?:\n\s*\n|Detailed|Bill|Treatment|$)/is,
+  /(?:Diagnosis)\s*[:\-]?\s*\n?\s*(.{3,150}?)(?:\n\s*\n|Invoice|Bill|$)/is,
+  /(?:CELLULITIS|MALARIA|DIABETES|HYPERTENSION|PNEUMONIA|FRACTURE|INFECTION|ULCER|PAIN|ABSCESS|CARIES|GINGIVITIS|PERIODONTITIS|GASTRITIS|ANAEMIA|APPENDICITIS|TONSILLITIS|BRONCHITIS|ASTHMA|ARTHRITIS)[A-Z\s\-]*/i,
+];
+
+// Service/visit date patterns
+export const SERVICE_DATE_PATTERNS = [
+  /(?:OP\s*Visit\s*Date|Visit\s*Date|Service\s*Date|Date\s*of\s*(?:Service|Visit|Admission))\s*[:\-.]?\s*(\d{4}[\-/.]\d{1,2}[\-/.]\d{1,2})/i,
+  /(?:OP\s*Visit\s*Date|Visit\s*Date|Service\s*Date|Date\s*of\s*(?:Service|Visit))\s*[:\-.]?\s*(\d{1,2}[\-/.]\d{1,2}[\-/.]\d{2,4})/i,
+  /(?:OP\s*Visit\s*Date|Visit\s*Date)\s*[:\-.]?\s*([\d\-/.]{5,20})/i,
+];
+
+// Insurance company patterns
+export const INSURANCE_PATTERNS = [
+  /(?:Insurance\s*(?:Co|Company)?|Insurer|Payer)\s*[:\-]?\s*([A-Z][A-Za-z\s&]{3,60}?)\s*(?:Referral|Service|Lab|Radiology|Pharmacy|Consultation|\n|$)/i,
+  /(?:Insurance\s*(?:Co|Company)?)\s*[:\-]?\s*([A-Z][A-Za-z\s&]{3,40}(?:Insurance|Limited|Ltd|PLC|Group|Kenya))/i,
+];
+
+// Account/employer patterns
+export const ACCOUNT_PATTERNS = [
+  /Account\s*[:\-]?\s*([A-Z][A-Za-z\s&().,-]{3,60}?)(?:\s*[\-]\s|\n|Lab|Radiology|$)/i,
+  /(?:Employer|Company|Scheme\s*Name)\s*[:\-]?\s*([A-Z][A-Za-z\s&().,-]{3,60})/i,
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Medical Coding: CPT, ICD-10-CM, HCPCS Level II
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * CPT (Current Procedural Terminology) codes: 5-digit numeric codes (10000-99999)
+ * and Category II/III codes.  E/M codes: 99201-99499.
+ */
+export const CPT_CODE_PATTERNS = [
+  // Explicit label
+  /CPT\s*(?:Code|#|No\.?)?\s*[:\-]?\s*(\d{5})/gi,
+  /Procedure\s*(?:Code|#|No\.?)?\s*[:\-]?\s*(\d{5})/gi,
+  // Table column: 5-digit followed by description
+  /^(\d{5})\s+[A-Z][a-z]/gm,
+  // Common E/M visit codes standalone
+  /(9920[1-5]|9921[1-5]|9920[3-5]|9921[3-5]|99213|99214|99215|99231|99232|99233)/g,
+];
+
+/**
+ * ICD-10-CM diagnosis codes: letter + 2 digits + optional decimal + up to 4 chars.
+ * Valid categories: A-N, P-Z (exclude O used for ICD-10-PCS).
+ */
+export const ICD10_CODE_PATTERNS = [
+  // Explicit label
+  /ICD[\-\s]?10\s*(?:Code|Diagnosis|Dx|CM)?\s*[:\-]?\s*([A-HJ-NP-Z]\d{2}(?:\.\d{1,4})?)/gi,
+  /(?:Diagnosis|Dx)\s*(?:Code)?\s*[:\-]?\s*([A-HJ-NP-Z]\d{2}(?:\.\d{1,4})?)/gi,
+  // Standalone ICD-10 pattern (letter then 2 digits, optionally dot and up to 4)
+  /\b([A-HJ-NP-Z]\d{2}(?:\.\d{1,4})?)\b/g,
+];
+
+/**
+ * HCPCS Level II codes: letter A-V followed by 4 digits (e.g. A0100, J0895).
+ */
+export const HCPCS_CODE_PATTERNS = [
+  /HCPCS\s*(?:Code|#|No\.?)?\s*[:\-]?\s*([A-V]\d{4})/gi,
+  // Standalone
+  /\b([A-V]\d{4})\b/g,
+];
+
+/**
+ * Extract all medical codes from text.
+ * Returns { cptCodes, icd10Codes, hcpcsCodes, allCodes }
+ */
+export function extractMedicalCodes(text: string): {
+  cptCodes: string[];
+  icd10Codes: string[];
+  hcpcsCodes: string[];
+  allCodes: string[];
+} {
+  const unique = (arr: string[]) => [...new Set(arr)];
+
+  const cptCodes: string[] = [];
+  for (const pat of CPT_CODE_PATTERNS) {
+    pat.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = pat.exec(text)) !== null) {
+      const code = m[1];
+      const n = parseInt(code);
+      if (!isNaN(n) && n >= 10000 && n <= 99999) cptCodes.push(code);
+    }
+  }
+
+  const icd10Codes: string[] = [];
+  for (const pat of ICD10_CODE_PATTERNS) {
+    pat.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = pat.exec(text)) !== null) {
+      const code = m[1];
+      if (/^[A-HJ-NP-Z]\d{2}/.test(code)) icd10Codes.push(code.toUpperCase());
+    }
+  }
+
+  const hcpcsCodes: string[] = [];
+  for (const pat of HCPCS_CODE_PATTERNS) {
+    pat.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = pat.exec(text)) !== null) {
+      const code = m[1];
+      if (/^[A-V]\d{4}$/.test(code)) hcpcsCodes.push(code.toUpperCase());
+    }
+  }
+
+  const allCodes = unique([...cptCodes, ...icd10Codes, ...hcpcsCodes]);
+  return {
+    cptCodes: unique(cptCodes),
+    icd10Codes: unique(icd10Codes),
+    hcpcsCodes: unique(hcpcsCodes),
+    allCodes,
+  };
+}

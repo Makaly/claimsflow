@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+*.lcov
+.nyc_output
+
+# Production
+build/
+dist/
+dist-ssr/
+
+# Misc
+.DS_Store
+*.pem
+.env
+.env.local
+.env.production
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Uploads & patient data — never commit
+uploads/
+uploaded_files/
+
+# Database
+*.db
+*.sqlite
