@@ -65,7 +65,7 @@ describe('attachRetryInterceptor', () => {
     } as unknown as AxiosInstance
     return {
       instance,
-      onError: (h) => {
+      onError: (h: (err: AxiosError) => any) => {
         handler = h
       },
       // expose a trigger via the instance: simulate axios invoking the error handler
