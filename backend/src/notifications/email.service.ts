@@ -523,4 +523,37 @@ export class EmailService {
     const text = `Your claim ${claimNumber} has been rejected. Reason: ${reason}`;
     return this.sendEmail(email, subject, text);
   }
+
+  async sendPasswordResetEmail(dto: { email: string; name: string; resetUrl: string }) {
+    const { email, name, resetUrl } = dto;
+    const subject = 'Reset your ClaimsFlow password';
+    const html = `<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;background:#f9fafb;padding:32px">
+      <div style="max-width:480px;margin:0 auto;background:white;border-radius:12px;padding:32px;border:1px solid #e5e7eb">
+        <h2 style="color:#1a56db;margin-bottom:8px">Password Reset</h2>
+        <p style="color:#374151">Hi ${name},</p>
+        <p style="color:#374151">We received a request to reset your ClaimsFlow password. Click the button below — this link expires in 1 hour.</p>
+        <a href="${resetUrl}" style="display:inline-block;background:#1a56db;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;margin:16px 0">Reset Password</a>
+        <p style="color:#6b7280;font-size:12px">If you did not request a password reset, ignore this email. Your password will not change.</p>
+        <p style="color:#6b7280;font-size:12px">CIC Insurance Group — Medical Claims Division</p>
+      </div></body></html>`;
+    const text = `Hi ${name},\n\nReset your password: ${resetUrl}\n\nThis link expires in 1 hour.\n\nCIC Insurance Group`;
+    return this.sendEmail(email, subject, text, html);
+  }
+
+  async sendSlaBreachAlert(dto: { email: string; name: string; claimNumber: string; stage: string; hoursElapsed: number }) {
+    const { email, name, claimNumber, stage, hoursElapsed } = dto;
+    const subject = `⚠ SLA Breach — Claim ${claimNumber} overdue`;
+    const text = `Hi ${name},\n\nClaim ${claimNumber} has been in "${stage}" for ${hoursElapsed} hours, exceeding the SLA threshold. Please action it immediately.\n\nCIC Claims System`;
+    return this.sendEmail(email, subject, text);
+  }
+
+  async sendAppealNotification(dto: { email: string; name: string; claimNumber: string; action: 'filed' | 'adjudicated'; outcome?: string }) {
+    const { email, name, claimNumber, action, outcome } = dto;
+    const subject = action === 'filed' ? `Appeal Received — Claim ${claimNumber}` : `Appeal Decision — Claim ${claimNumber}`;
+    const text = action === 'filed'
+      ? `Hi ${name},\n\nYour appeal for claim ${claimNumber} has been received and is under review by CIC.\n\nCIC Insurance Group`
+      : `Hi ${name},\n\nYour appeal for claim ${claimNumber} has been reviewed.\nOutcome: ${outcome}\n\nCIC Insurance Group`;
+    return this.sendEmail(email, subject, text);
+  }
 }
+
