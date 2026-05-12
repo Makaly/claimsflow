@@ -31,6 +31,17 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **"Failed to load onboarding packet" + repeated JSON.parse errors** —
+  ~20 places in the frontend still used raw `fetch('/api/...')` with
+  `Authorization: Bearer ${localStorage.getItem('token')}`. After the
+  move to HttpOnly cookie auth, the header became `Bearer null` and the
+  relative `/api/...` URL hit the frontend static site instead of the
+  backend, returning `index.html` (hence `JSON.parse: unexpected
+  character '<'`). Rather than rewrite every caller, added Render
+  static-site rewrites for `/api/*` and `/socket.io/*` so the frontend
+  proxies straight through to the backend. The browser now sees both as
+  same-origin (same as the Vite dev proxy in development), the cookie
+  rides every request automatically, and the no-token fetches succeed.
 - **Silent boot failure on Render** — deploy logs ended at "🎉 Seed
   complete!" with no subsequent output from the API process, leaving
   Render's edge in a `no-deploy` routing state. Three hardening
