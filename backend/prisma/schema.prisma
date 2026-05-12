@@ -912,6 +912,24 @@ model MemberPolicy {
   @@map("member_policies")
 }
 
+model ClaimLabel {
+  id          String   @id @default(uuid())
+  claimId     String   @unique
+  label       String   // 'legitimate' | 'suspicious' | 'fraud'
+  source      String   // 'auto_approve' | 'auto_reject' | 'manual_review' | 'fraud_confirmed' | 'appeal_outcome'
+  confidence  Float    @default(1.0)
+  labelledBy  String?
+  notes       String?
+  featuresSnapshot Json?  // captures the claim features at labelling time
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([label])
+  @@index([source])
+  @@index([createdAt])
+  @@map("claim_labels")
+}
+
 model SystemConfig {
   id          String   @id @default(uuid())
   key         String   @unique

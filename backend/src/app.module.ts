@@ -29,6 +29,7 @@ import { PaymentModule } from './payment/payment.module';
 import { SystemConfigModule } from './system-config/system-config.module';
 import { PreAuthModule } from './preauth/preauth.module';
 import { PolicyModule } from './policy/policy.module';
+import { MockIntegrationsModule } from './mock-integrations/mock-integrations.module';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { PolicyModule } from './policy/policy.module';
     SystemConfigModule,
     PreAuthModule,
     PolicyModule,
+    MockIntegrationsModule,
   ],
   controllers: [AppController],
   providers: [
