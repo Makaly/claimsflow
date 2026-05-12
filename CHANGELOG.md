@@ -31,6 +31,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **Global fetch proxy normalises legacy `/api/...` callers** —
+  installed a thin wrapper around `window.fetch` (in `main.tsx`, before
+  any component mounts) that rewrites relative `/api/*` and
+  `/socket.io/*` URLs to the absolute backend origin from
+  `VITE_API_URL` and sets `credentials: 'include'` so the HttpOnly
+  auth cookie travels with the request. Covers ~20 legacy components
+  that still use raw fetch + `localStorage.getItem('token')`, without
+  forcing a per-file refactor. Idempotent; no-op for absolute URLs
+  and non-api paths. Backed by eight Vitest cases.
 - **"Failed to load onboarding packet" + repeated JSON.parse errors** —
   ~20 places in the frontend still used raw `fetch('/api/...')` with
   `Authorization: Bearer ${localStorage.getItem('token')}`. After the
