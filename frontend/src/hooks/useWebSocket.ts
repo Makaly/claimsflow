@@ -61,16 +61,29 @@ export function useWebSocket() {
   }, [])
 
   useEffect(() => {
-    const token = localStorage.getItem('token')
-    if (!token) return
+    // Auth is delivered via the HttpOnly cookie set by /api/auth/login.
+    // socket.io must use withCredentials so the browser attaches it during
+    // the handshake. We also keep auth.token as a fallback for the rare
+    // dev flow where a token was stashed in localStorage manually.
+    const fallbackToken = localStorage.getItem('token') || undefined
 
-    const apiBase =
+    // VITE_API_URL points at the REST API (e.g. https://host.tld/api), but
+    // socket.io needs the *origin* (host without /api) and a namespace.
+    // Stripping a trailing /api keeps the gateway namespace /events instead
+    // of accidentally becoming /api/events on the server.
+    const rawApiBase =
       (import.meta as unknown as { env: Record<string, string> }).env.VITE_API_URL ||
       window.location.origin
+    const origin = rawApiBase.replace(/\/api\/?$/, '')
 
-    const socket = io(`${apiBase}/events`, {
-      auth: { token },
-      transports: ['websocket', 'polling'],
+    const socket = io(`${origin}/events`, {
+      auth: fallbackToken ? { token: fallbackToken } : undefined,
+      withCredentials: true,
+      // Start with polling (works through every proxy / free-tier edge) and
+      // upgrade to websocket once the session is established. Reversing the
+      // order means a single WS upgrade failure breaks the entire socket
+      // instead of silently degrading.
+      transports: ['polling', 'websocket'],
       reconnectionAttempts: 5,
       reconnectionDelay: 2000,
     })

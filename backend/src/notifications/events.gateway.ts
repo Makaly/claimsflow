@@ -11,7 +11,20 @@ import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { Logger } from '@nestjs/common';
 
-@WebSocketGateway({ cors: { origin: '*' }, namespace: '/events' })
+// CORS allowlist for the WS handshake — mirrors the REST CORS rules in main.ts.
+// Wildcard origin is incompatible with credentialed connections in modern
+// browsers, so we read the same FRONTEND_URL env var and fall back to
+// localhost for dev.
+const wsCorsOrigin = (() => {
+  const allowed = process.env.FRONTEND_URL;
+  if (!allowed) return /^https?:\/\/localhost(:\d+)?$/;
+  return [allowed, /^https?:\/\/localhost(:\d+)?$/] as any;
+})();
+
+@WebSocketGateway({
+  cors: { origin: wsCorsOrigin, credentials: true },
+  namespace: '/events',
+})
 export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;
   private readonly logger = new Logger(EventsGateway.name);
@@ -19,9 +32,32 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   constructor(private jwtService: JwtService) {}
 
+  /**
+   * Token resolution order for WS auth, matching the REST side:
+   *   1. handshake.auth.token   (socket.io-client { auth: { token } })
+   *   2. Authorization header   ("Bearer …")
+   *   3. access_token cookie    (HttpOnly, set by /api/auth/login)
+   */
+  private extractToken(client: Socket): string | undefined {
+    const fromAuth = (client.handshake.auth as Record<string, unknown> | undefined)?.token;
+    if (typeof fromAuth === 'string' && fromAuth) return fromAuth;
+
+    const authHeader = client.handshake.headers?.authorization;
+    if (authHeader?.startsWith('Bearer ')) return authHeader.slice('Bearer '.length);
+
+    const cookieHeader = client.handshake.headers?.cookie;
+    if (cookieHeader) {
+      for (const part of cookieHeader.split(';')) {
+        const [name, ...rest] = part.trim().split('=');
+        if (name === 'access_token') return decodeURIComponent(rest.join('='));
+      }
+    }
+    return undefined;
+  }
+
   async handleConnection(client: Socket) {
     try {
-      const token = client.handshake.auth?.token || client.handshake.headers?.authorization?.replace('Bearer ', '');
+      const token = this.extractToken(client);
       if (!token) { client.disconnect(); return; }
       const payload = this.jwtService.verify(token);
       (client as any).userId = payload.sub;
