@@ -6,7 +6,7 @@
 
 [![Build](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/Makaly/claimsflow/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![NestJS](https://img.shields.io/badge/backend-NestJS%2010-e0234e)](https://nestjs.com/)
+[![NestJS](https://img.shields.io/badge/backend-NestJS%2011-e0234e)](https://nestjs.com/)
 [![React](https://img.shields.io/badge/frontend-React%2018-61dafb)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/typescript-5.x-3178c6)](https://www.typescriptlang.org/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
@@ -32,6 +32,8 @@ ClaimsFlow digitises the full medical claims lifecycle — from provider intake 
 - **Real-time notifications** via WebSockets
 - **Two-factor authentication**, password reset, role-based access
 - **Reporting** — operational, financial, fraud, provider scorecards
+- **ML feedback loop** — claim labelling, factor-effectiveness analysis, and anomaly weight tuning
+- **Hardened security** — HttpOnly JWT cookies, Helmet CSP, global rate limiting, magic-byte file verification, TOTP 2FA
 
 ---
 
@@ -54,7 +56,7 @@ ClaimsFlow digitises the full medical claims lifecycle — from provider intake 
 | Layer         | Technology                                                              |
 | ------------- | ----------------------------------------------------------------------- |
 | Frontend      | React 18, TypeScript, Vite, TailwindCSS, Radix UI, Zustand, React Query |
-| Backend       | NestJS 10, TypeScript, Passport JWT, Socket.IO, BullMQ, Helmet          |
+| Backend       | NestJS 11, TypeScript, Passport JWT, Socket.IO, BullMQ, Helmet          |
 | Database      | PostgreSQL 15 + Prisma ORM                                              |
 | Cache / Queue | Redis 7                                                                 |
 | OCR / AI      | Google Gemini Vision, Anthropic API, Ollama, Tesseract                  |
@@ -71,15 +73,17 @@ claims/
 ├── backend/                  NestJS API server
 │   ├── src/
 │   │   ├── auth/             Authentication, 2FA, JWT, roles
-│   │   ├── claims/           Core claims domain + eligibility service
+│   │   ├── claims/           Core claims domain, eligibility, ML labels
 │   │   ├── workflow/         Maker/checker queues + SLA tracking
 │   │   ├── appeals/          Appeals adjudication
 │   │   ├── payment/          Payment advice generation
 │   │   ├── preauth/          Pre-authorisation
+│   │   ├── policy/           Policy module
 │   │   ├── system-config/    Runtime configuration
 │   │   ├── notifications/    Email, SMS, WebSocket gateway
 │   │   ├── ocr/              Gemini, Ollama, Tesseract pipelines
 │   │   ├── reports/          Analytics & scorecards
+│   │   ├── mock-integrations/ EDMS + eOxegen stubs for local dev
 │   │   └── ...
 │   └── prisma/               Schema and migrations
 ├── frontend/                 React SPA
@@ -89,6 +93,7 @@ claims/
 │       ├── hooks/            Custom React hooks
 │       ├── services/         API client
 │       └── store/            Zustand state stores
+├── docs/                     Architecture, SRD analysis, audit reports
 └── docker-compose.yml        Local dev orchestration
 ```
 

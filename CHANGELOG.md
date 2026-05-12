@@ -7,6 +7,65 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-05-12
+
+### Added
+
+- **ML feedback loop** — `ClaimLabel` model records adjudication outcomes
+  (`legitimate`, `suspicious`, `fraud`) against the claim features snapshot
+  taken at scoring time, enabling continuous model improvement.
+- **Factor-effectiveness endpoint** (`GET /claims/ml/factor-effectiveness`)
+  computes per-factor predictive power by correlating anomaly features with
+  labelled outcomes; requires minimum 20 labelled samples before returning
+  statistics.
+- **Claim-labels API** (`ClaimLabelsService` + `ClaimLabelsController`) —
+  create, update, and query outcome labels with source attribution and
+  confidence scores.
+- **Mock integrations module** — stub controllers for EDMS and eOxegen that
+  respond with realistic fixtures, allowing full local development without
+  live third-party connectivity.
+- **Policy module** — groundwork for plan-level policy configuration.
+- Migration `20260512300000_add_claim_labels` — creates `claim_labels` table
+  with unique claim constraint and indexes on label, source, and created_at.
+
+### Changed
+
+- NestJS upgraded from v10 to v11 across all `@nestjs/*` packages.
+- `MockIntegrationsModule` registered in `AppModule` so EDMS/eOxegen stubs
+  are available in every environment.
+- `AnomalyScoringService` extended with `getFactorEffectiveness()` for
+  weight-tuning insights.
+- README updated: NestJS version badge, repo layout, and highlights section.
+
+### Fixed
+
+- Docker production build (`Dockerfile.prod`) — both `npm ci` and
+  `npm install --omit=dev` now pass `--legacy-peer-deps` to resolve
+  the peer-dependency conflict introduced by `socket.io` v4 and
+  `@nestjs/platform-socket.io` v11.
+
+### Security
+
+- All `execSync` subprocess calls in OCR services replaced with `spawnSync`
+  with explicit argument arrays, eliminating shell-injection vectors.
+- File upload endpoints now verify magic bytes (PDF `%PDF`, JPEG `0xFF 0xD8`,
+  PNG `0x89 PNG` signatures) before accepting files; mismatched content types
+  are rejected and the temp file is deleted.
+- JWT delivery changed to HttpOnly, SameSite=Strict cookie; tokens are no
+  longer stored in `localStorage`. Frontend uses `withCredentials: true`.
+- Global rate limiting enforced via `ThrottlerGuard` as `APP_GUARD` — 120
+  req/min baseline, 10 req/min on auth endpoints.
+- Helmet middleware applies strict CSP, X-Frame-Options, and
+  X-Content-Type-Options on every response.
+- `RegisterDto` restricts self-registration to `provider_admin` and
+  `provider_user` roles; privileged roles require admin creation.
+- Password policy enforced: minimum 10 characters with uppercase, lowercase,
+  digit, and special character requirements.
+- 2FA backup codes stored as bcrypt hashes; used codes are invalidated
+  immediately after a successful recovery login.
+- Temporary passwords are emailed to users rather than returned in API
+  responses.
+
 ## [1.2.0] - 2026-05-12
 
 ### Added
@@ -91,7 +150,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Completeness validation.
 - 15 frontend pages and 50+ API endpoints.
 
-[Unreleased]: https://github.com/Makaly/claimsflow/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/Makaly/claimsflow/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/Makaly/claimsflow/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/Makaly/claimsflow/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Makaly/claimsflow/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Makaly/claimsflow/releases/tag/v1.0.0
