@@ -46,6 +46,8 @@ import { stampBarcodeOnPdf, stampBarcodeOnImage } from '@/lib/pdfBarcode'
 import { extractInvoicesFromPdf } from '@/lib/pdfTextExtract'
 import { cacheFile, restoreAsFiles, restoreFileByName } from '@/lib/fileCache'
 import { DocumentViewer } from '@/components/DocumentViewer'
+import { EligibilityBadge } from '@/components/EligibilityBadge'
+import AnomalyScoreBadge from '@/components/AnomalyScoreBadge'
 import { Pagination } from '@/components/Pagination'
 import {
   Annotation as UserAnnotation,
@@ -101,6 +103,8 @@ const DEFAULT_COLUMNS: ColumnDef[] = [
   { id: 'status',       label: 'Status',  visible: true },
   { id: 'docs',         label: 'Docs',    visible: true },
   { id: 'date',         label: 'Date',    visible: true },
+  { id: 'eligibility',  label: 'Eligibility', visible: true },
+  { id: 'anomaly',      label: 'Anomaly', visible: true },
 ]
 const COLUMNS_STORAGE_KEY = 'claimsflow_column_config'
 
@@ -1274,6 +1278,21 @@ export default function Claims() {
               <TooltipContent>{formatDate(claim.submittedAt)}</TooltipContent>
             </Tooltip>
           </TooltipProvider>
+        </TableCell>
+      )
+      case 'eligibility': return (
+        <TableCell key={colId}>
+          {'eligibilityStatus' in claim
+            ? <EligibilityBadge status={claim.eligibilityStatus} notes={claim.eligibilityNotes} showTooltip />
+            : <span className="text-xs text-muted-foreground">—</span>}
+        </TableCell>
+      )
+      case 'anomaly': return (
+        <TableCell key={colId}>
+          <AnomalyScoreBadge
+            claimId={claim.id}
+            score={(claim as any).ocrData?.anomalyScore ?? (claim as any).anomalyScore}
+          />
         </TableCell>
       )
       default: return null

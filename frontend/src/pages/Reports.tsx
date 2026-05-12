@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import {
@@ -27,6 +27,7 @@ import {
 import { useClaimsStore } from '@/store/claimsStore'
 import { Pagination } from '@/components/Pagination'
 import { formatCurrency, formatDate, getStatusColor } from '@/lib/utils'
+import { useReportData } from '@/hooks/useReportData'
 
 const COLORS = ['hsl(160,60%,45%)', 'hsl(30,80%,55%)', 'hsl(340,75%,55%)', 'hsl(220,70%,50%)', 'hsl(280,65%,60%)', 'hsl(170,60%,45%)']
 
@@ -41,6 +42,9 @@ export default function Reports() {
   // Filter state
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+
+  // Live API data (server-accurate)
+  const liveData = useReportData({ dateFrom: dateFrom || undefined, dateTo: dateTo || undefined })
   const [providerFilter, setProviderFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [amountMin, setAmountMin] = useState('')
@@ -487,6 +491,57 @@ ${unknownPat.slice(0,30).map(c => `<tr><td class="flag-cell">${c.claimNumber}</t
         </div>
       </div>
 
+      {/* Live Server-Side Summary */}
+      {liveData.approvalsRejections && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { label: 'Total Claims', value: liveData.approvalsRejections.total, color: 'text-blue-700' },
+            { label: 'Approved', value: liveData.approvalsRejections.approved, color: 'text-green-700' },
+            { label: 'Rejected', value: liveData.approvalsRejections.rejected, color: 'text-red-700' },
+            { label: 'Approval Rate', value: `${liveData.approvalsRejections.approvalRate}%`, color: 'text-purple-700' },
+          ].map(s => (
+            <Card key={s.label}>
+              <CardContent className="p-4">
+                <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
+                <div className="text-xs text-gray-500">{s.label}</div>
+                <div className="text-xs text-green-600 mt-1">● Live from server</div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* ── G22: Cross-Provider Duplicates summary ── */}
+      {liveData.crossDuplicates && (
+        <Card className={`border ${liveData.crossDuplicates.total > 0 ? 'border-amber-400 dark:border-amber-700' : 'border-border'}`}>
+          <CardContent className="flex items-center justify-between gap-4 p-4">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className={`h-5 w-5 shrink-0 ${liveData.crossDuplicates.total > 0 ? 'text-amber-500' : 'text-muted-foreground'}`} />
+              <div>
+                <p className="text-sm font-semibold">
+                  {liveData.crossDuplicates.total > 0
+                    ? `${liveData.crossDuplicates.total} cross-provider duplicate invoice group${liveData.crossDuplicates.total !== 1 ? 's' : ''} found`
+                    : 'No cross-provider duplicate invoices detected'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Same invoice number submitted by multiple providers — potential double-billing across facilities
+                </p>
+              </div>
+            </div>
+            {liveData.crossDuplicates.total > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="shrink-0 gap-1.5 text-amber-700 border-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                onClick={() => navigate('/workflow/fraud')}
+              >
+                <ShieldAlert className="h-3.5 w-3.5" /> Review in Fraud Queue →
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Filter Panel */}
       <Card>
         <CardHeader className="pb-3">
@@ -714,6 +769,66 @@ ${unknownPat.slice(0,30).map(c => `<tr><td class="flag-cell">${c.claimNumber}</t
                   </Table>
                 </CardContent>
               </Card>
+
+              {/* ── G22: Provider Performance Drill-Down (live server data) ── */}
+              {liveData.providerPerformance?.data && liveData.providerPerformance.data.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-blue-500" /> Provider Performance — Live Detail
+                    </CardTitle>
+                    <CardDescription>Server-computed metrics per provider. Click "View Claims" to drill into that provider's claims list.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Provider</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead className="text-right">Total</TableHead>
+                          <TableHead className="text-right">Approved</TableHead>
+                          <TableHead className="text-right">Rejected</TableHead>
+                          <TableHead className="text-right">Approval Rate</TableHead>
+                          <TableHead className="text-right">Total Amount</TableHead>
+                          <TableHead className="text-right">Avg OCR Conf.</TableHead>
+                          <TableHead></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {liveData.providerPerformance.data.map((p: any) => (
+                          <TableRow key={p.providerId}>
+                            <TableCell className="font-medium">{p.providerName}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground capitalize">{p.providerType ?? '—'}</TableCell>
+                            <TableCell className="text-right">{p.totalClaims}</TableCell>
+                            <TableCell className="text-right text-emerald-600">{p.approved}</TableCell>
+                            <TableCell className="text-right text-red-600">{p.rejected}</TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <Progress value={p.approvalRate} className="h-1.5 w-14" />
+                                <span className="text-xs w-8 text-right">{p.approvalRate}%</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right font-medium">{formatCurrency(p.totalAmount)}</TableCell>
+                            <TableCell className="text-right text-xs">
+                              {p.avgOcrConfidence > 0 ? `${(p.avgOcrConfidence * 100).toFixed(0)}%` : '—'}
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs gap-1 whitespace-nowrap"
+                                onClick={() => navigate(`/claims?provider=${encodeURIComponent(p.providerName)}`)}
+                              >
+                                View Claims →
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              )}
             </>
           ) : (
             <Card><CardContent className="flex items-center justify-center h-32 text-muted-foreground">No data matching current filters</CardContent></Card>
@@ -809,8 +924,24 @@ ${unknownPat.slice(0,30).map(c => `<tr><td class="flag-cell">${c.claimNumber}</t
                       formatter={(val: any, name: string) => [val, name === 'predicted' ? (trendWithPredictions.find(d => d.predicted === val)?.isPrediction ? 'Forecast' : 'Submitted') : name]}
                     />
                     <Legend />
-                    <Bar dataKey="submitted" name="Submitted" fill={COLORS[3]} fillOpacity={0.7} radius={[3,3,0,0]} />
-                    <Bar dataKey="approved" name="Approved" fill={COLORS[0]} fillOpacity={0.7} radius={[3,3,0,0]} />
+                    <Bar
+                      dataKey="submitted"
+                      name="Submitted"
+                      fill={COLORS[3]}
+                      fillOpacity={0.7}
+                      radius={[3,3,0,0]}
+                      cursor="pointer"
+                      onClick={() => navigate('/claims?status=submitted')}
+                    />
+                    <Bar
+                      dataKey="approved"
+                      name="Approved"
+                      fill={COLORS[0]}
+                      fillOpacity={0.7}
+                      radius={[3,3,0,0]}
+                      cursor="pointer"
+                      onClick={() => navigate('/claims?status=approved')}
+                    />
                     <Line type="monotone" dataKey="predicted" name="Forecast" stroke={COLORS[4]} strokeWidth={2} strokeDasharray="5 5" dot={{ fill: COLORS[4], r: 4 }} />
                   </ComposedChart>
                 </ResponsiveContainer>

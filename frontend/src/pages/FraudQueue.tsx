@@ -64,7 +64,54 @@ export default function FraudQueue() {
   const { user } = useAuthStore()
   const canAct = user?.role === 'admin' || user?.role === 'fraud_officer'
 
-  const [tab, setTab] = useState<'hold' | 'confirmed'>('hold')
+  const [tab, setTab] = useState<'hold' | 'confirmed' | 'cross-duplicates'>('hold')
+
+  // ── Cross-Provider Duplicates ─────────────────────────────────────────────
+  interface CrossDupClaim {
+    id: string
+    claimNumber: string
+    status: string
+    providerName?: string
+    invoiceAmount?: number
+    submittedAt: string
+  }
+  interface CrossDupGroup {
+    invoiceNumber: string
+    count: number
+    providerCount: number
+    totalAmount: number
+    claims: CrossDupClaim[]
+  }
+  const [crossDups, setCrossDups] = useState<CrossDupGroup[]>([])
+  const [crossDupsTotal, setCrossDupsTotal] = useState(0)
+  const [crossDupsLoading, setCrossDupsLoading] = useState(false)
+  const [expandedInvoices, setExpandedInvoices] = useState<Set<string>>(new Set())
+
+  const fetchCrossDups = async () => {
+    setCrossDupsLoading(true)
+    try {
+      const { data } = await api.get('/reports/cross-provider-duplicates')
+      setCrossDups(data.duplicates ?? [])
+      setCrossDupsTotal(data.total ?? 0)
+    } catch (err: any) {
+      toast.error('Failed to load cross-provider duplicates', { description: err?.response?.data?.message })
+    } finally {
+      setCrossDupsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (tab === 'cross-duplicates') fetchCrossDups()
+  }, [tab])
+
+  const toggleExpand = (invoiceNumber: string) => {
+    setExpandedInvoices(prev => {
+      const next = new Set(prev)
+      if (next.has(invoiceNumber)) next.delete(invoiceNumber)
+      else next.add(invoiceNumber)
+      return next
+    })
+  }
 
   // ── Under Investigation ──────────────────────────────────────────────────
   const [claims, setClaims] = useState<FraudClaim[]>([])
@@ -413,6 +460,13 @@ export default function FraudQueue() {
               <Badge variant="outline" className="text-[9px] h-4 px-1.5 ml-1 border-red-500/40 text-red-500">{confirmedTotal}</Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="cross-duplicates" className="gap-2">
+            <Receipt className="h-3.5 w-3.5 text-amber-500" />
+            Cross-Provider Duplicates
+            {crossDupsTotal > 0 && (
+              <Badge variant="outline" className="text-[9px] h-4 px-1.5 ml-1 border-amber-500/40 text-amber-600">{crossDupsTotal}</Badge>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         {/* ── Under Investigation tab ── */}
@@ -699,6 +753,126 @@ export default function FraudQueue() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ── Cross-Provider Duplicates tab ── */}
+        <TabsContent value="cross-duplicates" className="space-y-4 mt-2">
+          {/* Summary + refresh */}
+          <div className="flex items-center justify-between gap-4">
+            <Card className="flex-1">
+              <CardContent className="py-3 px-4 flex items-center gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" />
+                <span className="text-sm">
+                  {crossDupsLoading ? 'Loading…' : (
+                    <><span className="font-bold text-amber-600">{crossDupsTotal}</span> duplicate invoice group{crossDupsTotal !== 1 ? 's' : ''} found across multiple providers</>
+                  )}
+                </span>
+              </CardContent>
+            </Card>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchCrossDups}
+              disabled={crossDupsLoading}
+              className="gap-2 shrink-0"
+            >
+              <RefreshCw className={`h-4 w-4 ${crossDupsLoading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </div>
+
+          {crossDupsLoading ? (
+            <div className="flex items-center justify-center py-24">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : crossDups.length === 0 ? (
+            <Card className="border-dashed">
+              <CardContent className="py-20 flex flex-col items-center gap-3 text-muted-foreground">
+                <ShieldCheck className="h-10 w-10 text-emerald-500 opacity-60" />
+                <div className="text-center">
+                  <p className="font-medium">No cross-provider duplicates</p>
+                  <p className="text-sm">No invoice numbers are shared across multiple providers.</p>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="pt-0 px-0 overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-8" />
+                      <TableHead>Invoice #</TableHead>
+                      <TableHead className="text-center">Provider Count</TableHead>
+                      <TableHead className="text-center">Claim Count</TableHead>
+                      <TableHead className="text-right">Total Amount</TableHead>
+                      <TableHead>Claim Statuses</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {crossDups.map(group => {
+                      const isExpanded = expandedInvoices.has(group.invoiceNumber)
+                      const isCrossProvider = group.providerCount > 1
+                      return (
+                        <>
+                          <TableRow
+                            key={`group-${group.invoiceNumber}`}
+                            className={`cursor-pointer ${isCrossProvider ? 'bg-red-50 dark:bg-red-950/20 hover:bg-red-100 dark:hover:bg-red-950/30' : 'hover:bg-muted/50'}`}
+                            onClick={() => toggleExpand(group.invoiceNumber)}
+                          >
+                            <TableCell className="pl-4">
+                              <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                            </TableCell>
+                            <TableCell className="font-mono text-sm font-semibold">{group.invoiceNumber}</TableCell>
+                            <TableCell className="text-center">
+                              {isCrossProvider ? (
+                                <Badge variant="destructive" className="text-[10px]">{group.providerCount}</Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-[10px]">{group.providerCount}</Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-center text-sm">{group.count}</TableCell>
+                            <TableCell className="text-right text-sm font-medium">{formatCurrency(group.totalAmount)}</TableCell>
+                            <TableCell>
+                              <div className="flex flex-wrap gap-1">
+                                {Array.from(new Set(group.claims.map(c => c.status))).map(s => (
+                                  <Badge key={s} variant="outline" className="text-[10px] capitalize">{s}</Badge>
+                                ))}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                          {isExpanded && group.claims.map(claim => (
+                            <TableRow
+                              key={`claim-${claim.id}`}
+                              className={`text-xs ${isCrossProvider ? 'bg-red-50/60 dark:bg-red-950/10' : 'bg-muted/20'}`}
+                            >
+                              <TableCell />
+                              <TableCell className="pl-8 font-mono text-muted-foreground">{claim.claimNumber}</TableCell>
+                              <TableCell className="text-center text-muted-foreground" colSpan={1}>
+                                {claim.providerName ?? '—'}
+                              </TableCell>
+                              <TableCell className="text-center capitalize">
+                                <Badge
+                                  variant={claim.status === 'approved' ? 'default' : claim.status === 'rejected' ? 'destructive' : 'outline'}
+                                  className="text-[10px]"
+                                >
+                                  {claim.status}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right">{claim.invoiceAmount != null ? formatCurrency(claim.invoiceAmount) : '—'}</TableCell>
+                              <TableCell className="text-muted-foreground">
+                                {new Date(claim.submittedAt).toLocaleDateString('en-KE', { dateStyle: 'medium' })}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
 

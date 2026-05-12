@@ -34,6 +34,8 @@ function claimNumSubseq(claimNumber: string, query: string): boolean {
 }
 import { Pagination } from '@/components/Pagination'
 import InlineDocumentPreview from '@/components/InlineDocumentPreview'
+import BulkActionsBar from '@/components/BulkActionsBar'
+import { Checkbox } from '@/components/ui/checkbox'
 
 type ActionType = 'approve' | 'reject' | 'return_maker' | 'return_provider' | 'view' | 'escalate_fraud' | null
 
@@ -110,6 +112,7 @@ export default function CheckerQueue() {
   const [customDoc, setCustomDoc] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     const load = async () => {
@@ -323,9 +326,28 @@ export default function CheckerQueue() {
             </div>
           ) : (
             <>
+            {bulkSelected.size > 0 && (
+              <div className="mb-3">
+                <BulkActionsBar
+                  selectedIds={Array.from(bulkSelected)}
+                  onClear={() => setBulkSelected(new Set())}
+                  onDone={() => { setBulkSelected(new Set()); window.location.reload() }}
+                  queueType="checker"
+                />
+              </div>
+            )}
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-8">
+                    <Checkbox
+                      checked={filtered.length > 0 && filtered.every(c => bulkSelected.has(c.id))}
+                      onCheckedChange={checked => {
+                        if (checked) setBulkSelected(new Set(filtered.map(c => c.id)))
+                        else setBulkSelected(new Set())
+                      }}
+                    />
+                  </TableHead>
                   <TableHead>Claim #</TableHead>
                   <TableHead>Member</TableHead>
                   <TableHead>Provider</TableHead>
@@ -339,12 +361,20 @@ export default function CheckerQueue() {
               <TableBody>
                 {filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
                       No claims in checker queue
                     </TableCell>
                   </TableRow>
                 ) : filtered.slice((page - 1) * pageSize, page * pageSize).map(claim => (
-                  <TableRow key={claim.id}>
+                  <TableRow key={claim.id} className={bulkSelected.has(claim.id) ? 'bg-blue-50/50' : ''}>
+                    <TableCell onClick={e => e.stopPropagation()}>
+                      <Checkbox
+                        checked={bulkSelected.has(claim.id)}
+                        onCheckedChange={checked => {
+                          setBulkSelected(prev => { const n = new Set(prev); if (checked) n.add(claim.id); else n.delete(claim.id); return n })
+                        }}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium font-mono text-xs">{claim.claimNumber}</TableCell>
                     <TableCell>
                       <p className="font-medium">{claim.memberName}</p>

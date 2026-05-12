@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
   UserCheck, Eye, CheckCircle, XCircle, FileText,
   Clock, AlertTriangle, Search, Loader2, DollarSign, Hash, ChevronLeft, ChevronRight,
@@ -39,6 +39,8 @@ function claimNumSubseq(claimNumber: string, query: string): boolean {
 import { Pagination } from '@/components/Pagination'
 import InlineDocumentPreview from '@/components/InlineDocumentPreview'
 import { toast } from 'sonner'
+import BulkActionsBar from '@/components/BulkActionsBar'
+import { Checkbox } from '@/components/ui/checkbox'
 
 type ActionType = 'approve' | 'reject' | 'view' | 'escalate_fraud' | null
 
@@ -139,6 +141,7 @@ export default function MakerQueue() {
   const [comments, setComments] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
 
   // ── Confirmed fraud cases ─────────────────────────────────────────────────
   const [fraudClaims, setFraudClaims] = useState<any[]>([])
@@ -487,9 +490,28 @@ export default function MakerQueue() {
             </div>
           ) : (
             <>
+            {bulkSelected.size > 0 && (
+              <div className="mb-3">
+                <BulkActionsBar
+                  selectedIds={Array.from(bulkSelected)}
+                  onClear={() => setBulkSelected(new Set())}
+                  onDone={() => { setBulkSelected(new Set()); window.location.reload() }}
+                  queueType="maker"
+                />
+              </div>
+            )}
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-8">
+                    <Checkbox
+                      checked={filtered.length > 0 && filtered.every(c => bulkSelected.has(c.id))}
+                      onCheckedChange={checked => {
+                        if (checked) setBulkSelected(new Set(filtered.map(c => c.id)))
+                        else setBulkSelected(new Set())
+                      }}
+                    />
+                  </TableHead>
                   <TableHead>Claim #</TableHead>
                   <TableHead>Member</TableHead>
                   <TableHead>Provider</TableHead>
@@ -513,10 +535,21 @@ export default function MakerQueue() {
                   return (
                     <TableRow
                       key={claim.id}
-                      className={`cursor-pointer hover:bg-muted/60 transition-colors ${lowConf ? 'bg-amber-50/30 dark:bg-amber-950/10' : ''}`}
-                      onClick={() => openAction(claim, 'view')}
+                      className={`hover:bg-muted/60 transition-colors ${lowConf ? 'bg-amber-50/30 dark:bg-amber-950/10' : ''} ${bulkSelected.has(claim.id) ? 'bg-blue-50/50' : ''}`}
                     >
-                      <TableCell>
+                      <TableCell onClick={e => e.stopPropagation()}>
+                        <Checkbox
+                          checked={bulkSelected.has(claim.id)}
+                          onCheckedChange={checked => {
+                            setBulkSelected(prev => {
+                              const next = new Set(prev)
+                              if (checked) next.add(claim.id); else next.delete(claim.id)
+                              return next
+                            })
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell onClick={() => openAction(claim, 'view')} className="cursor-pointer">
                         <div className="flex items-center gap-1">
                           <span className="font-medium font-mono text-xs">{claim.claimNumber}</span>
                           {claim.aiExtracted && <Sparkles className="h-3 w-3 text-violet-500" />}

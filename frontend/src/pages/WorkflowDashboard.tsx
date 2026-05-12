@@ -304,8 +304,11 @@ export default function WorkflowDashboard() {
                 <Users className="mr-2 h-4 w-4" /> Provider Approvals
               </Button>
             )}
-            <Button variant="outline" className="w-full justify-start" onClick={() => navigate('/documents')}>
-              <AlertTriangle className="mr-2 h-4 w-4" /> Purge Requests
+            <Button variant="outline" className="w-full justify-start" onClick={() => navigate('/workflow/aging')}>
+              <Clock className="mr-2 h-4 w-4" /> Claims Aging
+            </Button>
+            <Button variant="outline" className="w-full justify-start" onClick={() => navigate('/appeals')}>
+              <AlertTriangle className="mr-2 h-4 w-4" /> Appeals Queue
             </Button>
             <Button variant="outline" className="w-full justify-start" onClick={() => navigate('/branches')}>
               <GitBranch className="mr-2 h-4 w-4" /> Branch Network
