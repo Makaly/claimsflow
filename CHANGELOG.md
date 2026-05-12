@@ -9,26 +9,53 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
-- Unit tests for `AppController` health and root endpoints.
-- Unit tests for `computeFraudSignals` covering all 10 fraud signal types
-  and the provider-mismatch helper (17 test cases).
-- Unit tests for `AuthService` covering login, account lockout (5 failed
-  attempts → 15-minute lock), and the forgot-password / reset-password
-  token flow including enumeration protection and token expiry.
-- Unit tests for `AnomalyScoringService` covering all 7 statistical
-  factors, score clamping, risk-level boundaries, and the
-  `OcrExtraction` upsert.
-- Lightweight HTTP e2e test for `/`, `/health`, and unknown routes
-  using supertest (boots only `AppController`/`AppService` so it runs
-  without infrastructure dependencies in CI).
+- **OpenAPI / Swagger** — backend now publishes a live Swagger UI at
+  `/api/docs` and emits an OpenAPI spec to disk via `EXPORT_OPENAPI=1`,
+  consumed by `scripts/build-redoc.sh` to produce a self-contained
+  Redoc static reference (`docs/api/redoc.html`).
+- **MkDocs site** — full Material-themed documentation under `docs/`
+  with home, getting-started, testing, API, architecture, security,
+  and changelog sections. Built in CI with `mkdocs build --strict`.
+- **Storybook 8** for the frontend with a11y + interactions addons and
+  initial badge/button stories; static bundle uploaded as a CI artifact.
+- **Frontend test infrastructure** — Vitest + jest-axe for unit and
+  accessibility tests; Playwright for browser-based e2e + a11y + visual
+  regression with the HTML report uploaded from CI.
+- **Architecture fitness suite** — `backend/test/architecture.e2e-spec.ts`
+  enforces module boundaries (no `claims → auth` deep imports, no
+  controller-to-controller dependencies, etc.).
+- **Module-layering rules** for the frontend via dependency-cruiser
+  (`.dependency-cruiser.cjs` + `npm run depcruise`), wired into CI.
+- **k6 performance suite** under `perf/` — smoke (`smoke.js`) and auth
+  load profile (`load-auth.js`); smoke runs on every PR labelled `perf`.
+- **Kubernetes manifests** under `k8s/` for namespace, backend, and
+  frontend deployments, validated in CI with kubeconform + kube-linter.
+- **Security tooling configs** — gitleaks, hadolint, semgrep, trivy,
+  and OWASP ZAP baseline configuration files for repeatable scans.
+- **Unit tests** for `AppController` health and root endpoints,
+  `computeFraudSignals` (10 signal types, 17 cases), `AuthService`
+  (login, lockout, password-reset flow), `AnomalyScoringService`
+  (7 statistical factors, score clamping, risk-level boundaries),
+  and the OCR vision-router pre-flight + invoice patterns.
+- **Lightweight HTTP e2e** for `/`, `/health`, and unknown routes using
+  supertest — boots only `AppController`/`AppService` so it runs without
+  infrastructure dependencies in CI.
 - External `jest.config.js` replaces the inline `package.json` block,
   keeping test configuration out of dependency-PR diffs.
 
 ### Changed
 
+- **CI pipeline expanded** — backend job runs the e2e + architecture
+  fitness suite alongside unit tests; frontend job runs depcruise +
+  Vitest + Storybook build; new dedicated jobs for Playwright e2e,
+  MkDocs (strict), hadolint + compose config check, kubeconform +
+  kube-linter, and a consolidated security scan (gitleaks, npm audit,
+  Trivy with SARIF upload to GitHub Security).
 - Enabled `isolatedModules: true` in `tsconfig.json` (recommended by
   ts-jest) — eliminates the deprecation warning and speeds up cold
   starts on the CI runner.
+- Repository `.gitignore` updated to exclude `storybook-static/` and
+  the generated `openapi.json`.
 
 ### Fixed
 
