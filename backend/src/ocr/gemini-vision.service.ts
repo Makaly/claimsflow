@@ -74,11 +74,11 @@ export async function buildPageContextHints(pdfPath: string): Promise<string> {
   try {
     // Use pdftotext per-page (subprocess) — more reliable than pdf-parse's async pagerender
     // which can silently drop pages when the callback returns a Promise it doesn't await.
-    const { execSync } = await import('child_process');
+    const { spawnSync } = await import('child_process');
     let pageCount = 0;
     try {
-      const info = execSync(`pdfinfo "${pdfPath}"`, { timeout: 10_000 }).toString();
-      const m = info.match(/Pages:\s+(\d+)/);
+      const infoRes = spawnSync('pdfinfo', [pdfPath], { timeout: 10_000, stdio: 'pipe' });
+      const m = (infoRes.stdout?.toString() || '').match(/Pages:\s+(\d+)/);
       pageCount = m ? parseInt(m[1]) : 0;
     } catch { /* pdfinfo unavailable */ }
 
@@ -86,8 +86,8 @@ export async function buildPageContextHints(pdfPath: string): Promise<string> {
     if (pageCount > 0) {
       for (let pg = 1; pg <= pageCount; pg++) {
         try {
-          const text = execSync(`pdftotext -f ${pg} -l ${pg} "${pdfPath}" -`, { timeout: 10_000 }).toString();
-          pageTexts.push(text);
+          const res = spawnSync('pdftotext', ['-f', String(pg), '-l', String(pg), pdfPath, '-'], { timeout: 10_000, stdio: 'pipe' });
+          pageTexts.push(res.stdout?.toString() || '');
         } catch { pageTexts.push(''); }
       }
     }
@@ -225,7 +225,7 @@ export async function buildPageContextHints(pdfPath: string): Promise<string> {
     // supporting document for that invoice — it must be a separate claim.
     // Run quick Tesseract on those pages so we can name the provider explicitly.
     try {
-      const { execSync } = await import('child_process');
+      const { spawnSync } = await import('child_process');
       const { createWorker, OEM } = await import('tesseract.js');
       const tmpDir = require('path').join(process.cwd(), 'uploads', 'ocr-temp', `hints-${Date.now()}`);
       require('fs').mkdirSync(tmpDir, { recursive: true });
@@ -239,7 +239,7 @@ export async function buildPageContextHints(pdfPath: string): Promise<string> {
           try {
             const pgNum = curr.pg;
             const tmpPrefix = require('path').join(tmpDir, `scan-${String(pgNum).padStart(4, '0')}`);
-            execSync(`pdftoppm -png -r 200 -f ${pgNum} -l ${pgNum} "${pdfPath}" "${tmpPrefix}"`, { timeout: 30_000, stdio: 'pipe' });
+            spawnSync('pdftoppm', ['-png', '-r', '200', '-f', String(pgNum), '-l', String(pgNum), pdfPath, tmpPrefix], { timeout: 30_000, stdio: 'pipe' });
             const files = require('fs').readdirSync(tmpDir).filter((f: string) => f.startsWith(require('path').basename(tmpPrefix)));
             if (files.length > 0) {
               const imgPath = require('path').join(tmpDir, files[0]);

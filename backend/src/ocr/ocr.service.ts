@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { createWorker, OEM } from 'tesseract.js';
-import { execSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
@@ -124,7 +124,7 @@ export class OcrService {
 
     if (emptyPageIndices.length > 0) {
       this.logger.log(`Scanned PDF detected, running Tesseract OCR...`);
-      const { execSync } = await import('child_process');
+      const { spawnSync } = await import('child_process');
       const tmpDir = path.join(process.cwd(), 'uploads', 'ocr-temp', `pages-${Date.now()}`);
       fs.mkdirSync(tmpDir, { recursive: true });
       const worker = await createWorker('eng', OEM.LSTM_ONLY);
@@ -134,8 +134,9 @@ export class OcrService {
           const pageNum = idx + 1;
           const tmpPrefix = path.join(tmpDir, `page-${String(pageNum).padStart(4, '0')}`);
           try {
-            execSync(
-              `pdftoppm -png -r 250 -f ${pageNum} -l ${pageNum} "${pdfPath}" "${tmpPrefix}"`,
+            spawnSync(
+              'pdftoppm',
+              ['-png', '-r', '250', '-f', String(pageNum), '-l', String(pageNum), pdfPath, tmpPrefix],
               { timeout: 300_000, stdio: 'pipe' },
             );
             const files = fs.readdirSync(tmpDir).filter(f => f.startsWith(path.basename(tmpPrefix)));
@@ -177,17 +178,17 @@ export class OcrService {
     const worker = await createWorker('eng', OEM.LSTM_ONLY);
 
     try {
-      const { execSync } = await import('child_process');
+      const { spawnSync } = await import('child_process');
       const tmpDir = path.join(process.cwd(), 'uploads', 'ocr-temp', `pages-${Date.now()}`);
       fs.mkdirSync(tmpDir, { recursive: true });
 
       try {
         // Only render pages we need at high res, rest at lower res for categorization
-        execSync(`pdftoppm -png -r 250 -f 1 -l ${maxOcrPages} "${pdfPath}" "${tmpDir}/page"`, { timeout: 300_000 });
+        spawnSync('pdftoppm', ['-png', '-r', '250', '-f', '1', '-l', String(maxOcrPages), pdfPath, `${tmpDir}/page`], { timeout: 300_000 });
 
         // If there are more pages, render them at lower res for categorization
         if (pageCount > maxOcrPages) {
-          execSync(`pdftoppm -png -r 150 -f ${maxOcrPages + 1} -l ${pageCount} "${pdfPath}" "${tmpDir}/page"`, { timeout: 300_000 });
+          spawnSync('pdftoppm', ['-png', '-r', '150', '-f', String(maxOcrPages + 1), '-l', String(pageCount), pdfPath, `${tmpDir}/page`], { timeout: 300_000 });
         }
 
         const pageFiles = fs.readdirSync(tmpDir).filter(f => f.endsWith('.png')).sort();

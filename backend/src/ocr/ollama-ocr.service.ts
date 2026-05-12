@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import { ParsedInvoice } from './ocr.service';
 import {
   INVOICE_NUMBER_PATTERNS, INVOICE_DATE_PATTERNS, TOTAL_AMOUNT_PATTERNS,
@@ -87,7 +87,7 @@ export class OllamaOcrService implements OnModuleInit {
   private async pdfPageToBase64(pdfPath: string, page = 1): Promise<string> {
     const tmpOut = `/tmp/ocr_page_${Date.now()}`;
     try {
-      execSync(`pdftoppm -r 300 -f ${page} -l ${page} -png "${pdfPath}" "${tmpOut}"`, { stdio: 'pipe' });
+      spawnSync('pdftoppm', ['-r', '300', '-f', String(page), '-l', String(page), '-png', pdfPath, tmpOut], { stdio: 'pipe' });
       const files = fs.readdirSync('/tmp').filter(f => f.startsWith(path.basename(tmpOut)));
       if (!files.length) throw new Error('pdftoppm produced no output');
       const imgPath = `/tmp/${files[0]}`;
@@ -308,8 +308,9 @@ export class OllamaOcrService implements OnModuleInit {
     // Get page count
     let pageCount = 1;
     try {
-      const out = execSync(`pdfinfo "${filePath}" 2>/dev/null | grep Pages | awk '{print $2}'`).toString().trim();
-      pageCount = parseInt(out) || 1;
+      const res = spawnSync('pdfinfo', [filePath], { stdio: 'pipe', timeout: 10_000 });
+      const match = (res.stdout?.toString() || '').match(/Pages:\s+(\d+)/);
+      pageCount = match ? parseInt(match[1]) : 1;
     } catch { /* use 1 */ }
 
     // Step 1: text-layer extraction (fast, no network, works for digitally-generated PDFs).

@@ -8,8 +8,8 @@ import * as path from 'path';
 import * as pdfParse from 'pdf-parse';
 import Anthropic from '@anthropic-ai/sdk';
 
-// Root folder for the structured file dump
-const DUMP_ROOT = '/home/bigdev/Desktop/cic/claims/uploaded_files';
+// Root folder for the structured file dump — configurable via UPLOAD_DUMP_DIR env var
+const DUMP_ROOT = process.env.UPLOAD_DUMP_DIR || path.resolve(process.cwd(), 'uploaded_files');
 
 @Injectable()
 export class DocumentsService {
