@@ -22,11 +22,16 @@ export class AuthController {
   async login(@Body() loginDto: LoginDto, @Response({ passthrough: true }) res: any) {
     const result = await this.authService.login(loginDto);
     const isProduction = process.env.NODE_ENV === 'production';
+    // Frontend and backend live on different subdomains in production
+    // (claimsflow-frontend.onrender.com → claimsflow-backend.onrender.com),
+    // so cookies must be SameSite=None;Secure for the browser to attach
+    // them to cross-site XHRs. In dev we still proxy through Vite, so
+    // SameSite=Strict is correct and tighter.
     res.cookie('access_token', result.access_token, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: 'strict',
-      maxAge: 24 * 60 * 60 * 1000, // 1 day in ms
+      sameSite: isProduction ? 'none' : 'strict',
+      maxAge: 24 * 60 * 60 * 1000,
       path: '/',
     });
     return result;
@@ -100,7 +105,13 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @HttpCode(200)
   async logout(@Request() req, @Response({ passthrough: true }) res: any) {
-    res.clearCookie('access_token', { httpOnly: true, sameSite: 'strict', path: '/' });
+    const isProduction = process.env.NODE_ENV === 'production';
+    res.clearCookie('access_token', {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'strict',
+      path: '/',
+    });
     return { message: 'Logged out successfully.' };
   }
 }
