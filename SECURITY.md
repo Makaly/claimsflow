@@ -34,7 +34,7 @@ We will:
 ## Hardening checklist for operators
 
 - Rotate `JWT_SECRET` whenever a `.env` file is leaked or shared.
-- Rotate **all** API keys (Gemini, Anthropic, Twilio, Africa's Talking,
+- Rotate **all** API keys (AI Vision, Gemini, Twilio, Africa's Talking,
   SMTP) on any suspicion of disclosure — they cannot be revoked
   retroactively.
 - Run the backend behind TLS termination only. The application sets HSTS

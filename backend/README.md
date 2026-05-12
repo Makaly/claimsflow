@@ -8,7 +8,7 @@ A production-ready REST API for end-to-end medical insurance claims processing b
 - **Provider Management** — Full lifecycle: onboarding, approval workflow, branch management, suspension/reactivation
 - **Claims Processing** — Create, submit, assign, validate, approve/reject with a maker-checker workflow
 - **Document Management** — Secure upload, storage, watermarking, barcode/QR generation, PDF operations, TIFF conversion
-- **OCR Engine** — Multi-model extraction pipeline: Gemini Vision, Anthropic Vision, Ollama (local), and Tesseract fallback; circuit-breaker quota management; model-agnostic page pre-scan for consistent claim splitting across all backends
+- **OCR Engine** — Multi-model extraction pipeline: Gemini Vision, AI Vision API, Ollama (local), and Tesseract fallback; circuit-breaker quota management; model-agnostic page pre-scan for consistent claim splitting across all backends
 - **Batch Submissions** — Bulk claim submission via CSV/Excel with async processing
 - **Notifications** — Email (SMTP/Nodemailer) and SMS (Africa's Talking) delivery with queue-backed retries
 - **Workflow Engine** — Completeness validation, auto-assignment, escalation, and audit trail
@@ -26,7 +26,7 @@ A production-ready REST API for end-to-end medical insurance claims processing b
 | Database | PostgreSQL 15 |
 | Cache / Queue | Redis + Bull |
 | Auth | Passport.js + JWT |
-| OCR | Tesseract.js + Gemini Vision + Anthropic Vision + Ollama |
+| OCR | Tesseract.js + Gemini Vision + AI Vision API + Ollama |
 | PDF | pdf-lib, PDFKit, pdf-parse |
 | Container | Docker |
 
@@ -103,16 +103,16 @@ Configure vision providers in `.env`. Any combination works — the pipeline aut
 GEMINI_API_KEY=your-google-ai-studio-key
 GEMINI_MODEL=gemini-2.5-pro          # optional override
 
-# Anthropic Vision (higher accuracy on complex documents)
-ANTHROPIC_API_KEY=your-anthropic-key
-ANTHROPIC_MODEL=claude-sonnet-4-6    # optional override
+# AI Vision API (higher accuracy on complex documents)
+ANTHROPIC_API_KEY=your-vision-api-key
+ANTHROPIC_MODEL=your-preferred-model    # optional override
 
 # Ollama local inference (no API key — privacy-first, GPU recommended)
 OLLAMA_URL=http://localhost:11434
 OLLAMA_VISION_MODEL=moondream        # moondream (1B, CPU-friendly) or llama3.2-vision (11B, GPU)
 
 # Active provider selection
-VISION_DEFAULT_PROVIDER=gemini       # gemini | claude | ollama | tesseract
+VISION_DEFAULT_PROVIDER=gemini       # gemini | ai-vision | ollama | tesseract
 ```
 
 Without any cloud key the pipeline falls back to Ollama (if running locally) then the Tesseract regex pipeline. All providers share the same page pre-scan split logic so claim grouping is consistent regardless of the active backend.
@@ -149,13 +149,13 @@ The extraction pipeline runs a lightweight **page pre-scan** on every PDF before
 
 ```env
 GEMINI_API_KEY=...                     # enables Gemini Vision
-ANTHROPIC_API_KEY=...                  # enables Anthropic Vision
+ANTHROPIC_API_KEY=...                  # enables AI Vision API backend
 OLLAMA_URL=http://localhost:11434      # enables local Ollama inference
-VISION_DEFAULT_PROVIDER=gemini         # gemini | claude | ollama | tesseract
+VISION_DEFAULT_PROVIDER=gemini         # gemini | ai-vision | ollama | tesseract
 OCR_USE_PAGE_HINTS=true                # set 'false' to disable pre-scan (not recommended)
 ```
 
-The pipeline uses the provider set in `VISION_DEFAULT_PROVIDER` first, then falls back through the chain `gemini → claude → ollama → tesseract`. Each provider runs the same pre-scan split logic so claim grouping stays consistent even after a failover. The circuit breaker suppresses a failed provider for 5 minutes so subsequent requests skip directly to the next available backend.
+The pipeline uses the provider set in `VISION_DEFAULT_PROVIDER` first, then falls back through the remaining chain automatically. Each provider runs the same pre-scan split logic so claim grouping stays consistent even after a failover. The circuit breaker suppresses a failed provider for 5 minutes so subsequent requests skip directly to the next available backend.
 
 ## Docker
 
@@ -206,9 +206,9 @@ src/
 │   └── services/           # PDF, barcode, EDMS, OCR helpers
 ├── documents/              # Document storage and management
 ├── notifications/          # Email + SMS services and processor
-├── ocr/                    # Multi-model invoice extraction (Gemini, Anthropic, Ollama, Tesseract)
+├── ocr/                    # Multi-model invoice extraction (Gemini, AI Vision, Ollama, Tesseract)
 │   ├── gemini-vision.service.ts  # Gemini Vision + shared model-agnostic page pre-scan
-│   ├── claude-vision.service.ts  # Anthropic Vision backend (single + multi-claim)
+│   ├── claude-vision.service.ts  # AI Vision backend (single + multi-claim)
 │   ├── ollama-ocr.service.ts     # Local Ollama inference with text-layer fast-path
 │   ├── vision-router.service.ts  # Quota-aware circuit-breaker + fallback chain
 │   ├── ocr.service.ts            # Tesseract pipeline + claim grouping logic

@@ -26,7 +26,7 @@ ClaimsFlow tests are organised into five layers. Each runs in CI on every PR.
 - `claims/fraud-signals.spec.ts` — every fraud rule (round-amount, identity, duplicate invoice, OCR confidence, date sanity, batch siblings)
 - `claims/anomaly-scoring.service.spec.ts` — z-score outliers, submission velocity, factor cap
 - `ocr/invoice-patterns.spec.ts` — every invoice / date / amount / membership regex against representative provider strings
-- `ocr/claude-vision.service.spec.ts` — API-key gating for the Anthropic vision call
+- `ocr/claude-vision.service.spec.ts` — API-key availability gating for the AI vision backend
 
 ### Backend e2e (`backend/test/`)
 

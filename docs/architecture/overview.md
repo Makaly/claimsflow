@@ -15,9 +15,9 @@ ClaimsFlow is a TypeScript monorepo with three logical layers:
 └──────────┬────────────┘
            │
 ┌──────────┴────────────┐
-│ External services     │  Anthropic, Gemini, Ollama,
+│ External services     │  AI Vision API, Gemini, Ollama,
 │ OCR pipeline (Tesser- │  Africastalking SMS, SMTP,
-│ act, Claude Vision)   │  Eoxegen eligibility, Twilio
+│ act + vision models)  │  Eoxegen eligibility, Twilio
 └───────────────────────┘
 ```
 
@@ -29,7 +29,7 @@ Each module is wired in `backend/src/app.module.ts`:
 | --------------------- | ------------------------------------------------------------- |
 | `AuthModule`          | JWT auth, login lockout, password reset                        |
 | `ClaimsModule`        | Claim CRUD, fraud signals, anomaly scoring, eligibility check  |
-| `OcrModule`           | Tesseract + Claude / Gemini / Ollama vision routing            |
+| `OcrModule`           | Tesseract + AI Vision / Gemini / Ollama routing with circuit-breaker |
 | `DocumentsModule`     | Upload + classify + viewer endpoints                           |
 | `WorkflowModule`      | Maker → checker → supervisor state machine                     |
 | `BatchSubmissionModule` | Batch claim ingestion + per-claim fanout                     |

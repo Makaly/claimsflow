@@ -87,7 +87,7 @@ services:
       - key: GEMINI_MODEL
         value: gemini-2.5-flash
       - key: VISION_DEFAULT_PROVIDER
-        value: claude
+        value: gemini
       - key: CLASSIFIER_AI_PROVIDER
         value: auto
       - key: OCR_USE_PAGE_HINTS

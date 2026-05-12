@@ -61,7 +61,7 @@ ClaimsFlow digitises the full medical claims lifecycle — from provider intake 
 | Backend       | NestJS 11, TypeScript, Passport JWT, Socket.IO, BullMQ, Helmet          |
 | Database      | PostgreSQL 15 + Prisma ORM                                              |
 | Cache / Queue | Redis 7                                                                 |
-| OCR / AI      | Google Gemini Vision, Anthropic API, Ollama, Tesseract                  |
+| OCR / AI      | Gemini Vision, AI Vision API, Ollama (local), Tesseract                 |
 | Notifications | Nodemailer (SMTP), Twilio, Africa's Talking, Socket.IO                  |
 | Reports       | ExcelJS, PDFKit, pdf-lib                                                |
 | Deployment    | Docker, Render, Alpine + OpenSSL                                        |
