@@ -21,7 +21,9 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('token')
       localStorage.removeItem('user')
-      window.location.href = '/login'
+      // Use location.replace so the browser history stack stays clean
+      // and the user lands on /login without a back-button loop.
+      window.location.replace('/login')
     }
     return Promise.reject(error)
   }

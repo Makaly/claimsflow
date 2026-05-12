@@ -90,7 +90,11 @@ export default function Login() {
       login(result.access_token, result.user)
       navigate('/')
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Invalid credentials. Please try again.')
+      if (!err.response) {
+        setError('Cannot reach the server. The backend may be starting up — please wait 30 seconds and try again.')
+      } else {
+        setError(err.response.data?.message || 'Invalid credentials. Please try again.')
+      }
     } finally {
       setLoading(false)
     }
@@ -112,8 +116,12 @@ export default function Login() {
       const result = await authService.login(credentials[role])
       login(result.access_token, result.user)
       navigate('/')
-    } catch {
-      setError('Demo login failed. Please run the database seed: npm run prisma:seed')
+    } catch (err: any) {
+      if (!err.response) {
+        setError('Backend is starting up — please wait 30 seconds and try again.')
+      } else {
+        setError('Demo login failed. Ensure the database seed has been run: npx prisma db seed')
+      }
     } finally {
       setDemoLoading(null)
     }

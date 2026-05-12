@@ -50,11 +50,16 @@ export const useAuthStore = create<AuthState>((set) => ({
       const { data } = await api.get<User>('/auth/profile')
       localStorage.setItem('user', JSON.stringify(data))
       set({ user: data })
-    } catch {
-      // Token is invalid — clear everything and force re-login
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
-      set({ token: null, user: null, isAuthenticated: false })
+    } catch (err: any) {
+      // Only invalidate the session when the server explicitly rejects the token.
+      // Network errors and 5xx (e.g. Render cold-start) must NOT clear the
+      // token — the user would be silently logged out every time the backend
+      // is sleeping.
+      if (err.response?.status === 401) {
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+        set({ token: null, user: null, isAuthenticated: false })
+      }
     }
   },
 }))
