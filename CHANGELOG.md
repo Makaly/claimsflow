@@ -7,6 +7,18 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- **CODEOWNERS** (`.github/CODEOWNERS`) for default-reviewer routing.
+- **GitHub Pages docs deploy** workflow (`.github/workflows/docs.yml`) —
+  builds MkDocs strictly on every push to `master` that touches `docs/`
+  or `mkdocs.yml` and publishes to GitHub Pages.
+
+### Changed
+
+- README badges now reflect live CI / CodeQL status and the latest
+  release tag instead of hard-coded shields.
+
 ## [1.4.0] - 2026-05-12
 
 ### Added
