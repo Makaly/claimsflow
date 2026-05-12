@@ -1,24 +1,45 @@
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Build-time deps: python/make/g++ for native addons, openssl for Prisma
+RUN apk add --no-cache python3 make g++ openssl
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+
+# Generate Prisma client targeting Alpine's musl + OpenSSL 3.x
+RUN npx prisma generate
+
+# Compile TypeScript
+RUN npm run build
+
+# ── Runtime image ─────────────────────────────────────────────────────────────
 FROM node:20-alpine
 
 WORKDIR /app
 
-# Install dependencies for node-gyp and Tesseract
-RUN apk add --no-cache python3 make g++ tesseract-ocr
+# Runtime dependencies
+# - openssl: required by Prisma query engine on Alpine (musl)
+# - tesseract-ocr: OCR fallback pipeline
+# - poppler-utils: pdftoppm / pdftotext for per-page PDF processing
+RUN apk add --no-cache openssl tesseract-ocr poppler-utils
 
-# Copy package files
 COPY package*.json ./
+RUN npm ci --omit=dev
 
-# Install dependencies
-RUN npm install
+# Copy compiled output and Prisma artifacts from builder
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY prisma ./prisma
 
-# Copy source code
-COPY . .
+# Tesseract English language data (bundled in the repo root)
+COPY eng.traineddata /usr/share/tessdata/eng.traineddata
 
-# Generate Prisma Client
-RUN npx prisma generate
-
-# Expose port
 EXPOSE 4000
 
-# Start application
-CMD ["npm", "run", "start:dev"]
+# Run migrations then start the compiled application
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main"]
