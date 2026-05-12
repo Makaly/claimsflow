@@ -11,11 +11,14 @@ import {
   UploadedFile,
   Query,
   Request,
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
+import * as fs from 'fs';
 import { ClaimsService } from './claims.service';
+import { AnomalyScoringService } from './anomaly-scoring.service';
 import { CreateClaimDto } from './dto/create-claim.dto';
 import { UpdateClaimDto } from './dto/update-claim.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -24,12 +27,31 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { ProviderApprovedGuard } from '../auth/guards/provider-approved.guard';
 import { EmailService } from '../notifications/email.service';
 
+// Allowed MIME signatures (magic bytes) for uploaded files
+const MAGIC_BYTES: Record<string, Buffer[]> = {
+  pdf: [Buffer.from([0x25, 0x50, 0x44, 0x46])],             // %PDF
+  jpg: [Buffer.from([0xff, 0xd8, 0xff])],
+  png: [Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])],
+};
+
+function verifyMagicBytes(filePath: string, ext: string): boolean {
+  const key = ext.replace('.', '').toLowerCase();
+  const signatures = MAGIC_BYTES[key === 'jpeg' ? 'jpg' : key];
+  if (!signatures) return false;
+  const fd = fs.openSync(filePath, 'r');
+  const buf = Buffer.alloc(8);
+  fs.readSync(fd, buf, 0, 8, 0);
+  fs.closeSync(fd);
+  return signatures.some((sig) => buf.slice(0, sig.length).equals(sig));
+}
+
 @Controller('claims')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ClaimsController {
   constructor(
     private readonly claimsService: ClaimsService,
     private readonly emailService: EmailService,
+    private readonly anomalyScoringService: AnomalyScoringService,
   ) {}
 
   @Post()
@@ -57,6 +79,14 @@ export class ClaimsController {
     @UploadedFile() file?: Express.Multer.File,
     @Request() req?: any,
   ) {
+    if (file) {
+      const ext = extname(file.originalname).toLowerCase();
+      if (!verifyMagicBytes(file.path, ext)) {
+        fs.unlinkSync(file.path);
+        throw new BadRequestException('File content does not match its declared type');
+      }
+    }
+
     const claim = await this.claimsService.create(
       createClaimDto,
       this.actorFrom(req),
@@ -223,6 +253,15 @@ export class ClaimsController {
     return this.claimsService.reprocessClaim(id, body?.reason ?? '', this.actorFrom(req));
   }
 
+  @Get('by-barcode/:barcode')
+  async findByBarcode(@Param('barcode') barcode: string) {
+    const claim = await this.claimsService.findByBarcode(barcode);
+    if (!claim) {
+      return { found: false, barcode };
+    }
+    return { found: true, claim };
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string, @Request() req: any) {
     return this.claimsService.findOne(id, this.actorFrom(req));
@@ -231,6 +270,11 @@ export class ClaimsController {
   @Get(':id/ocr-fields')
   getOcrFields(@Param('id') id: string, @Request() req: any) {
     return this.claimsService.getOcrFields(id, this.actorFrom(req));
+  }
+
+  @Get(':id/anomaly-detail')
+  async getAnomalyDetail(@Param('id') id: string) {
+    return this.anomalyScoringService.getAnomalyDetail(id);
   }
 
   @Get(':id/audit-trail')

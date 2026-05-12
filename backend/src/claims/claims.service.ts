@@ -8,6 +8,8 @@ import { computeFraudSignals, providerMismatchSignal, DuplicateClaimRef } from '
 import { AuditService, AuditActor } from '../common/services/audit.service';
 import { DocumentsService } from '../documents/documents.service';
 import { EmailService } from '../notifications/email.service';
+import { EligibilityService } from './eligibility.service';
+import { AnomalyScoringService } from './anomaly-scoring.service';
 
 @Injectable()
 export class ClaimsService {
@@ -17,6 +19,8 @@ export class ClaimsService {
     private audit: AuditService,
     private documentsService: DocumentsService,
     private emailService: EmailService,
+    private eligibilityService: EligibilityService,
+    private anomalyScoringService: AnomalyScoringService,
   ) {}
 
   /**
@@ -267,6 +271,10 @@ export class ClaimsService {
           attempts: 3,
           backoff: { type: 'exponential', delay: 3_000 },
         }).catch(() => {});
+        // Fire-and-forget eligibility check — must not block the response
+        this.eligibilityService.checkEligibility(claim.id, restDto.memberNumber || '', invoiceDate ? new Date(invoiceDate) : null).catch(() => {});
+        // Fire-and-forget anomaly scoring — statistical deviation analysis (G17)
+        this.anomalyScoringService.scoreClaim(claim.id).catch(() => {});
         return routed ?? claim;
       } catch (err: any) {
         const isUniqueViolation = err?.code === 'P2002';
@@ -420,6 +428,18 @@ export class ClaimsService {
     }
 
     return claim;
+  }
+
+  async findByBarcode(barcode: string) {
+    return this.prisma.claim.findFirst({
+      where: { barcode: barcode.trim() },
+      include: {
+        provider: { select: { id: true, name: true, type: true } },
+        documents: true,
+        ocrData: true,
+        assignedUser: { select: { id: true, name: true, email: true } },
+      },
+    });
   }
 
   async getOcrFields(id: string, actor?: AuditActor) {
