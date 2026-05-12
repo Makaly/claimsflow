@@ -12,6 +12,23 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Unit tests for `AppController` health and root endpoints.
 - Unit tests for `computeFraudSignals` covering all 10 fraud signal types
   and the provider-mismatch helper (17 test cases).
+- Unit tests for `AuthService` covering login, account lockout (5 failed
+  attempts → 15-minute lock), and the forgot-password / reset-password
+  token flow including enumeration protection and token expiry.
+- Unit tests for `AnomalyScoringService` covering all 7 statistical
+  factors, score clamping, risk-level boundaries, and the
+  `OcrExtraction` upsert.
+- Lightweight HTTP e2e test for `/`, `/health`, and unknown routes
+  using supertest (boots only `AppController`/`AppService` so it runs
+  without infrastructure dependencies in CI).
+- External `jest.config.js` replaces the inline `package.json` block,
+  keeping test configuration out of dependency-PR diffs.
+
+### Changed
+
+- Enabled `isolatedModules: true` in `tsconfig.json` (recommended by
+  ts-jest) — eliminates the deprecation warning and speeds up cold
+  starts on the CI runner.
 
 ### Fixed
 
