@@ -1,0 +1,53 @@
+name: Keep Render awake
+
+# Render's free web tier spins down a service after ~15 minutes of
+# inactivity, and the cold start that follows the next request can
+# take 30-60 seconds and surfaces as a 502 to end-users. A scheduled
+# ping every 10 minutes keeps the dyno warm at zero cost.
+#
+# The schedule uses GitHub's shared cron pool, which can drift by a
+# few minutes under load — that is fine; the goal is a steady stream
+# of traffic, not a precise interval.
+
+on:
+  schedule:
+    # Every 10 minutes, on the dot.
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keepalive
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    name: Ping ${{ matrix.target.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - name: backend
+            url: https://claimsflow-backend.onrender.com/api/health
+            expected: '200'
+          - name: frontend
+            url: https://claimsflow-frontend.onrender.com/
+            expected: '200'
+    steps:
+      - name: curl ${{ matrix.target.url }}
+        run: |
+          set -eu
+          status=$(curl -s -o /dev/null -w '%{http_code}' \
+            --max-time 90 \
+            --retry 3 --retry-delay 15 --retry-connrefused \
+            "${{ matrix.target.url }}")
+          echo "status=$status"
+          if [ "$status" != "${{ matrix.target.expected }}" ]; then
+            echo "::warning::${{ matrix.target.name }} returned $status (expected ${{ matrix.target.expected }})"
+            # Do not fail the job — a single bad ping should not page the maintainer.
+            # Persistent failures will show up as a streak of warnings in Actions.
+          fi
