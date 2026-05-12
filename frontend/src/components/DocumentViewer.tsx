@@ -694,7 +694,7 @@ export function DocumentViewer({ bytes, url, ready = true, filename = 'document'
   // Refs
   const mainRef        = useRef<HTMLCanvasElement>(null)
   const overlayRef     = useRef<HTMLCanvasElement>(null)
-  const noteTextRef    = useRef<HTMLTextAreaElement>(null)
+  const noteTextRef    = useRef<HTMLTextAreaElement | null>(null)
   const renderRef      = useRef<pdfjsLib.RenderTask|null>(null)
 
   const renderIdRef    = useRef(0)
