@@ -7,6 +7,34 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- **`Dockerfile.prod` boot chain** trimmed from 4 steps to 3:
+  - Removed the one-off `prisma migrate resolve --rolled-back
+    20260423220000_add_claim_branch` step. It was scaffolded for a
+    historical migration failure that's long since resolved; running it
+    every boot was harmless but noisy. Future migration recovery should
+    be done interactively via `render shell`, not baked into boot.
+  - Seed step (`node dist/prisma/seed.js`) is now **gated behind
+    `RUN_SEED=true`**. The seed remains idempotent (all `upsert`), but
+    re-running on every restart re-applies demo passwords and writes to
+    the audit trail unnecessarily. Set `RUN_SEED=true` once for a fresh
+    DB; leave unset otherwise.
+- **Seed credential block** (`prisma/seed.ts`) is no longer printed when
+  `NODE_ENV=production`. Listing demo emails alongside the literal
+  `password: password123` in prod logs surfaces working credentials to
+  anyone with read-only log access (log aggregators, support
+  dashboards). Dev terminals still get the convenience list.
+
+### Security
+
+- **WebSocket CORS allowlist** (`notifications/events.gateway.ts`) now
+  gates the localhost regex behind `NODE_ENV !== 'production'`,
+  matching the REST CORS policy in `main.ts`. Previously the WS gateway
+  accepted `Origin: http://localhost` in production too; this isn't
+  remotely exploitable but represented a needless inconsistency with
+  the REST side.
+
 ### Fixed
 
 - **Health-check 429 / cold-start oscillation** — `/api/health` is now

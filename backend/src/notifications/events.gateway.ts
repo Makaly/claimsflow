@@ -11,14 +11,18 @@ import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { Logger } from '@nestjs/common';
 
-// CORS allowlist for the WS handshake — mirrors the REST CORS rules in main.ts.
-// Wildcard origin is incompatible with credentialed connections in modern
-// browsers, so we read the same FRONTEND_URL env var and fall back to
-// localhost for dev.
-const wsCorsOrigin = (() => {
+// CORS allowlist for the WS handshake — mirrors the REST CORS rules in
+// main.ts. Wildcard origin is incompatible with credentialed connections in
+// modern browsers, so we read the same FRONTEND_URL env var. The localhost
+// regex is anchored (^…$) so it can't be bypassed by hostnames like
+// `https://localhost.evil.com`, and it's gated behind NODE_ENV so it is not
+// on the prod allowlist.
+const wsCorsOrigin: (string | RegExp)[] | RegExp = (() => {
   const allowed = process.env.FRONTEND_URL;
-  if (!allowed) return /^https?:\/\/localhost(:\d+)?$/;
-  return [allowed, /^https?:\/\/localhost(:\d+)?$/] as any;
+  const isDev = process.env.NODE_ENV !== 'production';
+  const localhost = /^https?:\/\/localhost(:\d+)?$/;
+  if (!allowed) return isDev ? localhost : [];
+  return isDev ? [allowed, localhost] : [allowed];
 })();
 
 @WebSocketGateway({

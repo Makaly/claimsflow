@@ -676,23 +676,30 @@ async function main() {
   console.log('✅ Activity logs created');
 
   console.log('\n🎉 Seed complete!\n');
-  console.log('Demo credentials (password: password123):');
-  console.log('  CIC Staff:');
-  console.log('    Admin              → admin@cic.co.ke');
-  console.log('    Claims Officer     → jane@cic.co.ke');
-  console.log('    Supervisor         → sarah@cic.co.ke');
-  console.log('    Checker            → checker@cic.co.ke');
-  console.log('  Provider Admins:');
-  console.log('    Nairobi Hospital   → admin@nairobihospital.co.ke');
-  console.log('    Aga Khan           → admin@agakhan.org');
-  console.log('    Eldoret Pharmacy   → info@eldoretpharmacy.co.ke');
-  console.log('    Kisumu Specialists → info@kisumuspecialists.co.ke');
-  console.log('  Provider Users (invoice uploaders):');
-  console.log('    NBI HQ uploader    → billing.hq@nairobihospital.co.ke');
-  console.log('    NBI West uploader  → billing.west@nairobihospital.co.ke');
-  console.log('    Aga Khan uploader  → billing@agakhan.org');
-  console.log('    Eldoret uploader   → billing@eldoretpharmacy.co.ke');
-  console.log('    Kisumu uploader    → billing@kisumuspecialists.co.ke');
+
+  // Demo accounts and their shared password are dev-only conveniences.
+  // Printing them in production logs surfaces working credentials to anyone
+  // with read-only log access (third-party log aggregators, dashboards
+  // shared with contractors, etc.) — gate behind NODE_ENV.
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('Demo credentials (password: password123):');
+    console.log('  CIC Staff:');
+    console.log('    Admin              → admin@cic.co.ke');
+    console.log('    Claims Officer     → jane@cic.co.ke');
+    console.log('    Supervisor         → sarah@cic.co.ke');
+    console.log('    Checker            → checker@cic.co.ke');
+    console.log('  Provider Admins:');
+    console.log('    Nairobi Hospital   → admin@nairobihospital.co.ke');
+    console.log('    Aga Khan           → admin@agakhan.org');
+    console.log('    Eldoret Pharmacy   → info@eldoretpharmacy.co.ke');
+    console.log('    Kisumu Specialists → info@kisumuspecialists.co.ke');
+    console.log('  Provider Users (invoice uploaders):');
+    console.log('    NBI HQ uploader    → billing.hq@nairobihospital.co.ke');
+    console.log('    NBI West uploader  → billing.west@nairobihospital.co.ke');
+    console.log('    Aga Khan uploader  → billing@agakhan.org');
+    console.log('    Eldoret uploader   → billing@eldoretpharmacy.co.ke');
+    console.log('    Kisumu uploader    → billing@kisumuspecialists.co.ke');
+  }
 }
 
 main()
