@@ -1,0 +1,30 @@
+# CODEOWNERS — default reviewers for ClaimsFlow.
+#
+# Lines later in this file override earlier ones, so put more specific rules
+# at the bottom.
+#
+# See: https://docs.github.com/en/repositories/managing-your-repositories-settings-and-customizations/customizing-your-repository/about-code-owners
+
+# Catch-all — everything not explicitly claimed below
+*                            @Makaly
+
+# Build / release / CI
+/.github/                    @Makaly
+/.github/workflows/          @Makaly
+/docker-compose.yml          @Makaly
+/render.yaml                 @Makaly
+/k8s/                        @Makaly
+
+# Documentation
+/docs/                       @Makaly
+/mkdocs.yml                  @Makaly
+/README.md                   @Makaly
+/CHANGELOG.md                @Makaly
+
+# Backend
+/backend/                    @Makaly
+/backend/prisma/             @Makaly
+
+# Frontend
+/frontend/                   @Makaly
+/frontend/.storybook/        @Makaly
