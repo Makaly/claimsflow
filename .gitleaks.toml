@@ -1,0 +1,27 @@
+# gitleaks v8 config — scans every PR for committed secrets.
+# Extends the default ruleset with project-specific allowlist entries so
+# we don't false-positive on fixture data.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test fixtures and intentional placeholders"
+paths = [
+  '''(?i)docs/.*\.md$''',
+  '''(?i)backend/test/.*''',
+  '''(?i)frontend/e2e/.*''',
+  '''(?i)\.gitleaks\.toml$''',
+  '''(?i)README\.md$''',
+  '''(?i)CHANGELOG\.md$''',
+]
+regexes = [
+  # Documented in README — bcrypt salt rounds, not a real secret
+  '''bcrypt\.hash\(.*,\s*10\)''',
+  # Test passwords used by spec files
+  '''Password!23''',
+  '''IntentionallyWrong!1''',
+  # Anthropic / Gemini key placeholders in docs
+  '''sk-test-key''',
+  '''YOUR_API_KEY_HERE''',
+]

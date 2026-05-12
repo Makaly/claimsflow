@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+coverage/
+storybook-static/
+site/
+*.lock
+*.lockb
+package-lock.json
+**/*.min.js
+**/*.bundle.js
+backend/prisma/migrations/
+frontend/public/

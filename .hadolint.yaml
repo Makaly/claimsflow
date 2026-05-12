@@ -1,0 +1,15 @@
+# hadolint configuration — lints Dockerfiles in CI.
+#
+# https://github.com/hadolint/hadolint
+ignored:
+  # We intentionally apk add without --no-cache pin per package — these are
+  # repeatable enough across rebuilds for our purposes.
+  - DL3018
+  # We're fine with the Alpine variants choosing latest minor of python3/openssl.
+  - DL3019
+
+trustedRegistries:
+  - docker.io
+  - ghcr.io
+
+failure-threshold: warning

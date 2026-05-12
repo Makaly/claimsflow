@@ -1,0 +1,6 @@
+# Trivy ignore list — vulnerabilities we have evaluated and decided not to
+# block builds on. Every entry MUST include a justification and a date.
+#
+# Format: <CVE-ID>          # <date>  <one-line reason>
+
+# (none — clean slate as of 2026-05-12)

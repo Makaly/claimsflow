@@ -1,0 +1,15 @@
+# OWASP ZAP baseline scan — rule overrides.
+# Format: RULE_ID	ACTION	NOTES
+#   IGNORE → don't report
+#   WARN   → report as warning (default for non-critical)
+#   FAIL   → fail the build
+#
+# Run with:
+#   zap-baseline.py -t http://localhost:4000 -c .zap/rules.tsv
+
+# X-Content-Type-Options is enforced by helmet — false positive on health probe
+10021	IGNORE	Set by helmet on every response
+# Modern browsers — no need to advertise the legacy X-XSS-Protection header
+10063	IGNORE	X-XSS-Protection deprecated; CSP covers this
+# CSP is strict — only complain about *missing* CSP, not directive scope
+10038	WARN	CSP review on every PR
