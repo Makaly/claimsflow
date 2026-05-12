@@ -7,12 +7,16 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { Roles } from './decorators/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
+import { EmailService } from '../notifications/email.service';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('admin', 'supervisor')
 export class UsersController {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private emailService: EmailService,
+  ) {}
 
   private readonly USER_SELECT = {
     id: true, email: true, name: true, role: true,
@@ -107,7 +111,17 @@ export class UsersController {
       },
       select: this.USER_SELECT,
     });
-    return { ...user, tempPassword: body.password ? undefined : tempPassword };
+
+    // Deliver temp password via email — never expose it in the API response
+    if (!body.password) {
+      this.emailService.sendEmail(
+        body.email,
+        'Your ClaimsFlow Account Has Been Created',
+        `Hello ${body.name},\n\nYour ClaimsFlow account has been created.\n\nTemporary password: ${tempPassword}\n\nPlease log in and change this password immediately.\n\nCIC Insurance Group`,
+      ).catch(() => {});
+    }
+
+    return user;
   }
 
   @Patch(':id')
@@ -150,13 +164,24 @@ export class UsersController {
 
   @Post(':id/reset-password')
   async resetPassword(@Param('id') id: string) {
+    const user = await this.prisma.user.findUnique({ where: { id }, select: { email: true, name: true } });
+    if (!user) throw new NotFoundException('User not found');
+
     const tempPassword = Math.random().toString(36).slice(-10) + 'A1!';
     const hashed = await bcrypt.hash(tempPassword, 10);
     await this.prisma.user.update({
       where: { id },
       data: { password: hashed, requirePasswordChange: true },
     });
-    return { tempPassword };
+
+    // Deliver via email — never return plaintext passwords in API responses
+    this.emailService.sendEmail(
+      user.email,
+      'Your ClaimsFlow Password Has Been Reset',
+      `Hello ${user.name},\n\nYour password has been reset by an administrator.\n\nTemporary password: ${tempPassword}\n\nPlease log in and change this password immediately.\n\nCIC Insurance Group`,
+    ).catch(() => {});
+
+    return { message: 'Temporary password sent to the user\'s email address.' };
   }
 
   @Delete(':id')

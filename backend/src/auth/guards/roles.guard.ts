@@ -17,8 +17,13 @@ export class RolesGuard implements CanActivate {
     }
 
     const { user } = context.switchToHttp().getRequest();
-    if (!user || !user.role) return false;
+    if (!user) return false;
 
-    return requiredRoles.includes(user.role);
+    // Check against the full RBAC roles array first, then fall back to the
+    // legacy single-role field so both authorization paths are honoured.
+    const userRoles: string[] = Array.isArray(user.roles) ? user.roles : [];
+    if (user.role && !userRoles.includes(user.role)) userRoles.push(user.role);
+
+    return requiredRoles.some((r) => userRoles.includes(r));
   }
 }

@@ -2,14 +2,15 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { UsersController } from './users.controller';
-// import { TwoFactorService } from './two-factor.service'; // Disabled - needs schema models
-// import { TwoFactorController } from './two-factor.controller'; // Disabled - needs schema models
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { LocalStrategy } from './strategies/local.strategy';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { TwoFactorController } from './two-factor.controller';
+import { TwoFactorService } from './two-factor.service';
 
 @Module({
   imports: [
@@ -18,13 +19,16 @@ import { NotificationsModule } from '../notifications/notifications.module';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         secret: config.get('JWT_SECRET'),
-        signOptions: { expiresIn: config.get('JWT_EXPIRES_IN') || '7d' },
+        signOptions: { expiresIn: config.get('JWT_EXPIRES_IN') || '1d' },
       }),
     }),
+    ThrottlerModule.forRoot([
+      { name: 'auth', ttl: 60_000, limit: 10 },
+    ]),
     NotificationsModule,
   ],
-  controllers: [AuthController, UsersController],
-  providers: [AuthService, JwtStrategy, LocalStrategy],
-  exports: [AuthService],
+  controllers: [AuthController, UsersController, TwoFactorController],
+  providers: [AuthService, JwtStrategy, LocalStrategy, TwoFactorService, ConfigService],
+  exports: [AuthService, TwoFactorService],
 })
 export class AuthModule {}

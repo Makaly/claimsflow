@@ -2,6 +2,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PassportStrategy } from '@nestjs/passport';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RbacService } from '../../rbac/rbac.service';
 
@@ -13,9 +14,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private rbac: RbacService,
   ) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      // Accept JWT from HttpOnly cookie first, then fall back to Bearer header.
+      // This supports both the secure cookie path and API clients using Bearer.
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        (req: Request) => req?.cookies?.['access_token'] ?? null,
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+      ]),
       ignoreExpiration: false,
       secretOrKey: configService.get('JWT_SECRET'),
+      passReqToCallback: false,
     });
   }
 

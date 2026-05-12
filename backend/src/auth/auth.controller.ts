@@ -1,4 +1,5 @@
-import { Controller, Post, Patch, Body, Get, UseGuards, Request, HttpCode } from '@nestjs/common';
+import { Controller, Post, Patch, Body, Get, UseGuards, Request, Response, HttpCode, Query } from '@nestjs/common';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -9,13 +10,26 @@ export class AuthController {
   constructor(private authService: AuthService) {}
 
   @Post('register')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ auth: { ttl: 60_000, limit: 5 } })
   async register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
   }
 
   @Post('login')
-  async login(@Body() loginDto: LoginDto) {
-    return this.authService.login(loginDto);
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ auth: { ttl: 60_000, limit: 10 } })
+  async login(@Body() loginDto: LoginDto, @Response({ passthrough: true }) res: any) {
+    const result = await this.authService.login(loginDto);
+    const isProduction = process.env.NODE_ENV === 'production';
+    res.cookie('access_token', result.access_token, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'strict',
+      maxAge: 24 * 60 * 60 * 1000, // 1 day in ms
+      path: '/',
+    });
+    return result;
   }
 
   @Get('profile')
@@ -55,6 +69,8 @@ export class AuthController {
 
   @Post('register-provider')
   @HttpCode(201)
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ auth: { ttl: 60_000, limit: 3 } })
   async registerProvider(@Body() body: {
     providerName: string; type: string; licenseNumber: string
     phone: string; email: string; physicalAddress: string
@@ -64,9 +80,27 @@ export class AuthController {
     return this.authService.registerProvider(body);
   }
 
+  @Post('forgot-password')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ auth: { ttl: 60_000, limit: 3 } })
+  @HttpCode(200)
+  async forgotPassword(@Body() body: { email: string }) {
+    return this.authService.forgotPassword(body.email);
+  }
+
+  @Post('reset-password')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ auth: { ttl: 60_000, limit: 5 } })
+  @HttpCode(200)
+  async resetPassword(@Body() body: { token: string; password: string }) {
+    return this.authService.resetPassword(body.token, body.password);
+  }
+
   @Post('logout')
   @UseGuards(JwtAuthGuard)
-  async logout() {
-    return { message: 'Logged out successfully' };
+  @HttpCode(200)
+  async logout(@Request() req, @Response({ passthrough: true }) res: any) {
+    res.clearCookie('access_token', { httpOnly: true, sameSite: 'strict', path: '/' });
+    return { message: 'Logged out successfully.' };
   }
 }

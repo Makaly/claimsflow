@@ -1,6 +1,7 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
+import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -59,9 +60,29 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // Enforce account lockout — check before bcrypt to avoid wasting CPU
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
+      const remaining = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60_000);
+      throw new UnauthorizedException(
+        `Account temporarily locked after repeated failed attempts. Try again in ${remaining} minute(s).`,
+      );
+    }
+
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
+      const attempts = (user.failedLoginAttempts ?? 0) + 1;
+      const LOCKOUT_THRESHOLD = 5;
+      const LOCKOUT_MINUTES = 15;
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          failedLoginAttempts: attempts,
+          ...(attempts >= LOCKOUT_THRESHOLD && {
+            lockedUntil: new Date(Date.now() + LOCKOUT_MINUTES * 60_000),
+          }),
+        },
+      });
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -69,11 +90,17 @@ export class AuthService {
       throw new UnauthorizedException('Account is inactive');
     }
 
+    // Reset lockout state and record login time on success
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { failedLoginAttempts: 0, lockedUntil: null, lastLogin: new Date() },
+    });
+
     const { password: _, ...result } = user;
     const access_token = this.generateToken(user.id, user.email);
 
     return {
-      user: result,
+      user: { ...result, failedLoginAttempts: 0, lockedUntil: null },
       access_token,
     };
   }
@@ -210,6 +237,48 @@ export class AuthService {
       data: { password: hashed, requirePasswordChange: false },
     });
     return { message: 'Password updated successfully' };
+  }
+
+  async forgotPassword(email: string) {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    // Always return success to prevent email enumeration
+    if (!user || !user.isActive) return { message: 'If that email exists, a reset link has been sent.' };
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { passwordResetToken: token, passwordResetExpiry: expiry },
+    });
+
+    const appUrl = process.env.APP_URL || 'http://localhost:3000';
+    const resetUrl = `${appUrl}/reset-password?token=${token}`;
+
+    await this.emailService.sendPasswordResetEmail({ email, name: user.name, resetUrl }).catch(() => {});
+
+    return { message: 'If that email exists, a reset link has been sent.' };
+  }
+
+  async resetPassword(token: string, newPassword: string) {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        passwordResetToken: token,
+        passwordResetExpiry: { gt: new Date() },
+      },
+    });
+
+    if (!user) throw new BadRequestException('Invalid or expired reset token.');
+
+    if (newPassword.length < 8) throw new BadRequestException('Password must be at least 8 characters.');
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { password: hashed, passwordResetToken: null, passwordResetExpiry: null, requirePasswordChange: false },
+    });
+
+    return { message: 'Password reset successfully. You can now log in.' };
   }
 
   private generateToken(userId: string, email: string): string {
