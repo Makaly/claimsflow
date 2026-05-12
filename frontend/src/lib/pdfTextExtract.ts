@@ -124,7 +124,7 @@ export async function extractInvoicesFromPdf(
 
     throw new Error('No data extracted')
   } catch (err: any) {
-    console.error('Backend OCR failed:', err.message)
+    console.warn('Backend OCR unavailable, using fallback:', err.message)
     onProgress?.('Backend OCR unavailable, using filename-based fallback')
 
     // Minimal fallback - just create a placeholder
