@@ -93,7 +93,10 @@ claims/
 │       ├── hooks/            Custom React hooks
 │       ├── services/         API client
 │       └── store/            Zustand state stores
-├── docs/                     Architecture, SRD analysis, audit reports
+├── docs/                     MkDocs site — architecture, API, security, changelog
+├── scripts/                  Repo-level shell helpers (e.g. build-redoc.sh)
+├── perf/                     k6 performance suite (smoke + auth load)
+├── k8s/                      Kubernetes manifests (namespace, backend, frontend)
 └── docker-compose.yml        Local dev orchestration
 ```
 
@@ -180,7 +183,25 @@ npm run dev             # Vite dev server
 npm run build           # tsc + vite build
 npm run preview         # serve built bundle
 npm run lint            # ESLint
+npm test                # Vitest unit + a11y tests
+npm run test:e2e        # Playwright browser e2e
+npm run storybook       # Storybook dev server
+npm run build-storybook # static Storybook bundle
+npm run depcruise       # dependency-cruiser layering rules
 ```
+
+---
+
+## Documentation
+
+| Surface           | Where                                                    |
+| ----------------- | -------------------------------------------------------- |
+| Project site      | `mkdocs serve` → http://localhost:8000 (built in CI)     |
+| API (Swagger UI)  | http://localhost:4000/api/docs (live, while backend up)  |
+| API (Redoc)       | `./scripts/build-redoc.sh` → `site/api/index.html`       |
+| Architecture / SRD | [docs/architecture/](docs/architecture/)                 |
+| Changelog         | [CHANGELOG.md](CHANGELOG.md)                             |
+| Security policy   | [SECURITY.md](SECURITY.md)                               |
 
 ---
 
