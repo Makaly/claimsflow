@@ -32,6 +32,8 @@ model User {
   savedSignatures       Json?           @default("[]")
   providerId            String?
   branchId              String?
+  passwordResetToken    String?
+  passwordResetExpiry   DateTime?
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
   createdBy             String?
@@ -43,9 +45,12 @@ model User {
   notifications         Notification[]
   userRoles             UserRole[]
   provider              Provider?       @relation(fields: [providerId], references: [id])
+  appeals               Appeal[]        @relation("AppealAdjudicator")
+  appealsFiled          Appeal[]        @relation("AppealFiler")
 
   @@index([providerId])
   @@index([email])
+  @@index([passwordResetToken])
   @@map("users")
 }
 
@@ -323,6 +328,13 @@ model Claim {
   documents             Document[]
   edmsData              EdmsDocument?
   ocrData               OcrExtraction?
+  appeals               Appeal[]
+  slaBreached           Boolean              @default(false)
+  slaBreachedAt         DateTime?
+  slaDeadline           DateTime?
+  eligibilityStatus     String?
+  eligibilityCheckedAt  DateTime?
+  eligibilityNotes      String?
 
   @@index([claimNumber])
   @@index([barcode])
@@ -333,6 +345,7 @@ model Claim {
   @@index([assignedTo])
   @@index([submittedAt])
   @@index([memberNumber])
+  @@index([slaBreached])
   @@map("claims")
 }
 
@@ -769,6 +782,134 @@ model ClaimEmail {
   @@index([claimId])
   @@index([sentAt])
   @@map("claim_emails")
+}
+
+model Appeal {
+  id              String    @id @default(uuid())
+  claimId         String
+  providerId      String
+  filedBy         String
+  reason          String
+  additionalNotes String?
+  status          String    @default("pending")
+  adjudicatedBy   String?
+  adjudicatedAt   DateTime?
+  outcome         String?
+  outcomeNotes    String?
+  documents       Json?     @default("[]")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  claim           Claim     @relation(fields: [claimId], references: [id])
+  filer           User      @relation("AppealFiler", fields: [filedBy], references: [id])
+  adjudicator     User?     @relation("AppealAdjudicator", fields: [adjudicatedBy], references: [id])
+
+  @@index([claimId])
+  @@index([providerId])
+  @@index([status])
+  @@index([filedBy])
+  @@map("appeals")
+}
+
+model PaymentAdvice {
+  id               String    @id @default(uuid())
+  adviceNumber     String    @unique
+  providerId       String
+  claimIds         Json
+  totalAmount      Float
+  status           String    @default("pending")
+  generatedBy      String?
+  confirmedBy      String?
+  confirmedAt      DateTime?
+  paymentReference String?
+  paymentDate      DateTime?
+  bankDetails      Json?
+  notes            String?
+  exportedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([providerId])
+  @@index([status])
+  @@index([adviceNumber])
+  @@map("payment_advices")
+}
+
+model PreAuthorisation {
+  id                String    @id @default(uuid())
+  referenceNumber   String    @unique
+  providerId        String
+  memberNumber      String
+  memberName        String?
+  treatmentType     String
+  diagnosisCode     String?
+  estimatedAmount   Float
+  requestedBy       String
+  status            String    @default("pending")
+  reviewedBy        String?
+  reviewedAt        DateTime?
+  approvedAmount    Float?
+  validFrom         DateTime?
+  validTo           DateTime?
+  conditions        String?
+  rejectionReason   String?
+  linkedClaimId     String?
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([providerId])
+  @@index([memberNumber])
+  @@index([status])
+  @@index([referenceNumber])
+  @@map("pre_authorisations")
+}
+
+model PolicyPlan {
+  id                String         @id @default(uuid())
+  planCode          String         @unique
+  planName          String
+  description       String?
+  inpatientLimit    Float          @default(0)
+  outpatientLimit   Float          @default(0)
+  dentalLimit       Float          @default(0)
+  opticalLimit      Float          @default(0)
+  maternityLimit    Float          @default(0)
+  copayPercent      Float          @default(0)
+  excessAmount      Float          @default(0)
+  isActive          Boolean        @default(true)
+  validFrom         DateTime?
+  validTo           DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  createdBy         String?
+  memberPolicies    MemberPolicy[]
+
+  @@index([planCode])
+  @@index([isActive])
+  @@map("policy_plans")
+}
+
+model MemberPolicy {
+  id              String     @id @default(uuid())
+  memberNumber    String     @unique
+  memberName      String
+  planId          String
+  policyStartDate DateTime
+  policyEndDate   DateTime
+  inpatientUsed   Float      @default(0)
+  outpatientUsed  Float      @default(0)
+  dentalUsed      Float      @default(0)
+  opticalUsed     Float      @default(0)
+  maternityUsed   Float      @default(0)
+  isActive        Boolean    @default(true)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  plan            PolicyPlan @relation(fields: [planId], references: [id])
+
+  @@index([memberNumber])
+  @@index([planId])
+  @@index([isActive])
+  @@map("member_policies")
 }
 
 model SystemConfig {
