@@ -1,7 +1,9 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import * as cookieParser from 'cookie-parser';
+import * as fs from 'fs';
 import { AppModule } from './app.module';
 
 // Allow BigInt values in JSON responses (Prisma returns BigInt for size fields)
@@ -60,6 +62,26 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  // OpenAPI / Swagger — exposed at /api/docs and emitted to disk when
+  // EXPORT_OPENAPI=1, used by CI to build the Redoc static page.
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('ClaimsFlow API')
+    .setDescription('REST API for CIC Insurance Group medical claims platform')
+    .setVersion(process.env.npm_package_version || '1.0.0')
+    .addBearerAuth()
+    .addCookieAuth('access_token')
+    .build();
+  const swaggerDoc = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup(`${process.env.API_PREFIX || 'api'}/docs`, app, swaggerDoc);
+  if (process.env.EXPORT_OPENAPI === '1') {
+    const out = process.env.OPENAPI_OUTPUT || 'openapi.json';
+    fs.writeFileSync(out, JSON.stringify(swaggerDoc, null, 2));
+    console.log(`OpenAPI spec written to ${out}`);
+    if (process.env.EXIT_AFTER_OPENAPI === '1') {
+      process.exit(0);
+    }
+  }
 
   const port = process.env.PORT || 4000;
   const server = await app.listen(port);
