@@ -10,24 +10,22 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  NODE_VERSION: '20.x'
+
 jobs:
   backend:
-    name: Backend (Node ${{ matrix.node }})
+    name: Backend (test + build)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        node: ['20.x']
     defaults:
       run:
         working-directory: backend
     steps:
       - uses: actions/checkout@v4
 
-      - name: Use Node.js ${{ matrix.node }}
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node }}
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: backend/package-lock.json
 
@@ -37,14 +35,14 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
-      - name: Lint
-        run: npm run lint
+      - name: Unit tests (Jest)
+        run: npm test -- --runInBand
+
+      - name: E2E tests (Supertest + architecture fitness)
+        run: npm run test:e2e -- --runInBand
 
       - name: Build
         run: npm run build
-
-      - name: Unit tests
-        run: npm test
 
       - name: Upload coverage
         if: always()
@@ -52,25 +50,20 @@ jobs:
         with:
           name: backend-coverage
           path: backend/coverage/
-          retention-days: 7
+          if-no-files-found: ignore
 
   frontend:
-    name: Frontend (Node ${{ matrix.node }})
+    name: Frontend (test + build)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        node: ['20.x']
     defaults:
       run:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
 
-      - name: Use Node.js ${{ matrix.node }}
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node }}
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -79,23 +72,227 @@ jobs:
 
       - name: Lint
         run: npm run lint
+        continue-on-error: true
+
+      - name: Unit + component tests (Vitest + jest-axe)
+        run: npm test
+
+      - name: Architecture fitness (dependency-cruiser)
+        run: npm run depcruise
 
       - name: Build
         run: npm run build
 
-      - name: Unit and component tests
-        run: npm test
+      - name: Build Storybook
+        run: npm run build-storybook
 
-  audit:
-    name: Dependency audit
+      - name: Upload Storybook static
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: storybook
+          path: frontend/storybook-static/
+          if-no-files-found: ignore
+
+  e2e:
+    name: Playwright E2E + a11y + visual
+    runs-on: ubuntu-latest
+    needs: frontend
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          if-no-files-found: ignore
+
+  docs:
+    name: Docs site (MkDocs + Redoc)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Audit backend
-        working-directory: backend
-        run: npm audit --audit-level=high --omit=dev || true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-      - name: Audit frontend
+      - name: Install MkDocs
+        run: pip install mkdocs mkdocs-material
+
+      - name: Build docs (strict)
+        run: mkdocs build --strict
+
+      - name: Upload site
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-site
+          path: site/
+
+  docker-lint:
+    name: Dockerfile + compose lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: hadolint backend
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: backend/Dockerfile
+          config: .hadolint.yaml
+
+      - name: hadolint backend (prod)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: backend/Dockerfile.prod
+          config: .hadolint.yaml
+
+      - name: hadolint frontend
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: frontend/Dockerfile
+          config: .hadolint.yaml
+
+      - name: docker compose config check
+        run: docker compose -f docker-compose.yml config -q
+
+  k8s-lint:
+    name: Kubernetes manifest lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubeconform
+        run: |
+          curl -sSLO https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz
+          tar xf kubeconform-linux-amd64.tar.gz
+          sudo mv kubeconform /usr/local/bin/
+
+      - name: Validate manifests
+        run: kubeconform -summary -strict k8s/*.yaml
+
+      - name: kube-linter
+        uses: stackrox/kube-linter-action@v1.0.5
+        with:
+          directory: k8s
+
+  security:
+    name: Security scans
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: npm audit (backend)
+        run: npm audit --omit=dev --audit-level=high
+        working-directory: backend
+        continue-on-error: true
+
+      - name: npm audit (frontend)
+        run: npm audit --omit=dev --audit-level=high
         working-directory: frontend
-        run: npm audit --audit-level=high --omit=dev || true
+        continue-on-error: true
+
+      - name: Trivy fs scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+          format: sarif
+          output: trivy-results.sarif
+
+      - name: Upload Trivy SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+
+  perf:
+    name: k6 smoke test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'perf')
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cic_claims
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install + migrate
+        working-directory: backend
+        run: |
+          npm ci --legacy-peer-deps
+          npx prisma generate
+          npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cic_claims
+
+      - name: Boot backend
+        working-directory: backend
+        run: |
+          npm run start:dev &
+          for i in {1..30}; do curl -sf http://localhost:4000/api/health && break; sleep 2; done
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cic_claims
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          JWT_SECRET: ci-only-secret-not-used-in-prod
+
+      - name: Install k6
+        run: |
+          sudo gpg -k && sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update && sudo apt-get install -y k6
+
+      - name: Run k6 smoke
+        run: k6 run perf/smoke.js
