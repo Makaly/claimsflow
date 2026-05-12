@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import api from '@/services/api'
 import type { User } from '@/types'
 
 interface AuthState {
@@ -8,6 +9,7 @@ interface AuthState {
   login: (token: string, user: User) => void
   logout: () => void
   setUser: (user: User) => void
+  fetchProfile: () => Promise<void>
 }
 
 function readUser(): User | null {
@@ -41,5 +43,18 @@ export const useAuthStore = create<AuthState>((set) => ({
   setUser: (user) => {
     localStorage.setItem('user', JSON.stringify(user))
     set({ user })
+  },
+
+  fetchProfile: async () => {
+    try {
+      const { data } = await api.get<User>('/auth/profile')
+      localStorage.setItem('user', JSON.stringify(data))
+      set({ user: data })
+    } catch {
+      // Token is invalid — clear everything and force re-login
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      set({ token: null, user: null, isAuthenticated: false })
+    }
   },
 }))

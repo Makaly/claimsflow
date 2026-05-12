@@ -62,8 +62,16 @@ const CIC_STAFF = ['admin', 'supervisor', 'claims_officer', 'checker', 'fraud_of
 const ADMIN_ONLY = ['admin', 'supervisor']
 
 function AppRoutes() {
-  const { isAuthenticated } = useAuthStore()
+  const { isAuthenticated, user, fetchProfile } = useAuthStore()
   const { fetchFromServer, serverLoaded } = useClaimsStore()
+
+  // Re-hydrate user profile when a token exists but user data is absent
+  // (e.g. after a corrupt-localStorage recovery or a hard refresh)
+  useEffect(() => {
+    if (isAuthenticated && !user) {
+      fetchProfile()
+    }
+  }, [isAuthenticated, user])
 
   // Load claims from server once after login
   useEffect(() => {
