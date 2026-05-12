@@ -293,6 +293,35 @@ export class MakerCheckerService {
       metadata: { claimNumber: claim.claimNumber, decision: 'approved', comments },
     });
 
+    // ─── ML LABEL: auto-label approved claim as legitimate ────────
+    // Non-blocking: a labelling failure must never abort the approval.
+    await this.prisma.claimLabel
+      .upsert({
+        where: { claimId },
+        create: {
+          claimId,
+          label: 'legitimate',
+          source: 'auto_approve',
+          labelledBy: checkerId,
+          confidence: 0.7, // auto-labels less certain than manual reviews
+          featuresSnapshot: {
+            invoiceAmount: claim.invoiceAmount,
+            ocrConfidence: claim.ocrConfidence,
+            fraudSignalCount: Array.isArray(claim.fraudSignals)
+              ? (claim.fraudSignals as any[]).length
+              : 0,
+          },
+        },
+        update: {
+          label: 'legitimate',
+          source: 'auto_approve',
+          labelledBy: checkerId,
+        },
+      })
+      .catch((err: any) =>
+        this.logger.warn(`Failed to label approved claim ${claimId}: ${err?.message}`),
+      );
+
     // ─── POST-APPROVAL PIPELINE (non-blocking) ───────────────────
 
     // 1. Auto-stamp approved PDFs with "APPROVED" watermark
@@ -391,6 +420,37 @@ export class MakerCheckerService {
       newValue: { status: 'rejected', workflowStage: 'completed', rejectionReason: reason },
       metadata: { claimNumber: claim.claimNumber, decision: 'rejected', reason },
     });
+
+    // ─── ML LABEL: auto-label rejected claim as suspicious ────────
+    // Non-blocking: a labelling failure must never abort the rejection.
+    await this.prisma.claimLabel
+      .upsert({
+        where: { claimId },
+        create: {
+          claimId,
+          label: 'suspicious',
+          source: 'auto_reject',
+          labelledBy: checkerId,
+          confidence: 0.7,
+          notes: reason,
+          featuresSnapshot: {
+            invoiceAmount: claim.invoiceAmount,
+            ocrConfidence: claim.ocrConfidence,
+            fraudSignalCount: Array.isArray(claim.fraudSignals)
+              ? (claim.fraudSignals as any[]).length
+              : 0,
+          },
+        },
+        update: {
+          label: 'suspicious',
+          source: 'auto_reject',
+          labelledBy: checkerId,
+          notes: reason,
+        },
+      })
+      .catch((err: any) =>
+        this.logger.warn(`Failed to label rejected claim ${claimId}: ${err?.message}`),
+      );
 
     // ─── Notifications: provider + checker (actor) + original maker ──
     await this.notificationsService.sendEmail({
