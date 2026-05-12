@@ -12,9 +12,13 @@ coverage/
 build/
 dist/
 dist-ssr/
+storybook-static/
 
 # TypeScript incremental build cache
 *.tsbuildinfo
+
+# Generated OpenAPI spec — produced by EXPORT_OPENAPI=1
+openapi.json
 
 # Misc
 .DS_Store
