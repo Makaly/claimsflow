@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { attachRetryInterceptor } from './retry'
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api',
@@ -9,6 +10,11 @@ const api = axios.create({
   // The browser handles this — no manual token attachment needed.
   withCredentials: true,
 })
+
+// Retry once on network errors / 502-504 — covers Render free-tier
+// cold-start, where the first request after a long idle returns a
+// CORS-headerless 502 from the edge while the container boots.
+attachRetryInterceptor(api)
 
 api.interceptors.response.use(
   (response) => response,
