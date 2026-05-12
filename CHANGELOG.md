@@ -7,6 +7,23 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- Unit tests for `AppController` health and root endpoints.
+- Unit tests for `computeFraudSignals` covering all 10 fraud signal types
+  and the provider-mismatch helper (17 test cases).
+
+### Fixed
+
+- **Production deploy failure** — `prisma` CLI was in `devDependencies` and
+  the runtime Docker stage runs `npm install --omit=dev`, which dropped it.
+  At startup `npx prisma migrate deploy` fell back to downloading the
+  latest Prisma from npm (v7.8.0), which rejected the existing schema
+  because Prisma 7 dropped `url = env("DATABASE_URL")` syntax in the
+  datasource block. Moved `prisma` to `dependencies` and pinned both
+  `prisma` and `@prisma/client` to exact `5.22.0` so the CLI is bundled
+  into the runtime image and version drift is impossible.
+
 ## [1.3.0] - 2026-05-12
 
 ### Added
