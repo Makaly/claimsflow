@@ -31,6 +31,22 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **WebSocket connection refused / namespace mismatch** — the socket.io
+  client built its URL by appending `/events` to `VITE_API_URL` (which
+  ends in `/api`), producing namespace `/api/events` on a server that
+  exposes `/events`. Strip a trailing `/api` from the API base when
+  constructing the socket URL. Also reorder transports to
+  `['polling', 'websocket']` so a blocked WS upgrade on Render's free
+  tier silently degrades to long-polling instead of looping retries,
+  drop the dead `localStorage.getItem('token')` gate (auth moved to
+  HttpOnly cookies), and add `withCredentials: true` so the cookie is
+  attached to the handshake.
+- **Events gateway accepts auth via cookie** — `EventsGateway` now
+  reads the token from `handshake.auth.token`, then the `Authorization`
+  header, then the `access_token` cookie, matching the REST auth
+  strategy. CORS for the WS handshake honours `FRONTEND_URL` with
+  `credentials: true` instead of the wildcard origin, which browsers
+  refuse to use with credentialed sockets.
 - **Render build broken by test-file type error** — production build
   runs `tsc -b && vite build`, which type-checked `*.test.ts` files
   alongside src and failed on an implicit-`any` in `retry.test.ts`.
