@@ -29,6 +29,17 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - README badges now reflect live CI / CodeQL status and the latest
   release tag instead of hard-coded shields.
 
+### Fixed
+
+- **Cross-site auth cookie** — production deploy puts the frontend
+  (`claimsflow-frontend.onrender.com`) and backend
+  (`claimsflow-backend.onrender.com`) on different sites, so
+  `SameSite=Strict` prevented the browser from attaching the
+  `access_token` cookie to API calls. Switched to
+  `SameSite=None; Secure` in production while keeping
+  `SameSite=Strict` in dev (where Vite proxies same-origin). Logout
+  uses the matching attributes so `clearCookie` actually unsets it.
+
 ## [1.4.0] - 2026-05-12
 
 ### Added
