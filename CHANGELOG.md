@@ -13,6 +13,16 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **GitHub Pages docs deploy** workflow (`.github/workflows/docs.yml`) —
   builds MkDocs strictly on every push to `master` that touches `docs/`
   or `mkdocs.yml` and publishes to GitHub Pages.
+- **Keep-warm workflow** (`.github/workflows/keepalive.yml`) — pings the
+  backend `/api/health` and the frontend root every 10 minutes so the
+  Render free tier does not spin down. Matrix runs the two targets in
+  parallel, curl handles transient retries, and a bad ping logs a
+  workflow warning rather than failing the job.
+- **Axios retry interceptor** (`frontend/src/services/retry.ts`) — single
+  retry on network errors and 502/503/504 responses, covering the
+  Render cold-start window where the edge returns a CORS-headerless
+  502 while the container boots. Surfaced as `attachRetryInterceptor`
+  and wired into the shared `api` client with seven Vitest cases.
 
 ### Changed
 
