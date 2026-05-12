@@ -31,6 +31,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **Render build broken by test-file type error** — production build
+  runs `tsc -b && vite build`, which type-checked `*.test.ts` files
+  alongside src and failed on an implicit-`any` in `retry.test.ts`.
+  Split test type-checking into a dedicated `tsconfig.test.json` and
+  excluded `*.{test,spec,stories}.{ts,tsx}` plus `src/test/` from the
+  production tsconfig so a test-only type error can never block a
+  deploy again.
 - **Cross-site auth cookie** — production deploy puts the frontend
   (`claimsflow-frontend.onrender.com`) and backend
   (`claimsflow-backend.onrender.com`) on different sites, so
