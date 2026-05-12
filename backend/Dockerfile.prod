@@ -19,7 +19,7 @@ WORKDIR /app
 RUN apk add --no-cache tesseract-ocr
 
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm install --omit=dev
 
 # Copy compiled output and generated Prisma client from builder
 COPY --from=builder /app/dist ./dist
