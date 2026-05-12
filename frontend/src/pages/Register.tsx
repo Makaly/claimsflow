@@ -253,10 +253,10 @@ export default function Register() {
     setLoading(true); setError('')
     try {
       const result = await authService.register({ name: data.name, email: data.email, password: data.password, role: data.role })
-      login(result.access_token, result.user); navigate('/')
+      login(result.user); navigate('/')
     } catch (err: any) {
       if (err.code === 'ERR_NETWORK' || err.message?.includes('Network')) {
-        login('demo-token', { id: 'new-' + Math.random().toString(36).slice(2), email: data.email, name: data.name, role: data.role as any, isActive: true, twoFactorEnabled: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
+        login({ id: 'new-' + Math.random().toString(36).slice(2), email: data.email, name: data.name, role: data.role as any, isActive: true, twoFactorEnabled: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() } as any)
         navigate('/'); return
       }
       setError(err.response?.data?.message || 'Registration failed. Please try again.')
@@ -275,7 +275,7 @@ export default function Register() {
         contactPerson: prov.contactPerson, city: prov.city || undefined, region: prov.region || undefined,
         adminName: prov.adminName, adminEmail: prov.adminEmail, adminPassword: prov.adminPassword,
       })
-      login(data.access_token, data.user); navigate('/')
+      login(data.user); navigate('/')
     } catch (err: any) {
       setError(err.response?.data?.message || 'Provider registration failed. Please try again.')
     } finally { setLoading(false) }

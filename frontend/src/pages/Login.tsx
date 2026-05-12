@@ -87,7 +87,7 @@ export default function Login() {
     setError('')
     try {
       const result = await authService.login(data)
-      login(result.access_token, result.user)
+      login(result.user)
       navigate('/')
     } catch (err: any) {
       if (!err.response) {
@@ -114,7 +114,7 @@ export default function Login() {
     setError('')
     try {
       const result = await authService.login(credentials[role])
-      login(result.access_token, result.user)
+      login(result.user)
       navigate('/')
     } catch (err: any) {
       if (!err.response) {

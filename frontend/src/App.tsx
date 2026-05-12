@@ -7,6 +7,11 @@ import { useClaimsStore } from '@/store/claimsStore'
 import Login from '@/pages/Login'
 import Register from '@/pages/Register'
 import ForgotPassword from '@/pages/ForgotPassword'
+import ResetPassword from '@/pages/ResetPassword'
+import Appeals from '@/pages/Appeals'
+import Payment from '@/pages/Payment'
+import SystemConfigPage from '@/pages/SystemConfigPage'
+import AgingDashboard from '@/pages/AgingDashboard'
 import Dashboard from '@/pages/Dashboard'
 import Claims from '@/pages/Claims'
 import Providers from '@/pages/Providers'
@@ -22,6 +27,8 @@ import Roles from '@/pages/Roles'
 import Permissions from '@/pages/Permissions'
 import ActivityLogs from '@/pages/ActivityLogs'
 import Reports from '@/pages/Reports'
+import ProviderScorecard from '@/pages/ProviderScorecard'
+import PreAuth from '@/pages/PreAuth'
 import Profile from '@/pages/Profile'
 import Settings from '@/pages/Settings'
 import TwoFactorSetup from '@/pages/TwoFactorSetup'
@@ -30,6 +37,8 @@ import TermsOfService from '@/pages/TermsOfService'
 import PrivacyPolicy from '@/pages/PrivacyPolicy'
 import DocumentClassifierEditor from '@/pages/DocumentClassifierEditor'
 import UnknownDocuments from '@/pages/UnknownDocuments'
+import ScanStation from '@/pages/ScanStation'
+import PolicyPlans from '@/pages/PolicyPlans'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -94,6 +103,7 @@ function AppRoutes() {
         path="/forgot-password"
         element={isAuthenticated ? <Navigate to="/" replace /> : <ForgotPassword />}
       />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/terms" element={<TermsOfService />} />
       <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route
@@ -124,6 +134,14 @@ function AppRoutes() {
         <Route path="/settings/document-classifiers/:id" element={<ProtectedRoute allowedRoles={['admin']}><DocumentClassifierEditor /></ProtectedRoute>} />
         <Route path="/unknown-documents" element={<ProtectedRoute allowedRoles={['admin','supervisor']}><UnknownDocuments /></ProtectedRoute>} />
         <Route path="/2fa-setup" element={<TwoFactorSetup />} />
+        <Route path="/appeals" element={<ProtectedRoute><Appeals /></ProtectedRoute>} />
+        <Route path="/payment" element={<ProtectedRoute allowedRoles={['admin','supervisor','finance']}><Payment /></ProtectedRoute>} />
+        <Route path="/system-config" element={<ProtectedRoute allowedRoles={['admin']}><SystemConfigPage /></ProtectedRoute>} />
+        <Route path="/workflow/aging" element={<ProtectedRoute allowedRoles={CIC_STAFF}><AgingDashboard /></ProtectedRoute>} />
+        <Route path="/provider-scorecard" element={<ProtectedRoute allowedRoles={['admin', 'supervisor']}><ProviderScorecard /></ProtectedRoute>} />
+        <Route path="/pre-auth" element={<ProtectedRoute><PreAuth /></ProtectedRoute>} />
+        <Route path="/scan-station" element={<ProtectedRoute allowedRoles={['admin','supervisor','claims_officer','checker']}><ScanStation /></ProtectedRoute>} />
+        <Route path="/policy-plans" element={<ProtectedRoute allowedRoles={['admin','supervisor']}><PolicyPlans /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

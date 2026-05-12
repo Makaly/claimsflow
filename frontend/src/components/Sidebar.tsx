@@ -4,7 +4,8 @@ import {
   LayoutDashboard, FileText, Building2, Upload, GitBranch,
   UserCheck, UserCog, Users, Activity, BarChart3, Shield,
   Settings, ChevronLeft, ChevronRight, Network, AlertOctagon,
-  KeyRound, ShieldCheck, FileQuestion,
+  KeyRound, ShieldCheck, FileQuestion, Scale, CreditCard, Clock, SlidersHorizontal,
+  ScanLine,
 } from 'lucide-react'
 import { useUnknownDocCount } from '@/hooks/useUnknownDocCount'
 import { cn } from '@/lib/utils'
@@ -45,14 +46,23 @@ const navigation: NavItem[] = [
   { name: 'Maker Queue', href: '/workflow/maker', icon: UserCheck, roles: ['admin', 'supervisor', 'claims_officer'] },
   { name: 'Checker Queue', href: '/workflow/checker', icon: UserCog, roles: ['admin', 'supervisor', 'checker'] },
   { name: 'Fraud Queue', href: '/workflow/fraud', icon: AlertOctagon, roles: ['admin', 'supervisor', 'fraud_officer', 'claims_officer'] },
+  { name: 'Claims Aging', href: '/workflow/aging', icon: Clock, roles: CIC_STAFF },
+  { name: 'Scan Station', href: '/scan-station', icon: ScanLine, roles: ['admin', 'supervisor', 'claims_officer', 'checker'] },
+  { name: 'Pre-Auth', href: '/pre-auth', icon: ShieldCheck, roles: ['admin', 'supervisor', 'claims_officer', 'provider_admin', 'provider_user'] },
   { name: 'Provider Approvals', href: '/provider-approvals', icon: Shield, roles: ['admin', 'supervisor'] },
+  { name: 'Appeals', href: '/appeals', icon: Scale, roles: [...CIC_STAFF, 'provider_admin', 'provider_user'] },
+  { type: 'separator', name: 'Finance', roles: ['admin', 'supervisor'] as Role[] },
+  { name: 'Payment Settlement', href: '/payment', icon: CreditCard, roles: ['admin', 'supervisor'] },
   { type: 'separator', name: 'Admin', roles: ['admin', 'supervisor'] },
   { name: 'Users', href: '/users', icon: Users, roles: ['admin', 'supervisor'] },
   { name: 'Roles', href: '/roles', icon: ShieldCheck, roles: ['admin', 'supervisor'] },
   { name: 'Permissions', href: '/permissions', icon: KeyRound, roles: ['admin', 'supervisor'] },
+  { name: 'Policy Plans', href: '/policy-plans', icon: Shield, roles: ['admin', 'supervisor'] },
   { name: 'Activity Logs', href: '/activity-logs', icon: Activity, roles: ['admin', 'supervisor'] },
   { name: 'Reports', href: '/reports', icon: BarChart3, roles: ['admin', 'supervisor'] },
+  { name: 'Provider Scorecard', href: '/provider-scorecard', icon: BarChart3, roles: ['admin', 'supervisor'] },
   { name: 'Unknown Docs', href: '/unknown-documents', icon: FileQuestion, roles: ['admin', 'supervisor'] },
+  { name: 'System Config', href: '/system-config', icon: SlidersHorizontal, roles: ['admin'] },
   { name: 'Settings', href: '/settings', icon: Settings, roles: ['admin', 'supervisor'] },
 ]
 

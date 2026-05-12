@@ -32,6 +32,9 @@ export interface ClaimRecord {
   batchType?: 'single' | 'batch'
   aiConfidence?: number
   fraudSignals?: { level: 'critical' | 'warning'; title: string; detail: string; detectedAt: string }[]
+  eligibilityStatus?: string | null
+  eligibilityNotes?: string | null
+  eligibilityCheckedAt?: string | null
 }
 
 // ---- System Barcode Generator ----
@@ -117,6 +120,9 @@ function mapBackendClaim(c: any): ClaimRecord {
     batchType: (c.batchId || c.batchNumber || c.batch?.batchNumber) ? 'batch' : 'single',
     aiConfidence: c.ocrConfidence,
     fraudSignals: Array.isArray(c.fraudSignals) && c.fraudSignals.length > 0 ? c.fraudSignals : undefined,
+    eligibilityStatus: c.eligibilityStatus ?? null,
+    eligibilityNotes: c.eligibilityNotes ?? null,
+    eligibilityCheckedAt: c.eligibilityCheckedAt ?? null,
   }
 }
 

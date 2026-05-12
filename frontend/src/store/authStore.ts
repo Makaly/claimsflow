@@ -2,11 +2,13 @@ import { create } from 'zustand'
 import api from '@/services/api'
 import type { User } from '@/types'
 
+// The JWT is now stored in an HttpOnly cookie managed by the browser.
+// localStorage only keeps non-sensitive cached user profile data.
+
 interface AuthState {
   user: User | null
-  token: string | null
   isAuthenticated: boolean
-  login: (token: string, user: User) => void
+  login: (user: User) => void
   logout: () => void
   setUser: (user: User) => void
   fetchProfile: () => Promise<void>
@@ -23,21 +25,19 @@ function readUser(): User | null {
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: readUser(),
-  token: localStorage.getItem('token'),
-  isAuthenticated: !!localStorage.getItem('token'),
+  isAuthenticated: !!readUser(),
 
-  login: (token, user) => {
-    localStorage.setItem('token', token)
+  login: (user) => {
+    // Token is set as HttpOnly cookie by the server on login response.
+    // We only cache the non-sensitive user profile in localStorage.
     localStorage.setItem('user', JSON.stringify(user))
-    set({ token, user, isAuthenticated: true })
+    set({ user, isAuthenticated: true })
   },
 
   logout: () => {
-    localStorage.removeItem('token')
     localStorage.removeItem('user')
-    // Clear per-user cached data so the next user on this browser doesn't inherit it.
     localStorage.removeItem('cic-claims-storage')
-    set({ token: null, user: null, isAuthenticated: false })
+    set({ user: null, isAuthenticated: false })
   },
 
   setUser: (user) => {
@@ -49,16 +49,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const { data } = await api.get<User>('/auth/profile')
       localStorage.setItem('user', JSON.stringify(data))
-      set({ user: data })
+      set({ user: data, isAuthenticated: true })
     } catch (err: any) {
-      // Only invalidate the session when the server explicitly rejects the token.
-      // Network errors and 5xx (e.g. Render cold-start) must NOT clear the
-      // token — the user would be silently logged out every time the backend
-      // is sleeping.
       if (err.response?.status === 401) {
-        localStorage.removeItem('token')
         localStorage.removeItem('user')
-        set({ token: null, user: null, isAuthenticated: false })
+        set({ user: null, isAuthenticated: false })
       }
     }
   },
