@@ -10,6 +10,9 @@ RUN npm ci
 COPY . .
 RUN npx prisma generate
 RUN npm run build && test -f dist/main.js || (echo "ERROR: dist/main.js not produced by build" && exit 1)
+# Compile seed separately (tsconfig excludes prisma/ so nest build skips it)
+RUN npx tsc --skipLibCheck --esModuleInterop --allowSyntheticDefaultImports \
+    --target ES2021 --module commonjs --outDir dist/prisma prisma/seed.ts 2>/dev/null || true
 
 # ---- runtime ----
 FROM node:20-alpine
@@ -29,6 +32,11 @@ COPY prisma ./prisma
 
 EXPOSE 4000
 
-# Resolve any previously-failed migration marker, then apply all pending
-# migrations and start. The resolve is a no-op once the migration succeeds.
-CMD npx prisma migrate resolve --rolled-back 20260423220000_add_claim_branch 2>/dev/null || true && npx prisma migrate deploy && node dist/main
+# 1. Resolve any previously-failed migration (no-op when migration is clean)
+# 2. Apply pending migrations
+# 3. Seed demo users and reference data (upsert — safe to run on every deploy)
+# 4. Start the API server
+CMD npx prisma migrate resolve --rolled-back 20260423220000_add_claim_branch 2>/dev/null || true \
+    && npx prisma migrate deploy \
+    && node dist/prisma/seed.js \
+    && node dist/main
