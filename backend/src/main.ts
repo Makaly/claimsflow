@@ -10,7 +10,13 @@ import { AppModule } from './app.module';
 ;(BigInt.prototype as any).toJSON = function () { return Number(this) }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  console.log('[bootstrap] creating Nest application…');
+  const app = await NestFactory.create(AppModule, {
+    // Pipe Nest's logger through console so Render captures it the same way
+    // it captures our explicit console.log calls (stdout, line-buffered).
+    bufferLogs: false,
+  });
+  console.log('[bootstrap] Nest application created');
 
   // Security headers — must be applied before CORS and body parsers
   app.use(helmet({
@@ -84,7 +90,11 @@ async function bootstrap() {
   }
 
   const port = process.env.PORT || 4000;
-  const server = await app.listen(port);
+  console.log(`[bootstrap] binding HTTP listener on 0.0.0.0:${port}…`);
+  // Bind to 0.0.0.0 — without an explicit host Nest defaults to listening
+  // only on IPv6 / ::1 inside the container, which makes Render's health
+  // probe miss the service even though it's running.
+  const server = await app.listen(port, '0.0.0.0');
   // OCR on large merged PDFs can take several minutes; extend the Node.js HTTP
   // server timeout so the connection is not dropped mid-processing.
   server.setTimeout(600_000);          // 10 min
@@ -92,4 +102,19 @@ async function bootstrap() {
   server.headersTimeout   = 620_000;
   console.log(`Application is running on port ${port}`);
 }
-bootstrap();
+// Surface unhandled errors loudly so a silent crash never looks like "no log
+// output" again. Without these listeners the process can die mid-await and
+// the only artefact is the absent next log line.
+process.on('unhandledRejection', (err) => {
+  console.error('[fatal] unhandledRejection:', err);
+  process.exit(1);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[fatal] uncaughtException:', err);
+  process.exit(1);
+});
+
+bootstrap().catch((err) => {
+  console.error('[fatal] bootstrap failed:', err);
+  process.exit(1);
+});

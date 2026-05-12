@@ -32,11 +32,22 @@ COPY prisma ./prisma
 
 EXPOSE 4000
 
-# 1. Resolve any previously-failed migration (no-op when migration is clean)
-# 2. Apply pending migrations
-# 3. Seed demo users and reference data (upsert — safe to run on every deploy)
-# 4. Start the API server
-CMD npx prisma migrate resolve --rolled-back 20260423220000_add_claim_branch 2>/dev/null || true \
+# Boot chain — every step echoes a marker so a deploy-log break in the middle
+# tells us exactly which step failed.
+#
+#   1. Resolve any previously-failed migration (no-op when migration is clean)
+#   2. Apply pending migrations
+#   3. Seed demo users and reference data (idempotent upsert)
+#   4. Hand off to the API server
+#
+# `exec` on the last line replaces the shell process with node, so signals
+# from the orchestrator reach the app cleanly (no zombie wrapper).
+CMD set -e \
+    && echo "[boot] step 1/4 resolve rolled-back migrations" \
+    && (npx prisma migrate resolve --rolled-back 20260423220000_add_claim_branch 2>/dev/null || true) \
+    && echo "[boot] step 2/4 prisma migrate deploy" \
     && npx prisma migrate deploy \
+    && echo "[boot] step 3/4 seed reference data" \
     && node dist/prisma/seed.js \
-    && node dist/main
+    && echo "[boot] step 4/4 starting API on PORT=$PORT" \
+    && exec node dist/main

@@ -31,6 +31,19 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **Silent boot failure on Render** — deploy logs ended at "🎉 Seed
+  complete!" with no subsequent output from the API process, leaving
+  Render's edge in a `no-deploy` routing state. Three hardening
+  changes turn the next failure into a diagnosable one:
+  - Boot chain in `Dockerfile.prod` now echoes a `[boot] step N/4`
+    marker before each phase and `exec node dist/main` so signals
+    reach the app instead of the wrapper shell.
+  - `src/main.ts` logs `[bootstrap]` markers around Nest creation
+    and HTTP bind, binds to `0.0.0.0` so Render's health probe can
+    reach the listener (Nest defaults to `::1` inside the container,
+    which the probe misses), and installs `unhandledRejection` /
+    `uncaughtException` handlers that print and exit instead of
+    swallowing the error.
 - **WebSocket connection refused / namespace mismatch** — the socket.io
   client built its URL by appending `/events` to `VITE_API_URL` (which
   ends in `/api`), producing namespace `/api/events` on a server that
