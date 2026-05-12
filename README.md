@@ -4,8 +4,10 @@
 
 **End-to-end medical claims automation platform for CIC Insurance Group PLC**
 
-[![Build](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/Makaly/claimsflow/actions)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/Makaly/claimsflow/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Makaly/claimsflow/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/Makaly/claimsflow/actions/workflows/codeql.yml/badge.svg?branch=master)](https://github.com/Makaly/claimsflow/actions/workflows/codeql.yml)
+[![Release](https://img.shields.io/github/v/release/Makaly/claimsflow?display_name=tag&sort=semver)](https://github.com/Makaly/claimsflow/releases)
+[![License](https://img.shields.io/github/license/Makaly/claimsflow)](LICENSE)
 [![NestJS](https://img.shields.io/badge/backend-NestJS%2011-e0234e)](https://nestjs.com/)
 [![React](https://img.shields.io/badge/frontend-React%2018-61dafb)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/typescript-5.x-3178c6)](https://www.typescriptlang.org/)
