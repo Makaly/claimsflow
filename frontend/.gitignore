@@ -47,3 +47,8 @@ coverage/
 # Misc
 *.pem
 .vercel
+
+# Playwright test artefacts
+playwright-report/
+test-results/
+
