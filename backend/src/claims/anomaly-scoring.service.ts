@@ -164,4 +164,51 @@ export class AnomalyScoringService {
     // Recompute fresh — cheap enough for single-claim lookup
     return this.scoreClaim(claimId);
   }
+
+  /**
+   * Compute weighted statistics by joining anomaly factors with labelled outcomes.
+   * Returns per-factor "predictive power" — how often each factor correlates with
+   * fraud labels vs legitimate labels. This is the input for tuning factor weights.
+   */
+  async getFactorEffectiveness() {
+    const labels = await this.prisma.claimLabel.findMany({
+      where: { label: { in: ['fraud', 'suspicious', 'legitimate'] } },
+      take: 1000,
+    });
+
+    if (labels.length < 20) {
+      return {
+        sampleSize: labels.length,
+        message: 'Insufficient labelled data to compute factor effectiveness. Collect more labels first.',
+        factors: [],
+      };
+    }
+
+    const fraudLabels = labels.filter(l => l.label === 'fraud' || l.label === 'suspicious');
+    const goodLabels = labels.filter(l => l.label === 'legitimate');
+
+    const computeMean = (items: any[], key: string) => {
+      const vals = items.map(i => (i.featuresSnapshot as any)?.[key]).filter(v => typeof v === 'number');
+      return vals.length === 0 ? 0 : vals.reduce((s, v) => s + v, 0) / vals.length;
+    };
+
+    const factors = [
+      { name: 'invoiceAmount', fraudAvg: computeMean(fraudLabels, 'invoiceAmount'), goodAvg: computeMean(goodLabels, 'invoiceAmount') },
+      { name: 'ocrConfidence', fraudAvg: computeMean(fraudLabels, 'ocrConfidence'), goodAvg: computeMean(goodLabels, 'ocrConfidence') },
+      { name: 'anomalyScore', fraudAvg: computeMean(fraudLabels, 'anomalyScore'), goodAvg: computeMean(goodLabels, 'anomalyScore') },
+      { name: 'fraudSignalCount', fraudAvg: computeMean(fraudLabels, 'fraudSignalCount'), goodAvg: computeMean(goodLabels, 'fraudSignalCount') },
+      { name: 'fraudSignalCritical', fraudAvg: computeMean(fraudLabels, 'fraudSignalCritical'), goodAvg: computeMean(goodLabels, 'fraudSignalCritical') },
+      { name: 'resubmissionCount', fraudAvg: computeMean(fraudLabels, 'resubmissionCount'), goodAvg: computeMean(goodLabels, 'resubmissionCount') },
+    ].map(f => ({
+      ...f,
+      separation: Math.abs(f.fraudAvg - f.goodAvg) / Math.max(1, Math.abs(f.fraudAvg + f.goodAvg) / 2),
+    }));
+
+    return {
+      sampleSize: labels.length,
+      fraudLabels: fraudLabels.length,
+      legitimateLabels: goodLabels.length,
+      factors: factors.sort((a, b) => b.separation - a.separation),
+    };
+  }
 }

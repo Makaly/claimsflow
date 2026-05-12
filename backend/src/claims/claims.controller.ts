@@ -157,6 +157,12 @@ export class ClaimsController {
     return this.claimsService.getStatistics(req.user);
   }
 
+  @Get('ml/factor-effectiveness')
+  @Roles('admin', 'supervisor')
+  async getFactorEffectiveness() {
+    return this.anomalyScoringService.getFactorEffectiveness();
+  }
+
   // ── Fraud workflow ─────────────────────────────────────────────
   // These must be declared BEFORE @Get(':id') / @Patch(':id') / @Delete(':id')
   // so the specific `fraud-queue` and `:id/fraud/*` paths aren't swallowed
