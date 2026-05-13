@@ -34,6 +34,29 @@ export class EoxegenMockController {
     }
   }
 
+  @Post('ocr-data/import')
+  importOcrData(@Headers() headers: any, @Body() body: any) {
+    this.auth(headers);
+    this.claimSeq++;
+    const smartClaimId = `SMART-${this.claimSeq}`;
+    const smartClaimNumber = `SC-${new Date().getFullYear()}-${String(this.claimSeq).padStart(6, '0')}`;
+    this.logger.log(`Mock eOxegen received OCR data for claim ${body.claimId} → ${smartClaimNumber}`);
+    return {
+      claimId: body.claimId,
+      smartClaimId,
+      smartClaimNumber,
+      received: true,
+      receivedAt: new Date().toISOString(),
+    };
+  }
+
+  @Post('claims/link')
+  linkClaim(@Headers() headers: any, @Body() body: any) {
+    this.auth(headers);
+    this.logger.log(`Mock eOxegen linked claim ${body.claimId} ↔ Smart policy ${body.smartPolicyNumber}`);
+    return { linked: true, claimId: body.claimId, smartPolicyNumber: body.smartPolicyNumber };
+  }
+
   @Post('claims/approved')
   receiveApprovedClaim(@Headers() headers: any, @Body() body: any) {
     this.auth(headers);

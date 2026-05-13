@@ -131,7 +131,7 @@ export class EoxegenIntegrationService {
         invoiceAmount: record.invoiceAmount,
       };
 
-      const response = await this.eoxegenClient!.post('/api/ocr-data/import', payload);
+      const response = await this.eoxegenClient!.post('/ocr-data/import', payload);
 
       await this.prisma.eOxegenData.update({
         where: { claimId },
@@ -199,7 +199,7 @@ export class EoxegenIntegrationService {
         })),
       };
 
-      const response = await this.eoxegenClient!.post('/api/claims/approved', payload);
+      const response = await this.eoxegenClient!.post('/claims/approved', payload);
 
       await this.prisma.eOxegenData.upsert({
         where: { claimId },
@@ -251,7 +251,7 @@ export class EoxegenIntegrationService {
     }
 
     try {
-      const response = await this.eoxegenClient!.get(`/api/claims/${record.smartClaimId}/status`);
+      const response = await this.eoxegenClient!.get(`/claims/${record.smartClaimId}/status`);
       const { paymentStatus, paymentDate } = response.data || {};
 
       if (paymentStatus === 'paid') {
@@ -306,7 +306,7 @@ export class EoxegenIntegrationService {
     if (!this.enabled) return { linked: false, reason: 'integration_disabled' };
 
     try {
-      await this.eoxegenClient!.post('/api/claims/link', {
+      await this.eoxegenClient!.post('/claims/link', {
         claimId,
         smartPolicyNumber,
       });
@@ -352,7 +352,7 @@ export class EoxegenIntegrationService {
   async healthCheck(): Promise<boolean> {
     if (!this.enabled) return false;
     try {
-      await this.eoxegenClient!.get('/api/health');
+      await this.eoxegenClient!.get('/health');
       return true;
     } catch {
       return false;

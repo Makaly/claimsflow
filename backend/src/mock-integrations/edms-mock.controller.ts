@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Headers, Body, Param, BadRequestException, UnauthorizedException, Logger,
+  Controller, Get, Post, Patch, Delete, Headers, Body, Param, BadRequestException, UnauthorizedException, Logger,
 } from '@nestjs/common';
 
 interface MockEdmsDocument {
@@ -24,7 +24,7 @@ export class EdmsMockController {
     }
   }
 
-  @Post('documents')
+  @Post('documents/upload')
   uploadDocument(@Headers() headers: any, @Body() body: any) {
     this.auth(headers);
     const id = `EDMS-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
@@ -53,6 +53,24 @@ export class EdmsMockController {
     const doc = this.documents.get(id);
     if (!doc) throw new BadRequestException(`Document ${id} not in mock EDMS`);
     return doc;
+  }
+
+  @Patch('documents/:id/metadata')
+  updateMetadata(@Headers() headers: any, @Param('id') id: string, @Body() metadata: any) {
+    this.auth(headers);
+    const doc = this.documents.get(id);
+    if (!doc) throw new BadRequestException(`Document ${id} not in mock EDMS`);
+    doc.metadata = { ...(doc.metadata || {}), ...(metadata || {}) };
+    this.logger.log(`Mock EDMS metadata updated for ${id}`);
+    return { documentId: id, metadata: doc.metadata, updatedAt: new Date().toISOString() };
+  }
+
+  @Delete('documents/:id')
+  deleteDocument(@Headers() headers: any, @Param('id') id: string) {
+    this.auth(headers);
+    const existed = this.documents.delete(id);
+    this.logger.log(`Mock EDMS delete ${id} (existed=${existed})`);
+    return { documentId: id, deleted: existed };
   }
 
   @Get('health')

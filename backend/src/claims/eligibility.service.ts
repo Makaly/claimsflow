@@ -36,7 +36,7 @@ export class EligibilityService {
     }
 
     try {
-      const response = await axios.get(`${this.baseUrl}/api/members/eligibility`, {
+      const response = await axios.get(`${this.baseUrl}/members/eligibility`, {
         headers: { Authorization: `Bearer ${this.apiKey}` },
         params: { memberNumber: memberNumber.trim(), serviceDate: dateOfService?.toISOString().slice(0, 10) },
         timeout: 10_000,

@@ -92,7 +92,7 @@ export class EdmsIntegrationService {
       form.append('batchNumber', document.batchNumber || '');
       form.append('uploadDate', document.createdAt.toISOString());
 
-      const response = await this.edmsClient!.post('/api/documents/upload', form, {
+      const response = await this.edmsClient!.post('/documents/upload', form, {
         headers: { ...form.getHeaders() },
       });
 
@@ -166,7 +166,7 @@ export class EdmsIntegrationService {
     if (!this.enabled) throw new Error('EDMS integration disabled');
 
     try {
-      const response = await this.edmsClient!.get(`/api/documents/${edmsDocumentId}`);
+      const response = await this.edmsClient!.get(`/documents/${edmsDocumentId}`);
       this.logger.log(`Document ${edmsDocumentId} retrieved from EDMS`);
       return {
         documentId: response.data.id,
@@ -183,7 +183,7 @@ export class EdmsIntegrationService {
   async updateDocumentMetadata(edmsDocumentId: string, metadata: any) {
     if (!this.enabled) return null;
     try {
-      const response = await this.edmsClient!.patch(`/api/documents/${edmsDocumentId}/metadata`, metadata);
+      const response = await this.edmsClient!.patch(`/documents/${edmsDocumentId}/metadata`, metadata);
       return response.data;
     } catch (err: any) {
       this.logger.error(`EDMS metadata update failed: ${err?.message}`);
@@ -194,7 +194,7 @@ export class EdmsIntegrationService {
   async deleteDocument(edmsDocumentId: string) {
     if (!this.enabled) return null;
     try {
-      await this.edmsClient!.delete(`/api/documents/${edmsDocumentId}`);
+      await this.edmsClient!.delete(`/documents/${edmsDocumentId}`);
       await this.prisma.edmsDocument.updateMany({
         where: { edmsDocumentId },
         data: { syncStatus: 'deleted' },
@@ -292,7 +292,7 @@ export class EdmsIntegrationService {
   async healthCheck(): Promise<boolean> {
     if (!this.enabled) return false;
     try {
-      await this.edmsClient!.get('/api/health');
+      await this.edmsClient!.get('/health');
       return true;
     } catch {
       return false;
