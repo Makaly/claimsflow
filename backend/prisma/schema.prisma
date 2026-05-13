@@ -9,17 +9,17 @@ datasource db {
 }
 
 model User {
-  id                    String          @id @default(uuid())
-  email                 String          @unique
+  id                    String                  @id @default(uuid())
+  email                 String                  @unique
   password              String
   name                  String
-  role                  String          @default("user")
-  isActive              Boolean         @default(true)
-  requirePasswordChange Boolean         @default(false)
+  role                  String                  @default("user")
+  isActive              Boolean                 @default(true)
+  requirePasswordChange Boolean                 @default(false)
   lastLogin             DateTime?
-  failedLoginAttempts   Int             @default(0)
+  failedLoginAttempts   Int                     @default(0)
   lockedUntil           DateTime?
-  twoFactorEnabled      Boolean         @default(false)
+  twoFactorEnabled      Boolean                 @default(false)
   twoFactorSecret       String?
   phone                 String?
   jobTitle              String?
@@ -29,29 +29,94 @@ model User {
   language              String?
   bio                   String?
   avatarUrl             String?
-  savedSignatures       Json?           @default("[]")
+  savedSignatures       Json?                   @default("[]")
   providerId            String?
   branchId              String?
   passwordResetToken    String?
   passwordResetExpiry   DateTime?
-  createdAt             DateTime        @default(now())
-  updatedAt             DateTime        @updatedAt
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
   createdBy             String?
   updatedBy             String?
+  // GDPR Art. 17 — soft-erasure marker. When set, login is blocked and PII
+  // is replaced with anonymised tokens but referential integrity for legally
+  // retained claim records (Insurance Act 2017 s.83 — 7 year retention) is
+  // preserved.
+  deletedAt             DateTime?
   activityLogs          ActivityLog[]
   claimsApproved        ClaimApproval[]
-  claimsAssigned        Claim[]         @relation("ClaimAssignee")
-  claimsCreated         Claim[]         @relation("ClaimCreator")
+  claimsAssigned        Claim[]                 @relation("ClaimAssignee")
+  claimsCreated         Claim[]                 @relation("ClaimCreator")
   notifications         Notification[]
   userRoles             UserRole[]
-  provider              Provider?       @relation(fields: [providerId], references: [id])
-  appeals               Appeal[]        @relation("AppealAdjudicator")
-  appealsFiled          Appeal[]        @relation("AppealFiler")
+  provider              Provider?               @relation(fields: [providerId], references: [id])
+  appeals               Appeal[]                @relation("AppealAdjudicator")
+  appealsFiled          Appeal[]                @relation("AppealFiler")
+  consents              ConsentRecord[]
+  dataExports           DataExportRequest[]
+  decisionReviews       DecisionReviewRequest[]
 
   @@index([providerId])
   @@index([email])
   @@index([passwordResetToken])
+  @@index([deletedAt])
   @@map("users")
+}
+
+/// Records every consent grant or withdrawal under KDPA Art. 7 / GDPR Art. 7.
+/// One row per consent action — never updated in place — so the consent history
+/// is auditable end-to-end.
+model ConsentRecord {
+  id        String   @id @default(uuid())
+  userId    String
+  purpose   String // e.g. "terms_of_service", "privacy_policy", "marketing", "fraud_analytics"
+  action    String // "granted" | "withdrawn"
+  version   String? // policy version the user accepted
+  ipAddress String?
+  userAgent String?
+  source    String? // "registration" | "profile" | "consent_page"
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, purpose])
+  @@map("consent_records")
+}
+
+/// Tracks Right of Access / Portability requests under GDPR Art. 15 + 20.
+/// Stored even after the export is downloaded so we can prove SLA compliance.
+model DataExportRequest {
+  id          String   @id @default(uuid())
+  userId      String
+  status      String   @default("completed") // "completed" | "failed"
+  requestedAt DateTime @default(now())
+  ipAddress   String?
+  userAgent   String?
+  bytes       Int?
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("data_export_requests")
+}
+
+/// Records a data subject's challenge of an automated decision (fraud flag)
+/// under GDPR Art. 22. A reviewer must take a human decision before closure.
+model DecisionReviewRequest {
+  id           String    @id @default(uuid())
+  userId       String
+  claimId      String?
+  decisionType String // "fraud_flag" | "anomaly_score"
+  reason       String
+  status       String    @default("pending") // "pending" | "upheld" | "overturned"
+  reviewerId   String?
+  reviewerNote String?
+  createdAt    DateTime  @default(now())
+  resolvedAt   DateTime?
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@map("decision_review_requests")
 }
 
 model Role {
@@ -835,27 +900,27 @@ model PaymentAdvice {
 }
 
 model PreAuthorisation {
-  id                String    @id @default(uuid())
-  referenceNumber   String    @unique
-  providerId        String
-  memberNumber      String
-  memberName        String?
-  treatmentType     String
-  diagnosisCode     String?
-  estimatedAmount   Float
-  requestedBy       String
-  status            String    @default("pending")
-  reviewedBy        String?
-  reviewedAt        DateTime?
-  approvedAmount    Float?
-  validFrom         DateTime?
-  validTo           DateTime?
-  conditions        String?
-  rejectionReason   String?
-  linkedClaimId     String?
-  notes             String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id              String    @id @default(uuid())
+  referenceNumber String    @unique
+  providerId      String
+  memberNumber    String
+  memberName      String?
+  treatmentType   String
+  diagnosisCode   String?
+  estimatedAmount Float
+  requestedBy     String
+  status          String    @default("pending")
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  approvedAmount  Float?
+  validFrom       DateTime?
+  validTo         DateTime?
+  conditions      String?
+  rejectionReason String?
+  linkedClaimId   String?
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([providerId])
   @@index([memberNumber])
@@ -865,24 +930,24 @@ model PreAuthorisation {
 }
 
 model PolicyPlan {
-  id                String         @id @default(uuid())
-  planCode          String         @unique
-  planName          String
-  description       String?
-  inpatientLimit    Float          @default(0)
-  outpatientLimit   Float          @default(0)
-  dentalLimit       Float          @default(0)
-  opticalLimit      Float          @default(0)
-  maternityLimit    Float          @default(0)
-  copayPercent      Float          @default(0)
-  excessAmount      Float          @default(0)
-  isActive          Boolean        @default(true)
-  validFrom         DateTime?
-  validTo           DateTime?
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
-  createdBy         String?
-  memberPolicies    MemberPolicy[]
+  id              String         @id @default(uuid())
+  planCode        String         @unique
+  planName        String
+  description     String?
+  inpatientLimit  Float          @default(0)
+  outpatientLimit Float          @default(0)
+  dentalLimit     Float          @default(0)
+  opticalLimit    Float          @default(0)
+  maternityLimit  Float          @default(0)
+  copayPercent    Float          @default(0)
+  excessAmount    Float          @default(0)
+  isActive        Boolean        @default(true)
+  validFrom       DateTime?
+  validTo         DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  createdBy       String?
+  memberPolicies  MemberPolicy[]
 
   @@index([planCode])
   @@index([isActive])
@@ -913,16 +978,16 @@ model MemberPolicy {
 }
 
 model ClaimLabel {
-  id          String   @id @default(uuid())
-  claimId     String   @unique
-  label       String   // 'legitimate' | 'suspicious' | 'fraud'
-  source      String   // 'auto_approve' | 'auto_reject' | 'manual_review' | 'fraud_confirmed' | 'appeal_outcome'
-  confidence  Float    @default(1.0)
-  labelledBy  String?
-  notes       String?
-  featuresSnapshot Json?  // captures the claim features at labelling time
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id               String   @id @default(uuid())
+  claimId          String   @unique
+  label            String // 'legitimate' | 'suspicious' | 'fraud'
+  source           String // 'auto_approve' | 'auto_reject' | 'manual_review' | 'fraud_confirmed' | 'appeal_outcome'
+  confidence       Float    @default(1.0)
+  labelledBy       String?
+  notes            String?
+  featuresSnapshot Json? // captures the claim features at labelling time
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@index([label])
   @@index([source])
