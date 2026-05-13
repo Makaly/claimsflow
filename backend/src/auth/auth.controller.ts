@@ -12,8 +12,11 @@ export class AuthController {
   @Post('register')
   @UseGuards(ThrottlerGuard)
   @Throttle({ auth: { ttl: 60_000, limit: 5 } })
-  async register(@Body() registerDto: RegisterDto) {
-    return this.authService.register(registerDto);
+  async register(@Body() registerDto: RegisterDto, @Request() req: any) {
+    return this.authService.register(registerDto, {
+      ipAddress: req?.ip,
+      userAgent: req?.headers?.['user-agent'],
+    });
   }
 
   @Post('login')
@@ -22,15 +25,15 @@ export class AuthController {
   async login(@Body() loginDto: LoginDto, @Response({ passthrough: true }) res: any) {
     const result = await this.authService.login(loginDto);
     const isProduction = process.env.NODE_ENV === 'production';
-    // Frontend and backend live on different subdomains in production
-    // (claimsflow-frontend.onrender.com → claimsflow-backend.onrender.com),
-    // so cookies must be SameSite=None;Secure for the browser to attach
-    // them to cross-site XHRs. In dev we still proxy through Vite, so
-    // SameSite=Strict is correct and tighter.
+    // The Render static-site rewrite in render.yaml proxies /api/* and
+    // /socket.io/* from the frontend origin to the backend, so the browser
+    // sees same-origin requests. SameSite=Lax is therefore the correct,
+    // CSRF-resistant choice in both prod and dev. (Earlier this was
+    // SameSite=None to support cross-origin cookies before the proxy existed.)
     res.cookie('access_token', result.access_token, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: isProduction ? 'none' : 'strict',
+      sameSite: 'lax',
       maxAge: 24 * 60 * 60 * 1000,
       path: '/',
     });
@@ -76,13 +79,20 @@ export class AuthController {
   @HttpCode(201)
   @UseGuards(ThrottlerGuard)
   @Throttle({ auth: { ttl: 60_000, limit: 3 } })
-  async registerProvider(@Body() body: {
-    providerName: string; type: string; licenseNumber: string
-    phone: string; email: string; physicalAddress: string
-    contactPerson: string; city?: string; region?: string
-    adminName: string; adminEmail: string; adminPassword: string
-  }) {
-    return this.authService.registerProvider(body);
+  async registerProvider(
+    @Body() body: {
+      providerName: string; type: string; licenseNumber: string
+      phone: string; email: string; physicalAddress: string
+      contactPerson: string; city?: string; region?: string
+      adminName: string; adminEmail: string; adminPassword: string
+      acceptTerms: boolean; policyVersion?: string
+    },
+    @Request() req: any,
+  ) {
+    return this.authService.registerProvider(body, {
+      ipAddress: req?.ip,
+      userAgent: req?.headers?.['user-agent'],
+    });
   }
 
   @Post('forgot-password')
@@ -109,7 +119,7 @@ export class AuthController {
     res.clearCookie('access_token', {
       httpOnly: true,
       secure: isProduction,
-      sameSite: isProduction ? 'none' : 'strict',
+      sameSite: 'lax',
       path: '/',
     });
     return { message: 'Logged out successfully.' };

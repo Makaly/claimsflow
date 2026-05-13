@@ -15,8 +15,11 @@ export class AuthService {
     private emailService: EmailService,
   ) {}
 
-  async register(registerDto: RegisterDto) {
-    const { email, password, name, role } = registerDto;
+  async register(
+    registerDto: RegisterDto,
+    meta?: { ipAddress?: string; userAgent?: string },
+  ) {
+    const { email, password, name, role, policyVersion } = registerDto;
 
     // Check if user already exists
     const existingUser = await this.prisma.user.findUnique({
@@ -30,13 +33,34 @@ export class AuthService {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user
+    // Create user and persist registration consent in the same transaction
+    // so a half-created account can never exist without its consent record.
     const user = await this.prisma.user.create({
       data: {
         email,
         password: hashedPassword,
         name,
         role: role || 'user',
+        consents: {
+          create: [
+            {
+              purpose: 'terms_of_service',
+              action: 'granted',
+              version: policyVersion,
+              source: 'registration',
+              ipAddress: meta?.ipAddress,
+              userAgent: meta?.userAgent,
+            },
+            {
+              purpose: 'privacy_policy',
+              action: 'granted',
+              version: policyVersion,
+              source: 'registration',
+              ipAddress: meta?.ipAddress,
+              userAgent: meta?.userAgent,
+            },
+          ],
+        },
       },
     });
 
@@ -57,6 +81,12 @@ export class AuthService {
     });
 
     if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // GDPR Art. 17 — once a user has exercised right of erasure the account
+    // row is kept for referential integrity only. Treat it as nonexistent.
+    if (user.deletedAt) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -165,14 +195,23 @@ export class AuthService {
     return result;
   }
 
-  async registerProvider(dto: {
-    // Provider fields
-    providerName: string; type: string; licenseNumber: string
-    phone: string; email: string; physicalAddress: string
-    contactPerson: string; city?: string; region?: string
-    // Admin user fields
-    adminName: string; adminEmail: string; adminPassword: string
-  }) {
+  async registerProvider(
+    dto: {
+      // Provider fields
+      providerName: string; type: string; licenseNumber: string
+      phone: string; email: string; physicalAddress: string
+      contactPerson: string; city?: string; region?: string
+      // Admin user fields
+      adminName: string; adminEmail: string; adminPassword: string
+      // GDPR / KDPA consent — required at registration.
+      acceptTerms: boolean
+      policyVersion?: string
+    },
+    meta?: { ipAddress?: string; userAgent?: string },
+  ) {
+    if (!dto.acceptTerms) {
+      throw new BadRequestException('You must accept the Terms of Service and Privacy Policy to register.')
+    }
     const existing = await this.prisma.user.findUnique({ where: { email: dto.adminEmail } })
     if (existing) throw new UnauthorizedException('A user with this email already exists')
 
@@ -194,7 +233,8 @@ export class AuthService {
       },
     })
 
-    // Create admin user linked to provider
+    // Create admin user linked to provider, with the same audit-grade
+    // consent rows the staff registration flow records.
     const hashed = await bcrypt.hash(dto.adminPassword, 10)
     const user = await this.prisma.user.create({
       data: {
@@ -203,6 +243,26 @@ export class AuthService {
         password: hashed,
         role: 'provider_admin',
         providerId: provider.id,
+        consents: {
+          create: [
+            {
+              purpose: 'terms_of_service',
+              action: 'granted',
+              version: dto.policyVersion,
+              source: 'registration',
+              ipAddress: meta?.ipAddress,
+              userAgent: meta?.userAgent,
+            },
+            {
+              purpose: 'privacy_policy',
+              action: 'granted',
+              version: dto.policyVersion,
+              source: 'registration',
+              ipAddress: meta?.ipAddress,
+              userAgent: meta?.userAgent,
+            },
+          ],
+        },
       },
     })
 

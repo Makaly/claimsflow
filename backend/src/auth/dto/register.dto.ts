@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsString, MinLength, Matches, IsOptional, IsIn } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, MinLength, Matches, IsOptional, IsIn, Equals } from 'class-validator';
 
 export class RegisterDto {
   @IsEmail()
@@ -23,4 +23,12 @@ export class RegisterDto {
   @IsOptional()
   @IsIn(['provider_admin', 'provider_user'])
   role?: string;
+
+  // GDPR/KDPA Art. 7 — affirmative consent recorded at registration.
+  @Equals(true, { message: 'You must accept the Terms of Service and Privacy Policy to register.' })
+  acceptTerms: boolean;
+
+  @IsOptional()
+  @IsString()
+  policyVersion?: string;
 }
