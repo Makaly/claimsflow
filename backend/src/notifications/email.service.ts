@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
+import { redactEmail } from '../common/services/pii-redaction';
 
 export interface BatchClaimRow {
   claimNumber: string;
@@ -57,10 +58,10 @@ export class EmailService {
 
     try {
       const info = await this.transporter.sendMail(mailOptions);
-      this.logger.log(`Email sent to ${to}: ${info.messageId}`);
+      this.logger.log(`Email sent to ${redactEmail(to)}: ${info.messageId}`);
       return info;
     } catch (error) {
-      this.logger.error(`Failed to send email to ${to}:`, error);
+      this.logger.error(`Failed to send email to ${redactEmail(to)}:`, error);
       throw error;
     }
   }

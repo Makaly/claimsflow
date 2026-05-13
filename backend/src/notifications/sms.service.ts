@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { redactPhone } from '../common/services/pii-redaction';
 
 // Types for SMS providers
 type SmsProvider = 'twilio' | 'africastalking';
@@ -123,7 +124,7 @@ export class SmsService {
         to: this.formatPhoneNumber(dto.phoneNumber),
       });
 
-      this.logger.log(`SMS sent via Twilio to ${dto.phoneNumber}: ${message.sid}`);
+      this.logger.log(`SMS sent via Twilio to ${redactPhone(dto.phoneNumber)}: ${message.sid}`);
 
       return {
         success: true,
@@ -165,7 +166,7 @@ export class SmsService {
 
       if (result.SMSMessageData.Recipients[0].status === 'Success') {
         this.logger.log(
-          `SMS sent via Africa's Talking to ${dto.phoneNumber}: ${result.SMSMessageData.Recipients[0].messageId}`,
+          `SMS sent via Africa's Talking to ${redactPhone(dto.phoneNumber)}: ${result.SMSMessageData.Recipients[0].messageId}`,
         );
 
         return {

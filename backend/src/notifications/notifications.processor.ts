@@ -4,6 +4,7 @@ import { Logger } from '@nestjs/common';
 import { EmailService } from './email.service';
 import { SmsService } from './sms.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { redactEmail, redactPhone } from '../common/services/pii-redaction';
 
 @Processor({ name: 'notifications' }, { concurrency: 5 })
 export class NotificationsProcessor extends WorkerHost {
@@ -30,7 +31,8 @@ export class NotificationsProcessor extends WorkerHost {
 
   private async handleSendEmail(job: Job) {
     const { notificationId, recipient, subject, message } = job.data;
-    this.logger.log(`Sending email to: ${recipient}`);
+    const safeRecipient = redactEmail(recipient);
+    this.logger.log(`Sending email to: ${safeRecipient}`);
 
     try {
       await this.emailService.sendEmail(recipient, subject, message);
@@ -38,10 +40,10 @@ export class NotificationsProcessor extends WorkerHost {
         where: { id: notificationId },
         data: { status: 'sent', sentAt: new Date() },
       });
-      this.logger.log(`Email sent to: ${recipient}`);
+      this.logger.log(`Email sent to: ${safeRecipient}`);
       return { notificationId, status: 'sent' };
     } catch (error) {
-      this.logger.error(`Failed to send email to ${recipient}:`, error);
+      this.logger.error(`Failed to send email to ${safeRecipient}:`, error);
       await this.prisma.notification.update({
         where: { id: notificationId },
         data: { status: 'failed', error: error.message },
@@ -52,7 +54,8 @@ export class NotificationsProcessor extends WorkerHost {
 
   private async handleSendSms(job: Job) {
     const { notificationId, phoneNumber, message } = job.data;
-    this.logger.log(`Sending SMS to: ${phoneNumber}`);
+    const safePhone = redactPhone(phoneNumber);
+    this.logger.log(`Sending SMS to: ${safePhone}`);
 
     try {
       const result = await this.smsService.sendSms({ phoneNumber, message });
@@ -66,10 +69,10 @@ export class NotificationsProcessor extends WorkerHost {
           templateData: { messageId: result.messageId, provider: result.provider },
         },
       });
-      this.logger.log(`SMS sent to ${phoneNumber} via ${result.provider}`);
+      this.logger.log(`SMS sent to ${safePhone} via ${result.provider}`);
       return { notificationId, status: 'sent', result };
     } catch (error) {
-      this.logger.error(`Failed to send SMS to ${phoneNumber}:`, error);
+      this.logger.error(`Failed to send SMS to ${safePhone}:`, error);
       await this.prisma.notification.update({
         where: { id: notificationId },
         data: { status: 'failed', error: error.message },

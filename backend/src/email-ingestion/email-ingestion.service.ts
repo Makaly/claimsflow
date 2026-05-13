@@ -5,6 +5,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
+import { redactEmail } from '../common/services/pii-redaction';
 
 /**
  * Email Ingestion Service
@@ -47,7 +48,7 @@ export class EmailIngestionService {
     this.subjectFilter = this.configService.get('EMAIL_SUBJECT_FILTER') || 'claim';
 
     if (this.enabled) {
-      this.logger.log(`Email ingestion enabled (${this.provider}) – polling ${this.inboxUser}`);
+      this.logger.log(`Email ingestion enabled (${this.provider}) – polling ${redactEmail(this.inboxUser)}`);
     } else {
       this.logger.log('Email ingestion disabled – set EMAIL_INGESTION_ENABLED=true to enable');
     }
@@ -239,10 +240,10 @@ export class EmailIngestionService {
         data: { status: 'completed', completedAt: new Date() },
       });
 
-      this.logger.log(`Email batch ${batchNumber} created from ${senderEmail}: ${pdfAttachments.length} PDF(s)`);
+      this.logger.log(`Email batch ${batchNumber} created from ${redactEmail(senderEmail)}: ${pdfAttachments.length} PDF(s)`);
     } else {
       // Provider not found – save docs as orphaned with a note for manual assignment
-      this.logger.warn(`Email from unknown sender ${senderEmail} – documents saved for manual assignment`);
+      this.logger.warn(`Email from unknown sender ${redactEmail(senderEmail)} – documents saved for manual assignment`);
       for (let i = 0; i < savedPaths.length; i++) {
         await this.prisma.document.create({
           data: {

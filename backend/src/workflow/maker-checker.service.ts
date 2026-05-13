@@ -5,6 +5,7 @@ import { EdmsIntegrationService } from '../common/services/edms-integration.serv
 import { EoxegenIntegrationService } from '../common/services/eoxegen-integration.service';
 import { PdfWatermarkService } from '../common/services/pdf-watermark.service';
 import { AuditService } from '../common/services/audit.service';
+import { redactEmail } from '../common/services/pii-redaction';
 
 @Injectable()
 export class MakerCheckerService {
@@ -819,7 +820,7 @@ export class MakerCheckerService {
         this.notificationsService
           .sendEmail({ recipient: u.email, subject, message })
           .catch((err: any) =>
-            this.logger.warn(`Fan-out email to ${u.email} failed: ${err?.message}`),
+            this.logger.warn(`Fan-out email to ${redactEmail(u.email)} failed: ${err?.message}`),
           ),
       ),
     );

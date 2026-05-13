@@ -258,23 +258,55 @@ export class ActivityLoggingInterceptor implements NestInterceptor {
   }
 
   /**
-   * Sanitize request body (remove sensitive data)
+   * Sanitize request body (remove sensitive data).
+   *
+   * Activity logs are queried by support and may be exported, so this list
+   * is intentionally broad and the walk is recursive so nested shapes like
+   * `{ user: { password } }` are redacted too. Match is case-insensitive
+   * and substring-based (`twoFactorSecret`, `twoFactorCode`, `accessToken`
+   * all match).
    */
-  private sanitizeRequestBody(body: any): any {
-    if (!body || typeof body !== 'object') {
-      return body;
-    }
+  private static readonly SENSITIVE_KEY_PATTERNS = [
+    'password',
+    'currentpassword',
+    'newpassword',
+    'token',
+    'secret',
+    'apikey',
+    'authorization',
+    'cookie',
+    'creditcard',
+    'cvv',
+    'pin',
+    'otp',
+    'backupcode',
+    'twofactor',
+    'mfa',
+    'signature',
+  ];
 
-    const sanitized = { ...body };
-    const sensitiveFields = ['password', 'token', 'secret', 'apiKey', 'creditCard'];
+  private sanitizeRequestBody(body: any, depth = 0): any {
+    // Cap recursion so a circular or pathologically deep body can't hang us.
+    if (depth > 6) return '[TRUNCATED]';
+    if (body == null) return body;
+    if (Array.isArray(body)) return body.map((v) => this.sanitizeRequestBody(v, depth + 1));
+    if (typeof body !== 'object') return body;
 
-    for (const field of sensitiveFields) {
-      if (sanitized[field]) {
-        sanitized[field] = '[REDACTED]';
+    const out: Record<string, any> = {};
+    for (const [key, value] of Object.entries(body)) {
+      const k = key.toLowerCase();
+      const isSensitive = ActivityLoggingInterceptor.SENSITIVE_KEY_PATTERNS.some(
+        (p) => k.includes(p),
+      );
+      if (isSensitive) {
+        out[key] = '[REDACTED]';
+      } else if (value && typeof value === 'object') {
+        out[key] = this.sanitizeRequestBody(value, depth + 1);
+      } else {
+        out[key] = value;
       }
     }
-
-    return sanitized;
+    return out;
   }
 
   /**
