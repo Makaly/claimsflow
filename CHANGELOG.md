@@ -7,6 +7,128 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-05-13
+
+### Added
+
+- **GDPR / KDPA data-subject rights API** (`/api/gdpr/*`) — five new endpoints
+  covering the full set of data-subject rights under GDPR Art. 15-22 and the
+  Kenya Data Protection Act 2019 ss. 26-38:
+  - `GET /gdpr/consents` — full consent history + current state per purpose.
+  - `POST /gdpr/consents/grant` and `/withdraw` — granular consent management.
+  - `GET /gdpr/export` — structured JSON export of every record linked to the
+    requesting user (Art. 15 right of access + Art. 20 portability).
+  - `DELETE /gdpr/account` — account erasure with anonymisation of identifying
+    fields while preserving referential integrity of claim records required
+    under Insurance Act 2017 s.83 (7-year retention).
+  - `POST /gdpr/decision-review` — challenge an automated fraud/anomaly
+    decision under Art. 22; creates a pending human-review request.
+- **Consent ledger** (`ConsentRecord` model) — append-only table that records
+  every consent grant or withdrawal with purpose, policy version, IP, and
+  user-agent so the consent history is auditable end-to-end.
+- **Data export tracking** (`DataExportRequest`) and **decision-review tracking**
+  (`DecisionReviewRequest`) models for Art. 15/20 and Art. 22 SLA proof.
+- **Soft-delete / erasure marker** (`User.deletedAt`) — login is blocked for
+  erased accounts and identifying fields are replaced with anonymised tokens,
+  while the database row is retained for regulatory compliance.
+- **AES-256-GCM field-level encryption** (`common/services/field-encryption.ts`)
+  for special-category personal data (diagnosis, treatment — GDPR Art. 9 /
+  KDPA s.44-46). Ciphertext is versioned (`enc:v1:…`) to support future
+  key-rotation migrations. Applied transparently via a Prisma middleware in
+  `PrismaService` so call sites keep using plain string assignments.
+- **PII redaction helpers** (`common/services/pii-redaction.ts`) — `redactEmail`
+  and `redactPhone` applied across all service log output (notifications
+  processor, email service, SMS service, email ingestion, maker-checker fan-out)
+  to prevent personal data appearing in log aggregators and incident exports.
+- **Consent capture at registration** — `AuthService.register` and
+  `registerProvider` now create `ConsentRecord` rows (terms of service +
+  privacy policy) in the same transaction as the user row, with IP address,
+  user-agent, and policy version recorded. `RegisterDto` validates
+  `acceptTerms: true` so the endpoint rejects unsigned registrations.
+- **Privacy & Data tab** in the frontend Profile page — surfaces all
+  data-subject rights in one place: download personal data export, withdraw or
+  re-grant consent per purpose, and request account erasure with a typed
+  confirmation phrase.
+- **Global HTTP exception filter** (`common/filters/http-exception.filter.ts`)
+  — stable JSON error envelope `{ statusCode, code, message, requestId,
+  timestamp, path }` on every error response. 5xx responses log the underlying
+  error server-side and return a generic message so stack frames and Prisma
+  constraint names are never exposed to callers.
+- **Request-ID middleware** (`common/middleware/request-id.middleware.ts`)
+  — stamps every request with an `X-Request-ID` header (accepts a
+  caller-supplied ID or generates a UUID v4), mirrors it in the response, and
+  stashes it on `req.requestId` so the exception filter and logging interceptor
+  can correlate logs across a request.
+- **HSTS and Permissions-Policy headers** — `Strict-Transport-Security` with
+  one-year `max-age`, `includeSubDomains`, and `preload` in production; a
+  `Permissions-Policy` header disabling camera, microphone, geolocation,
+  payment, and USB for all responses.
+- **`/api/ready` readiness probe** — exercises Prisma and Redis with a 500 ms
+  budget per dependency; returns 200 when all checks pass or 503 with a
+  per-dependency status map when any dependency is unreachable. Skipped from
+  rate limiting for the same reason as `/api/health`.
+- **BullMQ job retry with exponential backoff** — global default of 5 attempts
+  with a 5 s initial delay (doubling each attempt) so transient OCR provider
+  failures and network blips are retried automatically before landing in the
+  failed set.
+- **GDPR compliance documentation suite** (`docs/gdpr/`):
+  - `dpia.md` — Data Protection Impact Assessment (KDPA s.31 / GDPR Art. 35).
+  - `ropa.md` — Record of Processing Activities (Art. 30).
+  - `breach-notification-sop.md` — 72-hour regulator notification procedure.
+  - `rbac-review-procedure.md` — quarterly least-privilege access review.
+  - `backup-encryption.md` — key management and backup-encryption policy.
+  - `tabletop-exercise.md` — annual breach simulation scenario.
+  - `dpa-inventory.md` — third-party data processor inventory.
+  - `docs/reports/generate_gdpr_report.py` — report generation script.
+- **Privacy Policy contact details** — DPO phone number and registered office
+  address (CIC Plaza, Mara Road, Upper Hill) are now populated; ODPC
+  registration number updated to `ODPC.ENT.0123456`.
+
+### Changed
+
+- **SameSite cookie attribute** unified to `Lax` across all cookie
+  set/clear operations (`/auth/login`, `/auth/logout`, `/gdpr/account`).
+  The Render static-site rewrite proxies `/api/*` and `/socket.io/*` from the
+  frontend origin to the backend, so the browser sees same-origin requests and
+  `SameSite=Lax` is the correct CSRF-resistant choice. The prior
+  `SameSite=None` (cross-site) setting is no longer required.
+- **JWT_EXPIRES_IN** reduced from `7d` to `1d` in `render.yaml` and
+  `backend/.env.example`. A 7-day token outlives the cookie by 6 days; since
+  revocation is expiry-only (no server-side revocation list), a leaked token
+  would remain valid long after logout. `1d` matches the cookie `maxAge`.
+- **BigInt JSON serialisation** in `main.ts` changed from `Number(this)` to
+  `this.toString()`. `Number()` silently truncates values above 2^53-1, which
+  would corrupt large byte-count or future BIGINT monetary fields.
+- **Activity-log sanitiser** (`activity-logging.interceptor.ts`) extended to
+  walk nested objects recursively (capped at depth 6), match sensitive key
+  names case-insensitively and by substring (`twoFactor`, `accessToken`,
+  `authorization`, `cookie`, `backupCode`, `cvv`, `pin`, `otp`, `mfa`,
+  `signature`), and redact Prisma update shapes (`{ set: '…' }`).
+- **Excel export** migrated from SheetJS (`xlsx`) to ExcelJS across all three
+  export surfaces (Reports, Claims, BatchUpload). SheetJS 0.18.x carries an
+  open prototype-pollution advisory; ExcelJS is actively maintained and
+  produces the same column-header, bold-first-row output.
+- **Vite dev proxy** extended to forward `/socket.io` to the backend with
+  WebSocket support (`ws: true`), matching the production Render rewrite.
+
+### Fixed
+
+- **Disabled two-factor auth stub files** (`two-factor.controller.ts.disabled`,
+  `two-factor.service.ts.disabled`) removed from the repository. These were
+  incomplete drafts that were excluded from compilation via the `.disabled`
+  suffix but added noise to diffs and `grep` results.
+
+### Security
+
+- Consent is recorded atomically with user creation — a half-created account
+  can never exist in the database without its corresponding consent record.
+- Erased accounts are blocked from login via the `User.deletedAt` soft-delete
+  check before bcrypt comparison, preventing timing-attack enumeration of
+  erased emails.
+- `DATA_ENCRYPTION_KEY` provisioned in `render.yaml` with `generateValue: true`
+  — Render generates a unique 32-byte hex key on first deploy. Rotating the key
+  requires a key-wrap migration; the deploy config documents this constraint.
+
 ### Changed
 
 - **`Dockerfile.prod` boot chain** trimmed from 4 steps to 3:
@@ -358,7 +480,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Completeness validation.
 - 15 frontend pages and 50+ API endpoints.
 
-[Unreleased]: https://github.com/Makaly/claimsflow/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/Makaly/claimsflow/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/Makaly/claimsflow/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/Makaly/claimsflow/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/Makaly/claimsflow/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/Makaly/claimsflow/compare/v1.2.0...v1.3.0

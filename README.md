@@ -35,7 +35,8 @@ ClaimsFlow digitises the full medical claims lifecycle — from provider intake 
 - **Two-factor authentication**, password reset, role-based access
 - **Reporting** — operational, financial, fraud, provider scorecards
 - **ML feedback loop** — claim labelling, factor-effectiveness analysis, and anomaly weight tuning
-- **Hardened security** — HttpOnly JWT cookies, Helmet CSP, global rate limiting, magic-byte file verification, TOTP 2FA
+- **Hardened security** — HttpOnly JWT cookies, Helmet CSP, HSTS, global rate limiting, magic-byte file verification
+- **GDPR / KDPA compliance** — data-subject rights (access, portability, erasure, objection), consent ledger, AES-256-GCM field encryption for special-category data, structured request-ID tracing
 
 ---
 
@@ -85,6 +86,11 @@ claims/
 │   │   ├── notifications/    Email, SMS, WebSocket gateway
 │   │   ├── ocr/              Gemini, Ollama, Tesseract pipelines
 │   │   ├── reports/          Analytics & scorecards
+│   │   ├── gdpr/             Data-subject rights API (Art. 15-22 / KDPA)
+│   │   ├── common/
+│   │   │   ├── filters/      Global HTTP exception filter
+│   │   │   ├── middleware/   Request-ID middleware
+│   │   │   └── services/     Field encryption, PII redaction, integrations
 │   │   ├── mock-integrations/ EDMS + eOxegen stubs for local dev
 │   │   └── ...
 │   └── prisma/               Schema and migrations
@@ -95,7 +101,9 @@ claims/
 │       ├── hooks/            Custom React hooks
 │       ├── services/         API client
 │       └── store/            Zustand state stores
-├── docs/                     MkDocs site — architecture, API, security, changelog
+├── docs/
+│   ├── gdpr/                 DPIA, RoPA, breach SOP, RBAC review, backup policy
+│   └── ...                   MkDocs site — architecture, API, security, changelog
 ├── scripts/                  Repo-level shell helpers (e.g. build-redoc.sh)
 ├── perf/                     k6 performance suite (smoke + auth load)
 ├── k8s/                      Kubernetes manifests (namespace, backend, frontend)
@@ -157,8 +165,9 @@ The backend reads configuration from `.env`. See [backend/.env.example](backend/
 | `SMTP_*`         | Outbound email                     |
 | `TWILIO_*`       | SMS via Twilio                     |
 | `AT_*`           | SMS via Africa's Talking           |
-| `GEMINI_API_KEY` | Google Gemini Vision (OCR)         |
-| `OLLAMA_URL`     | Local Ollama server (optional)     |
+| `GEMINI_API_KEY`      | Google Gemini Vision (OCR)                                          |
+| `OLLAMA_URL`          | Local Ollama server (optional)                                      |
+| `DATA_ENCRYPTION_KEY` | 32-byte hex key for AES-256-GCM field encryption (GDPR Art. 9). Generate with `openssl rand -hex 32` and store in the deployment secret store — **never commit this value**. |
 
 > **Never commit `.env`.** Rotate API keys immediately if exposed. See [SECURITY.md](SECURITY.md).
 
@@ -202,6 +211,7 @@ npm run depcruise       # dependency-cruiser layering rules
 | API (Swagger UI)  | http://localhost:4000/api/docs (live, while backend up)  |
 | API (Redoc)       | `./scripts/build-redoc.sh` → `site/api/index.html`       |
 | Architecture / SRD | [docs/architecture/](docs/architecture/)                 |
+| GDPR / compliance  | [docs/gdpr/](docs/gdpr/)                                 |
 | Changelog         | [CHANGELOG.md](CHANGELOG.md)                             |
 | Security policy   | [SECURITY.md](SECURITY.md)                               |
 
