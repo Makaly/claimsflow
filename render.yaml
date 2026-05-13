@@ -55,8 +55,19 @@ services:
       # Auth — Render generates a random value on first deploy
       - key: JWT_SECRET
         generateValue: true
+      # JWT_EXPIRES_IN must match the cookie maxAge in auth.controller.ts
+      # (24h). A longer JWT expiry would mean a leaked token outlives the
+      # cookie and stays valid after logout (revocation today is by expiry
+      # only — there is no server-side revocation list).
       - key: JWT_EXPIRES_IN
-        value: 7d
+        value: 1d
+
+      # Field-level encryption for GDPR Art. 9 / KDPA s.44 special-category
+      # data (diagnosis, treatment, OCR extracts). Render generates a unique
+      # 32-byte hex key on first deploy; rotating it requires a key-wrap
+      # migration so do not regenerate this value casually.
+      - key: DATA_ENCRYPTION_KEY
+        generateValue: true
 
       # CORS — must match the frontend service URL
       - key: FRONTEND_URL
