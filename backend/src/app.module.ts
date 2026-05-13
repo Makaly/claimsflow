@@ -1,9 +1,11 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { getRedisConnection } from './config/redis.config';
-import { APP_INTERCEPTOR, APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_INTERCEPTOR, APP_GUARD } from '@nestjs/core';
+import { GlobalHttpExceptionFilter } from './common/filters/http-exception.filter';
+import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { CommonModule } from './common/common.module';
@@ -30,6 +32,7 @@ import { SystemConfigModule } from './system-config/system-config.module';
 import { PreAuthModule } from './preauth/preauth.module';
 import { PolicyModule } from './policy/policy.module';
 import { MockIntegrationsModule } from './mock-integrations/mock-integrations.module';
+import { GdprModule } from './gdpr/gdpr.module';
 
 @Module({
   imports: [
@@ -46,6 +49,11 @@ import { MockIntegrationsModule } from './mock-integrations/mock-integrations.mo
       defaultJobOptions: {
         removeOnComplete: { count: 500 },
         removeOnFail: { count: 200 },
+        // Retry transient failures (OCR provider 5xx, network blips) with
+        // exponential backoff: ~5s, 10s, 20s, 40s, 80s. After 5 attempts
+        // the job goes to the failed set for manual inspection.
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 5_000 },
       },
     }),
     CommonModule,
@@ -70,10 +78,15 @@ import { MockIntegrationsModule } from './mock-integrations/mock-integrations.mo
     PreAuthModule,
     PolicyModule,
     MockIntegrationsModule,
+    GdprModule,
   ],
   controllers: [AppController],
   providers: [
     AppService,
+    {
+      provide: APP_FILTER,
+      useClass: GlobalHttpExceptionFilter,
+    },
     {
       provide: APP_INTERCEPTOR,
       useClass: ActivityLoggingInterceptor,
@@ -84,4 +97,8 @@ import { MockIntegrationsModule } from './mock-integrations/mock-integrations.mo
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RequestIdMiddleware).forRoutes('*');
+  }
+}

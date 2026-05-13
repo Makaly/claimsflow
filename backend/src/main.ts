@@ -6,8 +6,11 @@ import * as cookieParser from 'cookie-parser';
 import * as fs from 'fs';
 import { AppModule } from './app.module';
 
-// Allow BigInt values in JSON responses (Prisma returns BigInt for size fields)
-;(BigInt.prototype as any).toJSON = function () { return Number(this) }
+// Allow BigInt values in JSON responses (Prisma returns BigInt for size fields).
+// Serialise as a string, not Number — Number silently truncates anything above
+// 2^53-1, which would corrupt large size/byte fields or any future BIGINT
+// monetary column. Frontend types for these fields must be `string`.
+;(BigInt.prototype as any).toJSON = function () { return this.toString() }
 
 async function bootstrap() {
   console.log('[bootstrap] creating Nest application…');
@@ -18,7 +21,10 @@ async function bootstrap() {
   });
   console.log('[bootstrap] Nest application created');
 
-  // Security headers — must be applied before CORS and body parsers
+  // Security headers — must be applied before CORS and body parsers.
+  // HSTS is enabled only in production so local HTTP development is not pinned
+  // to HTTPS in browsers that have visited the dev origin.
+  const isProd = process.env.NODE_ENV === 'production';
   app.use(helmet({
     contentSecurityPolicy: {
       directives: {
@@ -33,7 +39,22 @@ async function bootstrap() {
       },
     },
     crossOriginEmbedderPolicy: false,
+    // GDPR Art. 32 — encryption in transit. One year, all subdomains, preload-eligible.
+    hsts: isProd
+      ? { maxAge: 31_536_000, includeSubDomains: true, preload: true }
+      : false,
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
   }));
+
+  // Permissions-Policy — disable browser features we don't use. Helmet 7
+  // doesn't set this by default, so apply it as a small middleware.
+  app.use((_req: any, res: any, next: any) => {
+    res.setHeader(
+      'Permissions-Policy',
+      'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+    );
+    next();
+  });
 
   // Cookie parser — required for HttpOnly JWT cookie extraction
   app.use(cookieParser());
@@ -47,7 +68,7 @@ async function bootstrap() {
 
   // CORS — only allow explicitly whitelisted origins
   const allowedOrigin = process.env.FRONTEND_URL;
-  const isDev = process.env.NODE_ENV !== 'production';
+  const isDev = !isProd;
   app.enableCors({
     origin: (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => {
       // In production: only allow the configured frontend URL.
