@@ -46,3 +46,7 @@ uploaded_files/
 # Local Claude/agent harness state
 .claude/
 site/
+
+# Generated audit and compliance reports (binary/HTML artifacts — store in secure drive)
+*.pdf
+audit_report.html
