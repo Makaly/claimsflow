@@ -19,6 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import api from '@/services/api'
 import { useAuthStore } from '@/store/authStore'
 import { getInitials, formatDateTime, cn } from '@/lib/utils'
 
@@ -436,6 +437,7 @@ export default function Profile() {
           <TabsTrigger value="security" className="gap-2"><Shield className="h-4 w-4" /> Security</TabsTrigger>
           <TabsTrigger value="sessions" className="gap-2"><Monitor className="h-4 w-4" /> Sessions</TabsTrigger>
           <TabsTrigger value="notifications" className="gap-2"><Mail className="h-4 w-4" /> Notifications</TabsTrigger>
+          <TabsTrigger value="privacy" className="gap-2"><ShieldCheck className="h-4 w-4" /> Privacy &amp; Data</TabsTrigger>
         </TabsList>
 
         {/* ── GENERAL ─────────────────────────────────────────────── */}
@@ -804,7 +806,169 @@ export default function Profile() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* ── PRIVACY & DATA ──────────────────────────────────────── */}
+        <TabsContent value="privacy" className="mt-6 space-y-6">
+          <PrivacyAndDataTab />
+        </TabsContent>
       </Tabs>
     </div>
+  )
+}
+
+/**
+ * Surfaces the data-subject rights required by GDPR Art. 15-22 and the Kenya
+ * Data Protection Act 2019 in one place: download a copy of personal data,
+ * withdraw consent, and request erasure of the account.
+ */
+function PrivacyAndDataTab() {
+  const navigate = useNavigate()
+  const { logout } = useAuthStore()
+  const [busy, setBusy] = useState<'export' | 'delete' | 'consents' | null>(null)
+  const [consents, setConsents] = useState<Record<string, boolean>>({})
+  const [confirmText, setConfirmText] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [info, setInfo] = useState<string | null>(null)
+
+  useEffect(() => {
+    api.get('/gdpr/consents')
+      .then(res => setConsents(res.data.current || {}))
+      .catch(() => {})
+  }, [])
+
+  async function downloadExport() {
+    setBusy('export'); setError(null); setInfo(null)
+    try {
+      const res = await api.get('/gdpr/export', { responseType: 'blob' })
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `claimsflow-personal-data-${Date.now()}.json`
+      document.body.appendChild(a); a.click(); a.remove()
+      URL.revokeObjectURL(url)
+      setInfo('Your personal data export has been downloaded.')
+    } catch (e: any) {
+      setError(e?.response?.data?.message || 'Could not generate your export. Please try again.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function toggleConsent(purpose: string, granted: boolean) {
+    setBusy('consents'); setError(null)
+    try {
+      const path = granted ? '/gdpr/consents/grant' : '/gdpr/consents/withdraw'
+      await api.post(path, { purpose })
+      setConsents(prev => ({ ...prev, [purpose]: granted }))
+    } catch (e: any) {
+      setError(e?.response?.data?.message || 'Could not update consent.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function deleteAccount() {
+    if (confirmText !== 'DELETE MY ACCOUNT') {
+      setError('Type DELETE MY ACCOUNT exactly to confirm.')
+      return
+    }
+    setBusy('delete'); setError(null)
+    try {
+      await api.delete('/gdpr/account', { data: { confirmation: confirmText } })
+      logout?.()
+      navigate('/login', { replace: true })
+    } catch (e: any) {
+      setError(e?.response?.data?.message || 'Could not erase your account.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const optionalConsents = [
+    { key: 'marketing', label: 'Marketing communications', help: 'Service updates and promotional content. You can opt out at any time.' },
+    { key: 'fraud_analytics', label: 'Optional analytics', help: 'Aggregated usage analytics beyond what is needed to deliver the service.' },
+  ] as const
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Upload className="h-4 w-4 text-blue-500" /> Download your data</CardTitle>
+          <CardDescription>
+            Request a machine-readable copy of all personal data ClaimsFlow holds about you
+            (GDPR Art. 15 &amp; 20; Kenya Data Protection Act 2019 ss. 26 &amp; 38).
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button onClick={downloadExport} disabled={busy === 'export'} className="gap-2">
+            {busy === 'export' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            Download my data (JSON)
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-emerald-500" /> Consent preferences</CardTitle>
+          <CardDescription>
+            Terms of Service and Privacy Policy acceptance is required to use ClaimsFlow.
+            The consents below are optional — you can withdraw them at any time without
+            affecting your ability to use the service.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-1">
+          {optionalConsents.map(c => (
+            <div key={c.key} className="flex items-center justify-between rounded-lg p-3 hover:bg-muted/40">
+              <div>
+                <p className="text-sm font-medium">{c.label}</p>
+                <p className="text-xs text-muted-foreground">{c.help}</p>
+              </div>
+              <Switch
+                checked={!!consents[c.key]}
+                disabled={busy === 'consents'}
+                onCheckedChange={v => toggleConsent(c.key, v)}
+              />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card className="border-destructive/40">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-destructive"><Trash2 className="h-4 w-4" /> Delete my account</CardTitle>
+          <CardDescription>
+            Erase your personal data from ClaimsFlow (GDPR Art. 17). Claim records you
+            authored may be retained anonymously for the period required by the Insurance
+            Act 2017 and tax law. This action cannot be undone.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Label htmlFor="erase-confirm">Type <code className="px-1 bg-muted rounded">DELETE MY ACCOUNT</code> to confirm</Label>
+          <Input
+            id="erase-confirm"
+            value={confirmText}
+            onChange={e => setConfirmText(e.target.value)}
+            placeholder="DELETE MY ACCOUNT"
+            autoComplete="off"
+          />
+          <Button
+            variant="destructive"
+            onClick={deleteAccount}
+            disabled={busy === 'delete' || confirmText !== 'DELETE MY ACCOUNT'}
+            className="gap-2"
+          >
+            {busy === 'delete' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            Permanently erase my account
+          </Button>
+        </CardContent>
+      </Card>
+
+      {info && (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{info}</div>
+      )}
+      {error && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
+      )}
+    </>
   )
 }

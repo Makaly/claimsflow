@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import * as XLSX from 'xlsx'
+import { downloadXlsx } from '@/lib/xlsx-export'
 import {
   BarChart3, Download, FileText, Calendar, TrendingUp,
   PieChart, Filter, FileSpreadsheet, FileCode, Printer,
@@ -224,22 +224,28 @@ export default function Reports() {
     'Submitted At': c.submittedAt,
   }))
 
-  const exportExcel = () => {
-    const ws = XLSX.utils.json_to_sheet(buildExportRows())
-    const ws2 = XLSX.utils.json_to_sheet(providerData.map(p => ({
-      'Provider': p.name, 'Total Claims': p.total, 'Approved': p.approved,
-      'Pending': p.pending, 'Rejected': p.rejected, 'Total Amount (KES)': p.amount,
-    })))
-    const ws3 = XLSX.utils.json_to_sheet(batchData.map(b => ({
-      'Batch Number': b.batchNumber, 'Uploaded By': b.uploadedBy,
-      'Date': formatDate(b.date), 'Claims': b.count,
-      'Total Amount (KES)': b.amount, 'Providers': Array.from(b.providers).join('; '),
-    })))
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Claims')
-    XLSX.utils.book_append_sheet(wb, ws2, 'Provider Summary')
-    XLSX.utils.book_append_sheet(wb, ws3, 'Batch Summary')
-    XLSX.writeFile(wb, `CIC_Claims_Report_${new Date().toISOString().split('T')[0]}.xlsx`)
+  const exportExcel = async () => {
+    await downloadXlsx(
+      [
+        { name: 'Claims', rows: buildExportRows() },
+        {
+          name: 'Provider Summary',
+          rows: providerData.map((p) => ({
+            'Provider': p.name, 'Total Claims': p.total, 'Approved': p.approved,
+            'Pending': p.pending, 'Rejected': p.rejected, 'Total Amount (KES)': p.amount,
+          })),
+        },
+        {
+          name: 'Batch Summary',
+          rows: batchData.map((b) => ({
+            'Batch Number': b.batchNumber, 'Uploaded By': b.uploadedBy,
+            'Date': formatDate(b.date), 'Claims': b.count,
+            'Total Amount (KES)': b.amount, 'Providers': Array.from(b.providers).join('; '),
+          })),
+        },
+      ],
+      `CIC_Claims_Report_${new Date().toISOString().split('T')[0]}.xlsx`,
+    )
   }
 
   const exportCsv = () => {

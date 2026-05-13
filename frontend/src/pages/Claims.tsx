@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect, useLayoutEffect } from 'react
 import { toast } from 'sonner'
 import { useSearchParams } from 'react-router-dom'
 import * as pdfjsLib from 'pdfjs-dist'
-import * as XLSX from 'xlsx'
+import { downloadXlsx } from '@/lib/xlsx-export'
 import { saveAs } from 'file-saver'
 import {
   Search, Plus, Eye, EyeOff, MoreHorizontal, Download, Filter,
@@ -1494,18 +1494,20 @@ export default function Claims() {
     'AI Extracted': c.aiExtracted ? 'Yes' : 'No',
   }))
 
-  const exportExcelFor = (data: ClaimRecord[], label: string) => {
+  const exportExcelFor = async (data: ClaimRecord[], label: string) => {
     const statusRows = ['submitted', 'under_review', 'approved', 'rejected', 'incomplete', 'resubmitted', 'paid'].map(s => ({
       'Status': s.replace(/_/g, ' '),
       'Count': data.filter(c => c.status === s).length,
       'Total Amount (KES)': data.filter(c => c.status === s).reduce((sum, c) => sum + (c.invoiceAmount || 0), 0),
     }))
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(claimsToRows(data)), 'Claims')
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(statusRows), 'Status Summary')
-    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
     const slug = label.toLowerCase().replace(/\s+/g, '-')
-    saveAs(new Blob([buf], { type: 'application/octet-stream' }), `claimsflow-${slug}-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    await downloadXlsx(
+      [
+        { name: 'Claims', rows: claimsToRows(data) },
+        { name: 'Status Summary', rows: statusRows },
+      ],
+      `claimsflow-${slug}-${new Date().toISOString().slice(0, 10)}.xlsx`,
+    )
   }
 
   const exportPdfFor = (data: ClaimRecord[], label: string) => {

@@ -34,6 +34,10 @@ import { authService } from '@/services/authService'
 import api from '@/services/api'
 import { cn } from '@/lib/utils'
 
+// Bump this when the privacy policy or terms of service text changes so the
+// consent row recorded on the backend points at the exact version the user saw.
+const POLICY_VERSION = '2026-04-23'
+
 const registerSchema = z
   .object({
     name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -252,7 +256,11 @@ export default function Register() {
   const onSubmit = async (data: RegisterForm) => {
     setLoading(true); setError('')
     try {
-      const result = await authService.register({ name: data.name, email: data.email, password: data.password, role: data.role })
+      const result = await authService.register({
+        name: data.name, email: data.email, password: data.password, role: data.role,
+        acceptTerms: true,
+        policyVersion: POLICY_VERSION,
+      })
       login(result.user); navigate('/')
     } catch (err: any) {
       if (err.code === 'ERR_NETWORK' || err.message?.includes('Network')) {
@@ -274,6 +282,8 @@ export default function Register() {
         phone: prov.phone, email: prov.email, physicalAddress: prov.physicalAddress,
         contactPerson: prov.contactPerson, city: prov.city || undefined, region: prov.region || undefined,
         adminName: prov.adminName, adminEmail: prov.adminEmail, adminPassword: prov.adminPassword,
+        acceptTerms: true,
+        policyVersion: POLICY_VERSION,
       })
       login(data.user); navigate('/')
     } catch (err: any) {

@@ -11,6 +11,8 @@ export interface RegisterData {
   email: string
   password: string
   role?: string
+  acceptTerms: true
+  policyVersion?: string
 }
 
 export const authService = {

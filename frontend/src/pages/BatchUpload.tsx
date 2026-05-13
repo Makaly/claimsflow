@@ -1,6 +1,6 @@
 import { Fragment, useState, useCallback, useEffect, useRef } from 'react'
 import { useDropzone } from 'react-dropzone'
-import * as XLSX from 'xlsx'
+import { downloadXlsx } from '@/lib/xlsx-export'
 import * as pdfjsLib from 'pdfjs-dist'
 import {
   Upload, X, CheckCircle, AlertCircle,
@@ -2601,8 +2601,8 @@ export default function BatchUpload() {
   }
 
   // Export to Excel
-  const exportToExcel = () => {
-    const data = claims.map(c => ({
+  const exportToExcel = async () => {
+    const rows = claims.map(c => ({
       'Barcode': c.barcode,
       'Claim Number': c.claimNumber,
       'Patient Name': c.patientName,
@@ -2620,10 +2620,10 @@ export default function BatchUpload() {
       'Document': c.fileName,
       'Status': c.status,
     }))
-    const ws = XLSX.utils.json_to_sheet(data)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Extracted Claims')
-    XLSX.writeFile(wb, `CIC_Batch_Claims_${new Date().toISOString().split('T')[0]}.xlsx`)
+    await downloadXlsx(
+      [{ name: 'Extracted Claims', rows }],
+      `CIC_Batch_Claims_${new Date().toISOString().split('T')[0]}.xlsx`,
+    )
   }
 
   const resetAll = () => {

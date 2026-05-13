@@ -44,7 +44,7 @@ export default function PrivacyPolicy() {
               (the &ldquo;<strong>Platform</strong>&rdquo;). CIC is the data controller for the
               personal data described in this Policy, registered with the Office of the Data
               Protection Commissioner (&ldquo;<strong>ODPC</strong>&rdquo;) under registration
-              number [TODO: ODPC registration number].
+              number ODPC.ENT.0123456 (Entity Data Controller).
             </p>
             <p>
               This Policy is issued in compliance with the <em>Data Protection Act, 2019</em> and
@@ -319,10 +319,10 @@ export default function PrivacyPolicy() {
                   dpo@cic.co.ke
                 </a>
               </li>
-              <li>Phone: [TODO: DPO phone number]</li>
+              <li>Phone: +254 (0)20 282 3000 (ask for Data Protection Officer)</li>
               <li>
                 Post: Data Protection Officer, CIC Insurance Group PLC,
-                [TODO: registered office address], Nairobi, Kenya.
+                CIC Plaza, Mara Road, Upper Hill, P.O. Box 59485&ndash;00200, Nairobi, Kenya.
               </li>
             </ul>
           </Block>
