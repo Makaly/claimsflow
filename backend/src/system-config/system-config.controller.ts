@@ -33,9 +33,9 @@ export class SystemConfigController {
   getDefaults() {
     return [
       { key: 'sla_hours_initial_review', value: '4', category: 'sla', description: 'SLA hours for initial review stage' },
-      { key: 'sla_hours_maker_review', value: '24', category: 'sla', description: 'SLA hours for maker review stage' },
-      { key: 'sla_hours_checker_review', value: '48', category: 'sla', description: 'SLA hours for checker review stage' },
-      { key: 'sla_hours_final_approval', value: '8', category: 'sla', description: 'SLA hours for final approval stage' },
+      { key: 'sla_hours_maker_checker_review', value: '24', category: 'sla', description: 'SLA hours for maker-checker review stage' },
+      { key: 'sla_hours_claims_officer_review', value: '8', category: 'sla', description: 'SLA hours for claims officer review stage' },
+      { key: 'sla_hours_fraud_review', value: '48', category: 'sla', description: 'SLA hours for fraud review stage' },
       { key: 'high_value_threshold', value: '200000', category: 'fraud', description: 'KES threshold for high-value claim flag' },
       { key: 'log_retention_days', value: '730', category: 'compliance', description: 'Activity log retention period in days' },
       { key: 'max_daily_submissions', value: '500', category: 'submissions', description: 'Max claims per provider per day' },

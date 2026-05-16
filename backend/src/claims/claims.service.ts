@@ -829,7 +829,7 @@ export class ClaimsService {
       where: { id: claimId },
       data: {
         assignedTo: chosen.id,
-        workflowStage: 'maker_review',
+        workflowStage: 'maker_checker_review',
         status: 'under_review',
       },
       include: { provider: true },

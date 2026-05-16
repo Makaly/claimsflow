@@ -203,7 +203,7 @@ export class AssignmentService {
   async getReviewerWorkload(reviewerId?: string) {
     const assignedWhere: any = {
       assignedTo: { not: null },
-      workflowStage: { in: ['maker_review', 'checker_review', 'final_approval'] },
+      workflowStage: { in: ['maker_checker_review', 'claims_officer_review', 'fraud_review'] },
     };
     if (reviewerId) assignedWhere.assignedTo = reviewerId;
 

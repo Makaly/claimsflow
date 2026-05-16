@@ -5,10 +5,10 @@ import { EmailService } from '../notifications/email.service';
 
 // Default SLA hours per workflow stage — overridable via SystemConfig
 const DEFAULT_SLA: Record<string, number> = {
-  initial_review: 4,
-  maker_review: 24,
-  checker_review: 48,
-  final_approval: 8,
+  initial_review:        4,
+  maker_checker_review:  24,
+  claims_officer_review: 8,
+  fraud_review:          48,
 };
 
 @Injectable()
