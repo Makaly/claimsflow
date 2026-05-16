@@ -255,7 +255,7 @@ export class MakerCheckerService {
     await this.prisma.claimApproval.create({
       data: {
         claimId,
-        level: 'checker',
+        level: 'maker_checker',
         approvalStage: 'second_approval',
         approvedBy: checkerId,
         decision: 'approved',
@@ -381,7 +381,7 @@ export class MakerCheckerService {
     await this.prisma.claimApproval.create({
       data: {
         claimId,
-        level: 'checker',
+        level: 'maker_checker',
         approvalStage: 'second_approval',
         approvedBy: checkerId,
         decision: 'rejected',
@@ -491,7 +491,7 @@ export class MakerCheckerService {
     await this.prisma.claimApproval.create({
       data: {
         claimId,
-        level: 'checker',
+        level: 'maker_checker',
         approvalStage: 'second_approval',
         approvedBy: checkerId,
         decision: 'returned',
@@ -564,7 +564,7 @@ export class MakerCheckerService {
     await this.prisma.claimApproval.create({
       data: {
         claimId,
-        level: 'checker',
+        level: 'maker_checker',
         approvalStage: 'second_approval',
         approvedBy: checkerId,
         decision: 'returned',
@@ -828,7 +828,7 @@ export class MakerCheckerService {
 
   private async findCheckers(): Promise<string[]> {
     const checkers = await this.prisma.user.findMany({
-      where: { isActive: true, role: { in: ['supervisor', 'checker'] } },
+      where: { isActive: true, role: 'maker_checker' },
       select: { id: true },
     });
     return checkers.map((u) => u.id);
@@ -836,19 +836,32 @@ export class MakerCheckerService {
 
   private async findMakers(): Promise<string[]> {
     const makers = await this.prisma.user.findMany({
-      where: { isActive: true, role: 'claims_officer' },
+      where: { isActive: true, role: 'maker_checker' },
       select: { id: true },
     });
     return makers.map((u) => u.id);
   }
 
-  private async findOriginalMaker(claimId: string): Promise<string | null> {
-    const firstMakerApproval = await this.prisma.claimApproval.findFirst({
-      where: { claimId, level: 'maker' },
+  private async findClaimsOfficers(): Promise<string[]> {
+    const officers = await this.prisma.user.findMany({
+      where: { isActive: true, role: 'claims_officer' },
+      select: { id: true },
+    });
+    return officers.map((u) => u.id);
+  }
+
+  private async findOriginalMakerChecker(claimId: string): Promise<string | null> {
+    const firstApproval = await this.prisma.claimApproval.findFirst({
+      where: { claimId, level: { in: ['maker', 'maker_checker'] } },
       orderBy: { createdAt: 'asc' },
       select: { approvedBy: true },
     });
-    return firstMakerApproval?.approvedBy ?? null;
+    return firstApproval?.approvedBy ?? null;
+  }
+
+  /** @deprecated Use findOriginalMakerChecker */
+  private async findOriginalMaker(claimId: string): Promise<string | null> {
+    return this.findOriginalMakerChecker(claimId);
   }
 
   private async stampApprovedDocuments(documents: any[], claimNumber: string) {
