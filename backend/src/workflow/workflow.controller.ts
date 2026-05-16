@@ -295,12 +295,12 @@ export class WorkflowController {
 
   @Post('bulk/reject')
   @Roles('admin', 'claims_officer', 'maker_checker')
-  async bulkReject(@Body() body: { claimIds: string[]; reason: string; stage: 'maker' | 'checker' }, @Request() req) {
+  async bulkReject(@Body() body: { claimIds: string[]; reason: string; stage: 'maker_checker' | 'claims_officer' }, @Request() req) {
     const results: any[] = [];
     for (const claimId of body.claimIds) {
       try {
         let result: any;
-        if (body.stage === 'checker') {
+        if (body.stage === 'claims_officer') {
           result = await this.makerCheckerService.checkerReject(claimId, req.user.userId, body.reason);
         } else {
           result = await this.makerCheckerService.makerReject(claimId, req.user.userId, body.reason);
