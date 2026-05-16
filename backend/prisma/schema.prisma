@@ -52,6 +52,7 @@ model User {
   provider              Provider?               @relation(fields: [providerId], references: [id])
   appeals               Appeal[]                @relation("AppealAdjudicator")
   appealsFiled          Appeal[]                @relation("AppealFiler")
+  appealMessages        AppealMessage[]         @relation("AppealMessageSender")
   consents              ConsentRecord[]
   dataExports           DataExportRequest[]
   decisionReviews       DecisionReviewRequest[]
@@ -400,6 +401,15 @@ model Claim {
   eligibilityStatus     String?
   eligibilityCheckedAt  DateTime?
   eligibilityNotes      String?
+  // Fraud-officer verdict relayed back to the claims officer.
+  // Values: null | 'cleared' | 'confirmed'.
+  fraudVerdict             String?
+  fraudVerdictAt           DateTime?
+  fraudVerdictBy           String?
+  fraudVerdictNotes        String?
+  // Final approval by the claims officer, after maker_checker + (optional) fraud review.
+  claimsOfficerApprovedAt  DateTime?
+  claimsOfficerApprovedBy  String?
 
   @@index([claimNumber])
   @@index([barcode])
@@ -411,6 +421,7 @@ model Claim {
   @@index([submittedAt])
   @@index([memberNumber])
   @@index([slaBreached])
+  @@index([fraudVerdict])
   @@map("claims")
 }
 
@@ -850,29 +861,50 @@ model ClaimEmail {
 }
 
 model Appeal {
-  id              String    @id @default(uuid())
+  id              String           @id @default(uuid())
   claimId         String
   providerId      String
   filedBy         String
   reason          String
   additionalNotes String?
-  status          String    @default("pending")
+  status          String           @default("pending")
   adjudicatedBy   String?
   adjudicatedAt   DateTime?
   outcome         String?
   outcomeNotes    String?
-  documents       Json?     @default("[]")
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  claim           Claim     @relation(fields: [claimId], references: [id])
-  filer           User      @relation("AppealFiler", fields: [filedBy], references: [id])
-  adjudicator     User?     @relation("AppealAdjudicator", fields: [adjudicatedBy], references: [id])
+  documents       Json?            @default("[]")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  claim           Claim            @relation(fields: [claimId], references: [id])
+  filer           User             @relation("AppealFiler", fields: [filedBy], references: [id])
+  adjudicator     User?            @relation("AppealAdjudicator", fields: [adjudicatedBy], references: [id])
+  messages        AppealMessage[]
 
   @@index([claimId])
   @@index([providerId])
   @@index([status])
   @@index([filedBy])
   @@map("appeals")
+}
+
+/// Three-party appeal thread: provider, claims officer, fraud officer.
+/// Each row is one message in the conversation; senderRole is captured at
+/// write-time so a later role change does not rewrite history.
+model AppealMessage {
+  id          String   @id @default(uuid())
+  appealId    String
+  senderId    String
+  senderRole  String
+  message     String
+  attachments Json     @default("[]")
+  createdAt   DateTime @default(now())
+  appeal      Appeal   @relation(fields: [appealId], references: [id], onDelete: Cascade)
+  sender      User     @relation("AppealMessageSender", fields: [senderId], references: [id])
+
+  @@index([appealId])
+  @@index([senderId])
+  @@index([createdAt])
+  @@map("appeal_messages")
 }
 
 model PaymentAdvice {
