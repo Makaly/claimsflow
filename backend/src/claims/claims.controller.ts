@@ -158,7 +158,7 @@ export class ClaimsController {
   }
 
   @Get('ml/factor-effectiveness')
-  @Roles('admin', 'supervisor')
+  @Roles('admin', 'claims_officer')
   async getFactorEffectiveness() {
     return this.anomalyScoringService.getFactorEffectiveness();
   }
@@ -174,7 +174,7 @@ export class ClaimsController {
   // POST /claims/:id/fraud/confirm  — fraud team confirms; claim hard-rejected
 
   @Get('fraud-confirmed')
-  @Roles('admin', 'fraud_officer', 'supervisor', 'claims_officer')
+  @Roles('admin', 'fraud_officer', 'claims_officer')
   getFraudConfirmed(
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
@@ -186,7 +186,7 @@ export class ClaimsController {
   }
 
   @Get('fraud-queue')
-  @Roles('admin', 'fraud_officer', 'supervisor', 'claims_officer')
+  @Roles('admin', 'fraud_officer', 'claims_officer')
   getFraudQueue(
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
@@ -198,7 +198,7 @@ export class ClaimsController {
   }
 
   @Post(':id/fraud/escalate')
-  @Roles('admin', 'supervisor', 'claims_officer', 'fraud_officer')
+  @Roles('admin', 'claims_officer', 'fraud_officer')
   escalateToFraud(
     @Param('id') id: string,
     @Body() body: { reason: string },
@@ -228,7 +228,7 @@ export class ClaimsController {
   }
 
   @Post(':id/notify-denial')
-  @Roles('admin', 'claims_officer', 'supervisor', 'fraud_officer')
+  @Roles('admin', 'claims_officer', 'fraud_officer')
   notifyDenial(
     @Param('id') id: string,
     @Body() body: { message?: string; cc?: string; attachments?: { filename: string; path?: string; content?: string; encoding?: string }[] },
@@ -244,13 +244,13 @@ export class ClaimsController {
   }
 
   @Get(':id/emails')
-  @Roles('admin', 'claims_officer', 'supervisor', 'fraud_officer')
+  @Roles('admin', 'claims_officer', 'fraud_officer')
   getClaimEmails(@Param('id') id: string) {
     return this.claimsService.getClaimEmails(id);
   }
 
   @Post(':id/reprocess')
-  @Roles('admin', 'claims_officer', 'supervisor', 'fraud_officer')
+  @Roles('admin', 'claims_officer', 'fraud_officer')
   reprocessClaim(
     @Param('id') id: string,
     @Body() body: { reason?: string },

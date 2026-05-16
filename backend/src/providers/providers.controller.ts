@@ -320,7 +320,7 @@ export class ProvidersController {
    *  uploaded in the same request.  Falls back to JSON if no file is sent. */
   @Post()
   @UseGuards(RolesGuard)
-  @Roles('admin', 'supervisor')
+  @Roles('admin', 'claims_officer')
   @UseInterceptors(FileInterceptor('proofDocument', { storage: proofStorage, fileFilter: docFileFilter }))
   create(
     @Body() body: CreateProviderDto,
@@ -341,7 +341,7 @@ export class ProvidersController {
 
   @Get()
   @UseGuards(RolesGuard)
-  @Roles('admin', 'supervisor', 'claims_officer', 'checker', 'fraud_officer')
+  @Roles('admin', 'claims_officer', 'maker_checker', 'fraud_officer')
   findAll(
     @Query('type') type?: string,
     @Query('active') active?: string,
@@ -357,7 +357,7 @@ export class ProvidersController {
 
   @Get(':id')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'supervisor', 'claims_officer', 'checker', 'fraud_officer', 'provider_admin', 'provider_user')
+  @Roles('admin', 'claims_officer', 'maker_checker', 'fraud_officer', 'provider_admin', 'provider_user')
   findOne(@Param('id') id: string, @Request() req) {
     // provider_admin / provider_user may only read their OWN provider record.
     const role = req.user.role;
@@ -370,14 +370,14 @@ export class ProvidersController {
   /** Admin-facing: full onboarding packet for approval review. */
   @Get(':id/onboarding-packet')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'supervisor')
+  @Roles('admin', 'claims_officer')
   getOnboardingPacket(@Param('id') id: string) {
     return this.providersService.getOnboardingPacket(id);
   }
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'supervisor')
+  @Roles('admin', 'claims_officer')
   @UseInterceptors(FileInterceptor('proofDocument', { storage: proofStorage, fileFilter: docFileFilter }))
   update(
     @Param('id') id: string,
@@ -393,14 +393,14 @@ export class ProvidersController {
 
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'supervisor')
+  @Roles('admin', 'claims_officer')
   remove(@Param('id') id: string) {
     return this.providersService.remove(id);
   }
 
   @Get(':id/proof-document')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'supervisor', 'claims_officer', 'checker', 'fraud_officer')
+  @Roles('admin', 'claims_officer', 'maker_checker', 'fraud_officer')
   async serveProofDocument(@Param('id') id: string, @Res() res: Response) {
     const provider = await this.providersService.findOne(id);
     if (!provider?.proofDocumentPath || !existsSync(provider.proofDocumentPath)) {
@@ -429,7 +429,7 @@ export class ProvidersController {
 
   @Get('approvals/pending')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'supervisor')
+  @Roles('admin', 'claims_officer')
   getPendingApprovals(
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
@@ -442,14 +442,14 @@ export class ProvidersController {
 
   @Post(':id/approve')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'supervisor')
+  @Roles('admin', 'claims_officer')
   approveProvider(@Param('id') id: string, @Request() req) {
     return this.providersService.approveProvider(id, req.user.userId);
   }
 
   @Post(':id/reject')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'supervisor')
+  @Roles('admin', 'claims_officer')
   rejectProvider(
     @Param('id') id: string,
     @Body() body: { reason: string },
@@ -460,7 +460,7 @@ export class ProvidersController {
 
   @Post(':id/suspend')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'supervisor')
+  @Roles('admin', 'claims_officer')
   suspendProvider(
     @Param('id') id: string,
     @Body() body: { reason: string },
@@ -471,7 +471,7 @@ export class ProvidersController {
 
   @Post(':id/reactivate')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'supervisor')
+  @Roles('admin', 'claims_officer')
   reactivateProvider(@Param('id') id: string, @Request() req) {
     return this.providersService.reactivateProvider(id, req.user.userId);
   }

@@ -6,7 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 @Controller('activity-logs')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin', 'supervisor')
+@Roles('admin', 'claims_officer', 'fraud_officer')
 export class ActivityLogsController {
   constructor(private prisma: PrismaService) {}
 

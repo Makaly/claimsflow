@@ -15,11 +15,10 @@ export class WorkflowService {
 
   /**
    * Get claims by workflow stage, scoped to the caller's role:
-   *  - claims_officer at maker_review   → only claims assigned to them
-   *  - checker at checker_review        → only claims assigned to them, or
-   *                                       unclaimed ones awaiting pickup
-   *  - supervisor / admin               → everything (optionally filter by `assignedTo`)
-   *  - anyone else (incl. provider_*)   → empty list (they have no business here)
+   *  - admin / claims_officer  → everything (optionally filter by `assignedTo`)
+   *  - maker_checker           → assigned to them, plus unclaimed maker_checker_review claims
+   *  - fraud_officer           → fraud_review stage only, unfiltered
+   *  - anyone else             → empty list
    */
   async getClaimsByStage(
     stage: string,
@@ -32,17 +31,14 @@ export class WorkflowService {
 
     if (user) {
       const { role, userId } = user;
-      if (role === 'admin' || role === 'supervisor') {
+      if (role === 'admin' || role === 'claims_officer') {
         if (assignedTo) where.assignedTo = assignedTo;
-      } else if (role === 'claims_officer') {
-        // Makers only see claims assigned to them.
-        where.assignedTo = userId;
-      } else if (role === 'checker') {
-        // Checkers see their assigned work plus any unclaimed checker_review
-        // claims (post maker-approve, awaiting pickup).
+      } else if (role === 'maker_checker') {
         where.OR = [{ assignedTo: userId }, { assignedTo: null }];
+      } else if (role === 'fraud_officer') {
+        // Fraud officers only work the fraud_review stage.
+        if (stage !== 'fraud_review') return { claims: [], total: 0 };
       } else {
-        // Provider users and everyone else have no reviewer role here.
         return { claims: [], total: 0 };
       }
     } else if (assignedTo) {
@@ -78,21 +74,25 @@ export class WorkflowService {
 
     const [
       initialReview,
-      makerReview,
-      checkerReview,
-      finalApproval,
+      makerCheckerReview,
+      claimsOfficerReview,
+      fraudReview,
       completedToday,
       totalValueAgg,
     ] = await Promise.all([
       this.prisma.claim.count({ where: { workflowStage: 'initial_review' } }),
-      this.prisma.claim.count({ where: { workflowStage: 'maker_review' } }),
-      this.prisma.claim.count({ where: { workflowStage: 'checker_review' } }),
-      this.prisma.claim.count({ where: { workflowStage: 'final_approval' } }),
+      this.prisma.claim.count({ where: { workflowStage: 'maker_checker_review' } }),
+      this.prisma.claim.count({ where: { workflowStage: 'claims_officer_review' } }),
+      this.prisma.claim.count({ where: { workflowStage: 'fraud_review' } }),
       this.prisma.claim.count({
         where: { workflowStage: 'completed', updatedAt: { gte: today } },
       }),
       this.prisma.claim.aggregate({
-        where: { workflowStage: { in: ['initial_review', 'maker_review', 'checker_review', 'final_approval'] } },
+        where: {
+          workflowStage: {
+            in: ['initial_review', 'maker_checker_review', 'claims_officer_review', 'fraud_review'],
+          },
+        },
         _sum: { invoiceAmount: true },
       }),
     ]);
@@ -108,11 +108,11 @@ export class WorkflowService {
 
     return {
       initialReview,
-      makerReview,
-      checkerReview,
-      finalApproval,
+      makerCheckerReview,
+      claimsOfficerReview,
+      fraudReview,
       completed: completedToday,
-      total: initialReview + makerReview + checkerReview + finalApproval,
+      total: initialReview + makerCheckerReview + claimsOfficerReview + fraudReview,
       totalValue: Number(totalValueAgg._sum.invoiceAmount ?? 0),
       flagged,
     };

@@ -12,7 +12,7 @@ export class ClaimLabelsController {
 
   @Get()
   @UseGuards(RolesGuard)
-  @Roles('admin', 'supervisor', 'fraud_officer')
+  @Roles('admin', 'claims_officer', 'fraud_officer')
   list(
     @Query('label') label?: string,
     @Query('source') source?: string,
@@ -28,7 +28,7 @@ export class ClaimLabelsController {
 
   @Get('export')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'supervisor')
+  @Roles('admin', 'claims_officer')
   async exportDataset(@Res() res: Response) {
     const data = await this.labelsService.exportDataset();
     res.setHeader('Content-Type', 'application/json');
@@ -43,7 +43,7 @@ export class ClaimLabelsController {
 
   @Post(':claimId')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'supervisor', 'fraud_officer')
+  @Roles('admin', 'claims_officer', 'fraud_officer')
   upsert(
     @Param('claimId') claimId: string,
     @Body() body: { label: 'legitimate' | 'suspicious' | 'fraud'; notes?: string },
