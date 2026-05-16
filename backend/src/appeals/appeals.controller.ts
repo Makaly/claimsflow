@@ -59,4 +59,23 @@ export class AppealsController {
   ) {
     return this.appealsService.updateAppealStatus(id, body.status);
   }
+
+  // Three-party appeal messaging
+  @Get(':id/messages')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'claims_officer', 'fraud_officer', 'provider_admin', 'provider_user')
+  getMessages(@Param('id') id: string) {
+    return this.appealsService.getMessages(id);
+  }
+
+  @Post(':id/messages')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'claims_officer', 'fraud_officer', 'provider_admin', 'provider_user')
+  addMessage(
+    @Param('id') id: string,
+    @Body() body: { message: string },
+    @Request() req,
+  ) {
+    return this.appealsService.addMessage(id, req.user.userId, req.user.role, body.message);
+  }
 }
