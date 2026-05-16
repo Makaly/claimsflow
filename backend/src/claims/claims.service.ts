@@ -796,8 +796,8 @@ export class ClaimsService {
 
   /**
    * Pick the active claims_officer with the fewest open assignments and route
-   * the claim to them. Moves the claim to maker_review so it shows up in the
-   * Maker Queue immediately after upload. Writes a status-history row plus an
+   * the claim to them. Moves the claim to maker_checker_review so it shows up
+   * in the Maker-Checker Queue immediately after upload. Writes a status-history row plus an
    * audit entry attributing the auto-assignment.
    *
    * Safe to call from any upload path — if no officer is available, the claim

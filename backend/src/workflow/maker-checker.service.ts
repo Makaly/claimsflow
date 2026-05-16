@@ -332,7 +332,7 @@ export class MakerCheckerService {
       data: {
         claimId,
         level: 'claims_officer',
-        approvalStage: 'final_approval',
+        approvalStage: 'claims_officer_review',
         approvedBy: officerId,
         decision: 'approved',
         comments,
@@ -435,7 +435,7 @@ export class MakerCheckerService {
       data: {
         claimId,
         level: 'claims_officer',
-        approvalStage: 'final_approval',
+        approvalStage: 'claims_officer_review',
         approvedBy: officerId,
         decision: 'rejected',
         comments: reason,
@@ -521,7 +521,7 @@ export class MakerCheckerService {
       data: {
         claimId,
         level: 'claims_officer',
-        approvalStage: 'final_approval',
+        approvalStage: 'claims_officer_review',
         approvedBy: officerId,
         decision: 'returned',
         comments: reason,
@@ -588,7 +588,7 @@ export class MakerCheckerService {
       data: {
         claimId,
         level: 'claims_officer',
-        approvalStage: 'final_approval',
+        approvalStage: 'claims_officer_review',
         approvedBy: officerId,
         decision: 'returned',
         comments: `Returned to provider: ${reason}`,
