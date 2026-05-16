@@ -20,7 +20,7 @@ A production-ready REST API for end-to-end medical insurance claims processing b
 | Layer | Technology |
 |---|---|
 | Runtime | Node.js 20 |
-| Framework | NestJS 10 |
+| Framework | NestJS 11 |
 | Language | TypeScript 5 |
 | ORM | Prisma 5 |
 | Database | PostgreSQL 15 |
@@ -42,8 +42,8 @@ A production-ready REST API for end-to-end medical insurance claims processing b
 ### 1. Clone & Install
 
 ```bash
-git clone git@github.com:Makaly/invoice_backend.git
-cd invoice_backend
+git clone https://github.com/Makaly/claimsflow.git
+cd claimsflow/backend
 npm install
 ```
 

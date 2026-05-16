@@ -219,13 +219,17 @@ npm run depcruise       # dependency-cruiser layering rules
 
 ## Roles
 
-| Role       | Capabilities                                                      |
-| ---------- | ----------------------------------------------------------------- |
-| `admin`    | Full access, user/role management, system configuration           |
-| `maker`    | Create, edit, and submit claims for checking                      |
-| `checker`  | Approve, reject, or return claims; final adjudication authority   |
-| `fraud`    | Review flagged claims, investigate anomalies                      |
-| `provider` | Submit claims, view status, file appeals, view payment advice     |
+| Role             | Display Name           | Capabilities                                                                 |
+| ---------------- | ---------------------- | ---------------------------------------------------------------------------- |
+| `admin`          | Administrator          | Full system access, user/role management, system configuration               |
+| `claims_officer` | Claims Officer         | Final invoice approver; adjudicates appeals; manages policy plans and members; SLA escalation target |
+| `maker_checker`  | Maker-Checker          | Verifies captured invoice data; merges/splits documents; full document QA    |
+| `fraud_officer`  | Fraud Officer          | Investigates fraud signals; issues cleared/confirmed verdicts; joins appeal threads |
+| `finance`        | Finance Officer        | Views pending payments; generates and confirms payment advices; runs reports |
+| `provider_admin` | Provider Administrator | Provider org owner — uploads invoices, manages branches                      |
+| `provider_user`  | Provider User          | Provider branch staff — uploads invoices, views own claim status             |
+
+> **v1.7 migration note:** `supervisor` was merged into `claims_officer` and `checker` into `maker_checker`. Existing users were migrated automatically via the `20260514000000_maker_checker_workflow_refactor` migration.
 
 ---
 

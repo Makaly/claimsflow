@@ -7,6 +7,84 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-05-14
+
+### Added
+
+- **`AppealMessage` model** — new table (`appeal_messages`) enabling three-party
+  appeal conversations between providers, claims officers, and fraud officers.
+  Each message records the sender's role at write-time so a later role change
+  does not rewrite conversation history. Includes cascade-delete on the parent
+  appeal and indexed on `appealId`, `senderId`, and `createdAt`.
+- **Fraud-verdict fields on `Claim`** — `fraudVerdict`, `fraudVerdictAt`,
+  `fraudVerdictBy`, and `fraudVerdictNotes` capture the fraud officer's
+  explicit cleared/confirmed decision so the downstream claims-officer approval
+  step can reference it. `claimsOfficerApprovedAt` and `claimsOfficerApprovedBy`
+  record the final sign-off separately from the maker-checker check.
+- **`finance` role** — new `Finance Officer` role with read access to claims,
+  documents, providers, and full reports including export. Finance officers can
+  view pending payments and payment advices but cannot modify workflow state.
+- **`findClaimsOfficers` helper** in `MakerCheckerService` — enables direct
+  fan-out of assignments and notifications to claims officers independently of
+  the maker-checker pool.
+- **Demo seed user `finance@cic.co.ke`** (Grace Njeri) added alongside the
+  updated `sarah@cic.co.ke` (claims officer) and `checker@cic.co.ke`
+  (maker-checker) entries.
+
+### Changed
+
+- **Role refactor — `supervisor` removed, replaced by `claims_officer`:**
+  - All RBAC guards, controller decorators, and service queries that referenced
+    `supervisor` now reference `claims_officer`.
+  - `claims_officer` is now the **final invoice approver**, the appeals
+    adjudicator, the policy plan and member manager, and the SLA escalation
+    target.
+  - `supervisor`-only user-management endpoints now require `admin` only.
+  - Document annotation edit/delete guard updated from `supervisor` to
+    `maker_checker` (the new document-QA owner).
+
+- **Role refactor — `checker` removed, replaced by `maker_checker`:**
+  - All controller decorators, service queries, and `claimApproval.level` values
+    that used `checker` now use `maker_checker`.
+  - `maker_checker` inherits all document annotation permissions the old
+    `supervisor` role held (stamp, redaction, whiteout, all annotation types).
+  - `findMakers()` and `findCheckers()` in `MakerCheckerService` now both
+    resolve from the single `maker_checker` role pool.
+  - `findOriginalMaker` renamed `findOriginalMakerChecker` and queries both
+    `maker` and `maker_checker` level values to remain compatible with
+    pre-migration approval rows.
+
+- **Appeals notifications** — SLA breach and new-appeal WebSocket events are
+  now routed to `claims_officer` sockets (previously `supervisor`). New-appeal
+  events also fan out to `fraud_officer` sockets so fraud reviewers are notified
+  when a fraud-verdict appeal arrives.
+- **High-value claim fraud signal** — alert text updated from "supervisor
+  approval" to "claims officer approval" to reflect the new role name.
+- **`bulkReject` stage values** — internal `stage: 'checker'` string replaced
+  with `stage: 'claims_officer'` so the bulk-rejection endpoint correctly
+  records the approving role in the audit trail.
+- **Demo simulate script** — `sarah@cic.co.ke` set to `claims_officer` and
+  `checker@cic.co.ke` set to `maker_checker`.
+- **Fraud backfill script** — exempt-roles list updated from
+  `admin, claims_officer, supervisor, checker` to
+  `admin, claims_officer, maker_checker, fraud_officer, finance`.
+
+### Migration
+
+Upgrade path from v1.6.x is handled by
+`backend/prisma/migrations/20260514000000_maker_checker_workflow_refactor/migration.sql`:
+
+1. `UPDATE users SET role = 'claims_officer' WHERE role = 'supervisor'`
+2. `UPDATE users SET role = 'maker_checker'  WHERE role = 'checker'`
+3. Removes `supervisor` and `checker` rows from `roles` and `role_permissions`.
+4. Adds the six new columns on `claims` and creates the `appeal_messages` table.
+5. Re-routes claims in the `final_approval` stage to `claims_officer_review`.
+6. Renames `checker_review` and `maker_review` workflow stages to
+   `maker_checker_review`.
+
+The `claim_status_history` audit trail is intentionally left unchanged — it
+preserves the original stage and role names for compliance immutability.
+
 ## [1.6.0] - 2026-05-13
 
 ### Added
