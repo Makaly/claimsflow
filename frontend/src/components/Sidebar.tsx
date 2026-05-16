@@ -18,10 +18,10 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/comp
 
 type Role =
   | 'admin'
-  | 'supervisor'
   | 'claims_officer'
-  | 'checker'
+  | 'maker_checker'
   | 'fraud_officer'
+  | 'finance'
   | 'provider_admin'
   | 'provider_user'
 
@@ -29,42 +29,39 @@ type NavItem =
   | { type: 'separator'; name: string; roles: Role[] }
   | { type?: undefined; name: string; href: string; icon: any; roles: Role[] }
 
-const CIC_STAFF: Role[] = ['admin', 'supervisor', 'claims_officer', 'checker', 'fraud_officer']
+const CIC_STAFF: Role[] = ['admin', 'claims_officer', 'maker_checker', 'fraud_officer', 'finance']
 const ALL_ROLES: Role[] = [...CIC_STAFF, 'provider_admin', 'provider_user']
 
 const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard, roles: ALL_ROLES },
   { name: 'Claims', href: '/claims', icon: FileText, roles: ALL_ROLES },
-  // Providers directory is a CIC-internal tool.
-  { name: 'Providers', href: '/providers', icon: Building2, roles: ['admin', 'supervisor', 'checker', 'fraud_officer'] },
-  // Provider admins manage their own branches; CIC staff see everything.
+  { name: 'Providers', href: '/providers', icon: Building2, roles: ['admin', 'claims_officer', 'maker_checker', 'fraud_officer'] },
   { name: 'Branches', href: '/branches', icon: Network, roles: [...CIC_STAFF, 'provider_admin'] },
-  // Only people who actually upload claims.
-  { name: 'Batch Upload', href: '/batch-upload', icon: Upload, roles: ['admin', 'claims_officer', 'provider_admin', 'provider_user'] },
+  { name: 'Batch Upload', href: '/batch-upload', icon: Upload, roles: ['admin', 'claims_officer', 'maker_checker', 'provider_admin', 'provider_user'] },
   { type: 'separator', name: 'Workflow', roles: CIC_STAFF },
   { name: 'Workflow', href: '/workflow', icon: GitBranch, roles: CIC_STAFF },
-  { name: 'Maker Queue', href: '/workflow/maker', icon: UserCheck, roles: ['admin', 'supervisor', 'claims_officer'] },
-  { name: 'Checker Queue', href: '/workflow/checker', icon: UserCog, roles: ['admin', 'supervisor', 'checker'] },
-  { name: 'Fraud Queue', href: '/workflow/fraud', icon: AlertOctagon, roles: ['admin', 'supervisor', 'fraud_officer', 'claims_officer'] },
+  { name: 'Maker-Checker Queue', href: '/workflow/checker', icon: UserCog, roles: ['admin', 'maker_checker'] },
+  { name: 'Claims Officer Queue', href: '/workflow/claims-officer', icon: UserCheck, roles: ['admin', 'claims_officer'] },
+  { name: 'Fraud Queue', href: '/workflow/fraud', icon: AlertOctagon, roles: ['admin', 'fraud_officer', 'claims_officer'] },
   { name: 'Claims Aging', href: '/workflow/aging', icon: Clock, roles: CIC_STAFF },
-  { name: 'Scan Station', href: '/scan-station', icon: ScanLine, roles: ['admin', 'supervisor', 'claims_officer', 'checker'] },
-  { name: 'Pre-Auth', href: '/pre-auth', icon: ShieldCheck, roles: ['admin', 'supervisor', 'claims_officer', 'provider_admin', 'provider_user'] },
-  { name: 'Provider Approvals', href: '/provider-approvals', icon: Shield, roles: ['admin', 'supervisor'] },
+  { name: 'Scan Station', href: '/scan-station', icon: ScanLine, roles: ['admin', 'claims_officer', 'maker_checker'] },
+  { name: 'Pre-Auth', href: '/pre-auth', icon: ShieldCheck, roles: ['admin', 'claims_officer', 'provider_admin', 'provider_user'] },
+  { name: 'Provider Approvals', href: '/provider-approvals', icon: Shield, roles: ['admin', 'claims_officer'] },
   { name: 'Appeals', href: '/appeals', icon: Scale, roles: [...CIC_STAFF, 'provider_admin', 'provider_user'] },
-  { type: 'separator', name: 'Finance', roles: ['admin', 'supervisor'] as Role[] },
-  { name: 'Payment Settlement', href: '/payment', icon: CreditCard, roles: ['admin', 'supervisor'] },
-  { type: 'separator', name: 'Admin', roles: ['admin', 'supervisor'] },
-  { name: 'Users', href: '/users', icon: Users, roles: ['admin', 'supervisor'] },
-  { name: 'Roles', href: '/roles', icon: ShieldCheck, roles: ['admin', 'supervisor'] },
-  { name: 'Permissions', href: '/permissions', icon: KeyRound, roles: ['admin', 'supervisor'] },
-  { name: 'Policy Plans', href: '/policy-plans', icon: Shield, roles: ['admin', 'supervisor'] },
-  { name: 'Activity Logs', href: '/activity-logs', icon: Activity, roles: ['admin', 'supervisor'] },
-  { name: 'ML Labelling', href: '/ml-labelling', icon: Database, roles: ['admin', 'supervisor', 'fraud_officer'] },
-  { name: 'Reports', href: '/reports', icon: BarChart3, roles: ['admin', 'supervisor'] },
-  { name: 'Provider Scorecard', href: '/provider-scorecard', icon: BarChart3, roles: ['admin', 'supervisor'] },
-  { name: 'Unknown Docs', href: '/unknown-documents', icon: FileQuestion, roles: ['admin', 'supervisor'] },
+  { type: 'separator', name: 'Finance', roles: ['admin', 'finance', 'claims_officer'] as Role[] },
+  { name: 'Payment Settlement', href: '/payment', icon: CreditCard, roles: ['admin', 'finance', 'claims_officer'] },
+  { type: 'separator', name: 'Admin', roles: ['admin'] },
+  { name: 'Users', href: '/users', icon: Users, roles: ['admin'] },
+  { name: 'Roles', href: '/roles', icon: ShieldCheck, roles: ['admin'] },
+  { name: 'Permissions', href: '/permissions', icon: KeyRound, roles: ['admin'] },
+  { name: 'Policy Plans', href: '/policy-plans', icon: Shield, roles: ['admin', 'claims_officer'] },
+  { name: 'Activity Logs', href: '/activity-logs', icon: Activity, roles: ['admin', 'claims_officer', 'fraud_officer'] },
+  { name: 'ML Labelling', href: '/ml-labelling', icon: Database, roles: ['admin', 'claims_officer', 'fraud_officer'] },
+  { name: 'Reports', href: '/reports', icon: BarChart3, roles: ['admin', 'claims_officer'] },
+  { name: 'Provider Scorecard', href: '/provider-scorecard', icon: BarChart3, roles: ['admin', 'claims_officer'] },
+  { name: 'Unknown Docs', href: '/unknown-documents', icon: FileQuestion, roles: ['admin', 'maker_checker'] },
   { name: 'System Config', href: '/system-config', icon: SlidersHorizontal, roles: ['admin'] },
-  { name: 'Settings', href: '/settings', icon: Settings, roles: ['admin', 'supervisor'] },
+  { name: 'Settings', href: '/settings', icon: Settings, roles: ['admin'] },
 ]
 
 export function Sidebar() {

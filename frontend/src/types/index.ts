@@ -2,7 +2,7 @@ export interface User {
   id: string
   email: string
   name: string
-  role: 'admin' | 'claims_officer' | 'supervisor' | 'provider_admin' | 'provider_user' | 'fraud_officer'
+  role: 'admin' | 'claims_officer' | 'maker_checker' | 'fraud_officer' | 'finance' | 'provider_admin' | 'provider_user'
   isActive: boolean
   twoFactorEnabled: boolean
   providerId?: string
@@ -60,7 +60,7 @@ export interface Claim {
   diagnosis?: string
   treatment?: string
   status: 'submitted' | 'under_review' | 'incomplete' | 'resubmitted' | 'approved' | 'rejected' | 'paid'
-  workflowStage: 'initial_review' | 'maker_review' | 'checker_review' | 'final_approval' | 'completed'
+  workflowStage: 'initial_review' | 'maker_checker_review' | 'claims_officer_review' | 'fraud_review' | 'payment_pending' | 'completed'
   assignedTo?: string
   assignedUser?: User
   priority: 'urgent' | 'high' | 'normal' | 'low'
@@ -81,7 +81,7 @@ export interface Claim {
 export interface ClaimApproval {
   id: string
   claimId: string
-  level: 'maker' | 'checker' | 'supervisor'
+  level: 'maker' | 'maker_checker' | 'claims_officer'
   approvalStage: string
   approvedBy: string
   approver?: User
@@ -135,9 +135,9 @@ export interface ActivityLog {
 
 export interface WorkflowStatistics {
   initial_review: number
-  maker_review: number
-  checker_review: number
-  final_approval: number
+  maker_checker_review: number
+  claims_officer_review: number
+  fraud_review: number
   completed: number
   total: number
 }

@@ -20,6 +20,7 @@ import BatchUpload from '@/pages/BatchUpload'
 import WorkflowDashboard from '@/pages/WorkflowDashboard'
 import MakerQueue from '@/pages/MakerQueue'
 import CheckerQueue from '@/pages/CheckerQueue'
+import ClaimsOfficerQueue from '@/pages/ClaimsOfficerQueue'
 import FraudQueue from '@/pages/FraudQueue'
 import ProviderApprovals from '@/pages/ProviderApprovals'
 import UserManagement from '@/pages/UserManagement'
@@ -68,8 +69,8 @@ function ProtectedRoute({
   return <>{children}</>
 }
 
-const CIC_STAFF = ['admin', 'supervisor', 'claims_officer', 'checker', 'fraud_officer']
-const ADMIN_ONLY = ['admin', 'supervisor']
+const CIC_STAFF = ['admin', 'claims_officer', 'maker_checker', 'fraud_officer', 'finance']
+const ADMIN_ONLY = ['admin']
 
 function AppRoutes() {
   const { isAuthenticated, user, fetchProfile } = useAuthStore()
@@ -116,34 +117,35 @@ function AppRoutes() {
       >
         <Route path="/" element={<Dashboard />} />
         <Route path="/claims" element={<Claims />} />
-        <Route path="/providers" element={<ProtectedRoute allowedRoles={['admin', 'supervisor', 'checker', 'fraud_officer']}><Providers /></ProtectedRoute>} />
+        <Route path="/providers" element={<ProtectedRoute allowedRoles={['admin', 'claims_officer', 'maker_checker', 'fraud_officer']}><Providers /></ProtectedRoute>} />
         <Route path="/documents" element={<Documents />} />
         <Route path="/batch-upload" element={<BatchUpload />} />
         <Route path="/workflow" element={<ProtectedRoute allowedRoles={CIC_STAFF}><WorkflowDashboard /></ProtectedRoute>} />
-        <Route path="/workflow/maker" element={<ProtectedRoute allowedRoles={['admin','supervisor','claims_officer']}><MakerQueue /></ProtectedRoute>} />
-        <Route path="/workflow/checker" element={<ProtectedRoute allowedRoles={['admin','supervisor','checker']}><CheckerQueue /></ProtectedRoute>} />
-        <Route path="/workflow/fraud" element={<ProtectedRoute allowedRoles={['admin','supervisor','fraud_officer','claims_officer']}><FraudQueue /></ProtectedRoute>} />
-        <Route path="/provider-approvals" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><ProviderApprovals /></ProtectedRoute>} />
+        <Route path="/workflow/maker" element={<ProtectedRoute allowedRoles={['admin','claims_officer','maker_checker']}><MakerQueue /></ProtectedRoute>} />
+        <Route path="/workflow/checker" element={<ProtectedRoute allowedRoles={['admin','maker_checker']}><CheckerQueue /></ProtectedRoute>} />
+        <Route path="/workflow/claims-officer" element={<ProtectedRoute allowedRoles={['admin','claims_officer']}><ClaimsOfficerQueue /></ProtectedRoute>} />
+        <Route path="/workflow/fraud" element={<ProtectedRoute allowedRoles={['admin','fraud_officer','claims_officer']}><FraudQueue /></ProtectedRoute>} />
+        <Route path="/provider-approvals" element={<ProtectedRoute allowedRoles={['admin','claims_officer']}><ProviderApprovals /></ProtectedRoute>} />
         <Route path="/branches" element={<Branches />} />
         <Route path="/users" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><UserManagement /></ProtectedRoute>} />
         <Route path="/roles" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><Roles /></ProtectedRoute>} />
         <Route path="/permissions" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><Permissions /></ProtectedRoute>} />
-        <Route path="/activity-logs" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><ActivityLogs /></ProtectedRoute>} />
-        <Route path="/reports" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><Reports /></ProtectedRoute>} />
+        <Route path="/activity-logs" element={<ProtectedRoute allowedRoles={['admin','claims_officer','fraud_officer']}><ActivityLogs /></ProtectedRoute>} />
+        <Route path="/reports" element={<ProtectedRoute allowedRoles={['admin','claims_officer']}><Reports /></ProtectedRoute>} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/settings" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><Settings /></ProtectedRoute>} />
         <Route path="/settings/document-classifiers/:id" element={<ProtectedRoute allowedRoles={['admin']}><DocumentClassifierEditor /></ProtectedRoute>} />
-        <Route path="/unknown-documents" element={<ProtectedRoute allowedRoles={['admin','supervisor']}><UnknownDocuments /></ProtectedRoute>} />
+        <Route path="/unknown-documents" element={<ProtectedRoute allowedRoles={['admin','maker_checker']}><UnknownDocuments /></ProtectedRoute>} />
         <Route path="/2fa-setup" element={<TwoFactorSetup />} />
         <Route path="/appeals" element={<ProtectedRoute><Appeals /></ProtectedRoute>} />
-        <Route path="/payment" element={<ProtectedRoute allowedRoles={['admin','supervisor','finance']}><Payment /></ProtectedRoute>} />
+        <Route path="/payment" element={<ProtectedRoute allowedRoles={['admin','finance','claims_officer']}><Payment /></ProtectedRoute>} />
         <Route path="/system-config" element={<ProtectedRoute allowedRoles={['admin']}><SystemConfigPage /></ProtectedRoute>} />
         <Route path="/workflow/aging" element={<ProtectedRoute allowedRoles={CIC_STAFF}><AgingDashboard /></ProtectedRoute>} />
-        <Route path="/provider-scorecard" element={<ProtectedRoute allowedRoles={['admin', 'supervisor']}><ProviderScorecard /></ProtectedRoute>} />
+        <Route path="/provider-scorecard" element={<ProtectedRoute allowedRoles={['admin','claims_officer']}><ProviderScorecard /></ProtectedRoute>} />
         <Route path="/pre-auth" element={<ProtectedRoute><PreAuth /></ProtectedRoute>} />
-        <Route path="/scan-station" element={<ProtectedRoute allowedRoles={['admin','supervisor','claims_officer','checker']}><ScanStation /></ProtectedRoute>} />
-        <Route path="/policy-plans" element={<ProtectedRoute allowedRoles={['admin','supervisor']}><PolicyPlans /></ProtectedRoute>} />
-        <Route path="/ml-labelling" element={<ProtectedRoute allowedRoles={['admin','supervisor','fraud_officer']}><MLLabelling /></ProtectedRoute>} />
+        <Route path="/scan-station" element={<ProtectedRoute allowedRoles={['admin','claims_officer','maker_checker']}><ScanStation /></ProtectedRoute>} />
+        <Route path="/policy-plans" element={<ProtectedRoute allowedRoles={['admin','claims_officer']}><PolicyPlans /></ProtectedRoute>} />
+        <Route path="/ml-labelling" element={<ProtectedRoute allowedRoles={['admin','claims_officer','fraud_officer']}><MLLabelling /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
