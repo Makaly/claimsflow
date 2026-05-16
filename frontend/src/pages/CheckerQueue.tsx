@@ -332,7 +332,7 @@ export default function CheckerQueue() {
                   selectedIds={Array.from(bulkSelected)}
                   onClear={() => setBulkSelected(new Set())}
                   onDone={() => { setBulkSelected(new Set()); window.location.reload() }}
-                  queueType="checker"
+                  queueType="maker_checker"
                 />
               </div>
             )}

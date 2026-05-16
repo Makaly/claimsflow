@@ -203,7 +203,7 @@ export default function MakerQueue() {
     const load = async () => {
       try {
         const token = localStorage.getItem('token')
-        const res = await fetch('/api/workflow/claims/maker_review', {
+        const res = await fetch('/api/workflow/claims/maker_checker_review', {
           headers: { Authorization: `Bearer ${token}` },
         })
         if (res.ok) {
@@ -496,7 +496,7 @@ export default function MakerQueue() {
                   selectedIds={Array.from(bulkSelected)}
                   onClear={() => setBulkSelected(new Set())}
                   onDone={() => { setBulkSelected(new Set()); window.location.reload() }}
-                  queueType="maker"
+                  queueType="maker_checker"
                 />
               </div>
             )}

@@ -53,9 +53,10 @@ const LANGUAGES = [
 
 const ROLE_COLORS: Record<string, string> = {
   admin: 'from-red-500 to-orange-500',
-  supervisor: 'from-purple-500 to-pink-500',
   claims_officer: 'from-blue-500 to-cyan-500',
-  checker: 'from-indigo-500 to-blue-500',
+  maker_checker: 'from-indigo-500 to-blue-500',
+  fraud_officer: 'from-orange-500 to-red-500',
+  finance: 'from-purple-500 to-pink-500',
   provider_admin: 'from-emerald-500 to-teal-500',
   provider_user: 'from-teal-500 to-cyan-500',
 }
@@ -689,7 +690,7 @@ export default function Profile() {
                     <p className="text-xs text-muted-foreground">
                       {twoFaEnabled
                         ? 'You will be asked for a 6-digit code each time you sign in.'
-                        : 'We strongly recommend enabling 2FA for admins and supervisors.'}
+                        : 'We strongly recommend enabling 2FA for all staff accounts.'}
                     </p>
                   </div>
                 </div>

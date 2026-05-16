@@ -59,7 +59,9 @@ type RegisterForm = z.infer<typeof registerSchema>
 const ROLES = [
   { value: 'admin', label: 'Administrator' },
   { value: 'claims_officer', label: 'Claims Officer' },
-  { value: 'supervisor', label: 'Supervisor' },
+  { value: 'maker_checker', label: 'Maker-Checker' },
+  { value: 'fraud_officer', label: 'Fraud Officer' },
+  { value: 'finance', label: 'Finance' },
 ]
 
 const PROVIDER_TYPES = [

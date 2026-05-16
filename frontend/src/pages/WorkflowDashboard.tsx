@@ -17,9 +17,9 @@ import { formatCurrency } from '@/lib/utils'
 
 interface WorkflowStats {
   initial_review: number
-  maker_review: number
-  checker_review: number
-  final_approval: number
+  maker_checker_review: number
+  claims_officer_review: number
+  fraud_review: number
   completed: number
   total: number
   totalValue?: number
@@ -41,8 +41,8 @@ interface RecentAction {
 }
 
 const DEMO_STATS: WorkflowStats = {
-  initial_review: 45, maker_review: 120, checker_review: 85,
-  final_approval: 52, completed: 40, total: 342,
+  initial_review: 45, maker_checker_review: 120, claims_officer_review: 52,
+  fraud_review: 18, completed: 40, total: 342,
   totalValue: 18750000, flagged: 18,
 }
 
@@ -77,7 +77,7 @@ function timeAgo(dateStr: string) {
 export default function WorkflowDashboard() {
   const navigate = useNavigate()
   const { user } = useAuthStore()
-  const canManageProviders = user?.role === 'admin' || user?.role === 'supervisor'
+  const canManageProviders = user?.role === 'admin' || user?.role === 'claims_officer'
   const [stats, setStats] = useState<WorkflowStats | null>(null)
   const [workload, setWorkload] = useState<ReviewerWorkload[]>([])
   const [activity, setActivity] = useState<RecentAction[]>([])
@@ -98,9 +98,9 @@ export default function WorkflowDashboard() {
         // Backend returns camelCase; normalise to the shape the component expects
         setStats({
           initial_review:  raw.initialReview  ?? raw.initial_review  ?? 0,
-          maker_review:    raw.makerReview    ?? raw.maker_review    ?? 0,
-          checker_review:  raw.checkerReview  ?? raw.checker_review  ?? 0,
-          final_approval:  raw.finalApproval  ?? raw.final_approval  ?? 0,
+          maker_checker_review:  raw.makerCheckerReview  ?? raw.maker_checker_review  ?? 0,
+          claims_officer_review: raw.claimsOfficerReview ?? raw.claims_officer_review ?? 0,
+          fraud_review:          raw.fraudReview         ?? raw.fraud_review          ?? 0,
           completed:       raw.completed      ?? 0,
           total:           raw.total          ?? 0,
           totalValue:      raw.totalValue,
@@ -153,9 +153,9 @@ export default function WorkflowDashboard() {
 
   const stages = [
     { key: 'initial_review', label: 'Initial Review', icon: Clock, count: stats?.initial_review ?? 0, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-950/40' },
-    { key: 'maker_review', label: 'Maker Review', icon: UserCheck, count: stats?.maker_review ?? 0, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-950/40', action: () => navigate('/workflow/maker') },
-    { key: 'checker_review', label: 'Checker Review', icon: UserCog, count: stats?.checker_review ?? 0, color: 'text-purple-600', bg: 'bg-purple-50 dark:bg-purple-950/40', action: () => navigate('/workflow/checker') },
-    { key: 'final_approval', label: 'Final Approval', icon: CheckCircle, count: stats?.final_approval ?? 0, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/40' },
+    { key: 'maker_checker_review', label: 'Maker-Checker', icon: UserCheck, count: stats?.maker_checker_review ?? 0, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-950/40', action: () => navigate('/workflow/checker') },
+    { key: 'claims_officer_review', label: 'Claims Officer', icon: CheckCircle, count: stats?.claims_officer_review ?? 0, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/40', action: () => navigate('/workflow/claims-officer') },
+    { key: 'fraud_review', label: 'Fraud Review', icon: AlertTriangle, count: stats?.fraud_review ?? 0, color: 'text-red-600', bg: 'bg-red-50 dark:bg-red-950/40', action: () => navigate('/workflow/fraud') },
     { key: 'completed', label: 'Completed Today', icon: CheckCircle, count: stats?.completed ?? 0, color: 'text-teal-600', bg: 'bg-teal-50 dark:bg-teal-950/40' },
   ]
 
@@ -291,13 +291,13 @@ export default function WorkflowDashboard() {
             <CardTitle className="text-base">Quick Actions</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            <Button variant="outline" className="w-full justify-start" onClick={() => navigate('/workflow/maker')}>
-              <UserCheck className="mr-2 h-4 w-4" /> Maker Queue
-              <Badge className="ml-auto" variant="secondary">{stats?.maker_review ?? 0}</Badge>
-            </Button>
             <Button variant="outline" className="w-full justify-start" onClick={() => navigate('/workflow/checker')}>
-              <UserCog className="mr-2 h-4 w-4" /> Checker Queue
-              <Badge className="ml-auto" variant="secondary">{stats?.checker_review ?? 0}</Badge>
+              <UserCheck className="mr-2 h-4 w-4" /> Maker-Checker Queue
+              <Badge className="ml-auto" variant="secondary">{stats?.maker_checker_review ?? 0}</Badge>
+            </Button>
+            <Button variant="outline" className="w-full justify-start" onClick={() => navigate('/workflow/claims-officer')}>
+              <UserCog className="mr-2 h-4 w-4" /> Claims Officer Queue
+              <Badge className="ml-auto" variant="secondary">{stats?.claims_officer_review ?? 0}</Badge>
             </Button>
             {canManageProviders && (
               <Button variant="outline" className="w-full justify-start" onClick={() => navigate('/provider-approvals')}>

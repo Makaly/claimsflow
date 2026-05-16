@@ -2207,7 +2207,7 @@ export default function Claims() {
                     if (!c.memberNumber || c.memberName?.toLowerCase().includes('unknown'))
                       signals.push({ level: 'critical', title: 'Unknown / Missing Patient Identity', detail: `Member number is ${c.memberNumber ? `"${c.memberNumber}"` : 'absent'} and patient name is "${c.memberName || 'blank'}". Without verified identity this claim cannot be cross-checked against policy eligibility or prior claim history — a primary indicator of a ghost claim.` })
                     if (amt > 200000)
-                      signals.push({ level: 'warning', title: 'High-Value Claim', detail: `${formatCurrency(amt)} exceeds the KES 200,000 threshold. Requires 3rd-level supervisor approval and a matching pre-authorisation letter.` })
+                      signals.push({ level: 'warning', title: 'High-Value Claim', detail: `${formatCurrency(amt)} exceeds the KES 200,000 threshold. Requires claims officer approval and a matching pre-authorisation letter.` })
                     const dupClaims = claims.filter(x => x.id !== c.id && x.invoiceNumber && x.invoiceNumber === c.invoiceNumber)
                     if (dupClaims.length > 0)
                       signals.push({ level: 'critical', title: 'Duplicate Invoice Number', detail: `Invoice number "${c.invoiceNumber}" also appears on ${dupClaims.map(x => x.claimNumber).join(', ')} — potential double-billing by the provider.` })

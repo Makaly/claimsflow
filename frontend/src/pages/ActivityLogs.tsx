@@ -71,7 +71,7 @@ const DEMO_LOGS: ActivityLog[] = [
     createdAt: '2026-04-15T10:00:00Z',
   },
   {
-    id: '6', username: 'Sarah Wambui', userRole: 'supervisor', action: 'assign_claim',
+    id: '6', username: 'Sarah Wambui', userRole: 'claims_officer', action: 'assign_claim',
     entity: 'workflow', entityId: 'CLM-2026-00142', ipAddress: '192.168.1.112', status: 'success',
     method: 'POST', endpoint: '/api/workflow/assign',
     metadata: { assignedTo: 'Jane Mwangi', strategy: 'workload', priority: 'normal' },
@@ -115,7 +115,7 @@ const DEMO_LOGS: ActivityLog[] = [
     createdAt: '2026-04-15T11:30:00Z',
   },
   {
-    id: '12', username: 'Sarah Wambui', userRole: 'supervisor', action: 'return_to_provider',
+    id: '12', username: 'Sarah Wambui', userRole: 'claims_officer', action: 'return_to_provider',
     entity: 'claim', entityId: 'CLM-2026-00130', ipAddress: '192.168.1.112', status: 'success',
     method: 'POST', endpoint: '/api/workflow/checker/return-to-provider',
     metadata: { missingDocuments: ['Discharge Summary', 'Lab Results'], reason: 'Incomplete documentation' },

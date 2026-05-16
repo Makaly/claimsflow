@@ -237,8 +237,8 @@ export default function Providers() {
   const { logout, user } = useAuthStore()
   const token = () => localStorage.getItem('token')
 
-  // Only admin and supervisor can approve / reject / suspend / reactivate providers
-  const canManageProviders = user?.role === 'admin' || user?.role === 'supervisor'
+  // Only admin and claims_officer can approve / reject / suspend / reactivate providers
+  const canManageProviders = user?.role === 'admin' || user?.role === 'claims_officer'
 
   const handle401 = useCallback(() => {
     logout()

@@ -27,7 +27,7 @@ function startPolling() {
 
 export function useUnknownDocCount() {
   const { user } = useAuthStore()
-  const isAdmin = user?.role === 'admin' || user?.role === 'supervisor'
+  const isAdmin = user?.role === 'admin' || user?.role === 'maker_checker'
   const [count, setCount] = useState(cachedCount)
 
   useEffect(() => {

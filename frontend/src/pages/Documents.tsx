@@ -665,7 +665,7 @@ export default function Documents() {
             </div>
             <p className="text-xs text-muted-foreground">
               A purge request will be created to remove the source documents after merging.
-              A supervisor must approve before the originals are deleted.
+              A claims officer must approve before the originals are deleted.
             </p>
             <div className="rounded bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
               Source documents ({selectedIds.size}) will be queued for purge approval after merge completes.

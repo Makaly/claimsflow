@@ -11,7 +11,7 @@ interface BulkActionsBarProps {
   selectedIds: string[]
   onClear: () => void
   onDone: () => void
-  queueType: 'maker' | 'checker'
+  queueType: 'maker_checker' | 'claims_officer'
   showApprove?: boolean
   showReject?: boolean
   showAssignToMe?: boolean
@@ -36,7 +36,7 @@ export default function BulkActionsBar({
     setLoading(true)
     try {
       if (type === 'approve') {
-        const endpoint = queueType === 'maker' ? '/workflow/bulk/approve-maker' : '/workflow/bulk/approve-checker'
+        const endpoint = queueType === 'maker_checker' ? '/workflow/bulk/approve-maker' : '/workflow/bulk/approve-checker'
         const res = await api.post(endpoint, { claimIds: selectedIds })
         toast.success(`${res.data.succeeded} claim(s) approved, ${res.data.failed} failed`)
       } else if (type === 'reject') {

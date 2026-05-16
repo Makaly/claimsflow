@@ -105,7 +105,7 @@ export default function PreAuth() {
   })
   const [submitting, setSubmitting] = useState(false)
 
-  const isStaff    = ['admin', 'supervisor'].includes(user?.role ?? '')
+  const isStaff    = ['admin', 'claims_officer', 'maker_checker'].includes(user?.role ?? '')
   const isProvider = ['provider_admin', 'provider_user'].includes(user?.role ?? '')
 
   // ── Fetch list ──────────────────────────────────────────────────────────────

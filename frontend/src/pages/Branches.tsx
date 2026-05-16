@@ -200,7 +200,7 @@ export default function Branches() {
         const u = await uRes.json()
         const list = Array.isArray(u) ? u : Array.isArray(u?.users) ? u.users : []
         setStaffUsers(list.filter((u: StaffUser) =>
-          ['provider_user', 'provider_admin', 'claims_officer', 'supervisor'].includes(u.role)
+          ['provider_user', 'provider_admin', 'claims_officer', 'maker_checker'].includes(u.role)
         ))
       }
     } catch { /* keep demo */ }

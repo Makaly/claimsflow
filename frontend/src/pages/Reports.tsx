@@ -429,12 +429,12 @@ export default function Reports() {
 <div class="loophole">
   <div class="loophole-title">4. High-Frequency Members — ${highFreq.length} member(s) with ≥5 claims</div>
   <div>Members submitting an unusually high number of claims in a short period may indicate identity fraud (member number shared/sold) or benefit abuse.</div>
-  <div class="loophole-fix">▶ CONTROL: Implement per-member frequency limits. Auto-flag and route to supervisor when a single member exceeds 5 claims in a rolling 90-day window.</div>
+  <div class="loophole-fix">▶ CONTROL: Implement per-member frequency limits. Auto-flag and route to fraud officer when a single member exceeds 5 claims in a rolling 90-day window.</div>
 </div>
 <div class="loophole">
   <div class="loophole-title">5. High-Value Claims Without Enhanced Review — ${highVal.length} claim(s) &gt; KES 200,000</div>
   <div>Claims above KES 200,000 currently pass through the standard 2-level maker-checker without additional scrutiny. High-value fraud causes the most financial damage per incident.</div>
-  <div class="loophole-fix">▶ CONTROL: Route all claims &gt; KES 200,000 to mandatory 3rd-level supervisor approval. Require matching pre-authorisation letter before processing.</div>
+  <div class="loophole-fix">▶ CONTROL: Route all claims &gt; KES 200,000 to mandatory claims officer approval. Require matching pre-authorisation letter before processing.</div>
 </div>
 <div class="loophole">
   <div class="loophole-title">6. OCR Low-Confidence Pass-Through</div>
@@ -1726,14 +1726,14 @@ ${unknownPat.slice(0,30).map(c => `<tr><td class="flag-cell">${c.claimNumber}</t
               signals.push({
                 level: 'warning',
                 title: 'High-Value Claim — Enhanced Review Required',
-                what: `${fmtAmount(amt)} exceeds the KES 200,000 enhanced-review threshold by ${fmtAmount(amt - 200000)} (${((amt / 200000 - 1) * 100).toFixed(0)}% above threshold).${multiple ? ` This is ${multiple}× the average claim value for ${c.provider?.name || 'this provider'} (${fmtAmount(Math.round(providerAvg))}).` : ''} Claims at this value level require pre-authorisation documentation and mandatory 3rd-level supervisor sign-off before any payment is processed.`,
+                what: `${fmtAmount(amt)} exceeds the KES 200,000 enhanced-review threshold by ${fmtAmount(amt - 200000)} (${((amt / 200000 - 1) * 100).toFixed(0)}% above threshold).${multiple ? ` This is ${multiple}× the average claim value for ${c.provider?.name || 'this provider'} (${fmtAmount(Math.round(providerAvg))}).` : ''} Claims at this value level require pre-authorisation documentation and mandatory claims officer sign-off before any payment is processed.`,
                 rules: [
                   'CIC Underwriting Rule §8.3 — Pre-Authorisation: Any planned procedure or treatment expected to exceed KES 200,000 must be pre-authorised by CIC before the service is rendered. No pre-authorisation letter has been attached to this claim.',
-                  'CIC Workflow Policy §5.2 — High-Value Escalation: Claims above KES 200,000 must be automatically routed to supervisor queue and require 3-level approval (maker + checker + supervisor). This claim is currently at initial_review — the escalation was not triggered.',
-                  'CIC Payment Authority §9.1: No single claim payment above KES 200,000 may be processed without a supervisor\'s digital approval stamp on file.',
+                  'CIC Workflow Policy §5.2 — High-Value Escalation: Claims above KES 200,000 must pass through maker-checker verification and then claims officer final approval before payment. This claim is currently at initial_review — the escalation was not triggered.',
+                  'CIC Payment Authority §9.1: No single claim payment above KES 200,000 may be processed without a claims officer\'s digital approval stamp on file.',
                 ],
                 exposure: fmtAmount(amt) + ' — if approved without pre-authorisation, CIC has no contractual basis to demand a refund from the provider.',
-                action: 'Verify whether a pre-authorisation letter exists for this case. If none was issued, the claim is automatically ineligible for payment under CIC policy terms. Route to supervisor queue immediately.',
+                action: 'Verify whether a pre-authorisation letter exists for this case. If none was issued, the claim is automatically ineligible for payment under CIC policy terms. Route to claims officer queue immediately.',
               })
             }
 

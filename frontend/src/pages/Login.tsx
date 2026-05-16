@@ -42,8 +42,8 @@ type LoginForm = z.infer<typeof loginSchema>
 type DemoRole =
   | 'admin'
   | 'claims_officer'
-  | 'checker'
-  | 'supervisor'
+  | 'maker_checker'
+  | 'finance'
   | 'fraud_officer'
   | 'provider_admin'
   | 'provider_user'
@@ -54,13 +54,13 @@ const DEMO_ROLES: Array<{
   sub?: string
   icon: React.ComponentType<{ className?: string }>
 }> = [
-  { key: 'admin',          label: 'Admin',         icon: UserCog },
-  { key: 'claims_officer', label: 'Maker',         sub: 'Officer',       icon: Briefcase },
-  { key: 'checker',        label: 'Checker',       sub: 'Approver',      icon: ClipboardCheck },
-  { key: 'supervisor',     label: 'Supervisor',    icon: Users },
-  { key: 'fraud_officer',  label: 'Fraud Officer', sub: 'Investigations', icon: ShieldAlert },
-  { key: 'provider_admin', label: 'Prov. Admin',   icon: Building2 },
-  { key: 'provider_user',  label: 'Prov. User',    icon: UserRound },
+  { key: 'admin',          label: 'Admin',          icon: UserCog },
+  { key: 'claims_officer', label: 'Claims Officer', sub: 'Final Approver', icon: Briefcase },
+  { key: 'maker_checker',  label: 'Maker-Checker',  sub: 'Verifier',       icon: ClipboardCheck },
+  { key: 'finance',        label: 'Finance',        sub: 'Payments',       icon: Users },
+  { key: 'fraud_officer',  label: 'Fraud Officer',  sub: 'Investigations',  icon: ShieldAlert },
+  { key: 'provider_admin', label: 'Prov. Admin',    icon: Building2 },
+  { key: 'provider_user',  label: 'Prov. User',     icon: UserRound },
 ]
 
 const HIGHLIGHTS = [
@@ -104,8 +104,8 @@ export default function Login() {
     const credentials: Record<DemoRole, { email: string; password: string }> = {
       admin: { email: 'admin@cic.co.ke', password: 'password123' },
       claims_officer: { email: 'jane@cic.co.ke', password: 'password123' },
-      checker: { email: 'checker@cic.co.ke', password: 'password123' },
-      supervisor: { email: 'sarah@cic.co.ke', password: 'password123' },
+      maker_checker: { email: 'checker@cic.co.ke', password: 'password123' },
+      finance: { email: 'finance@cic.co.ke', password: 'password123' },
       fraud_officer: { email: 'fraud@cic.co.ke', password: 'password123' },
       provider_admin: { email: 'admin@nairobihospital.co.ke', password: 'password123' },
       provider_user: { email: 'billing.hq@nairobihospital.co.ke', password: 'password123' },
@@ -289,7 +289,7 @@ export default function Login() {
               <div className="grid grid-cols-4 gap-2">
                 {DEMO_ROLES.map(({ key, label, sub, icon: Icon }) => {
                   const isLoading = demoLoading === key
-                  const isWorkflowRole = key === 'claims_officer' || key === 'checker'
+                  const isWorkflowRole = key === 'claims_officer' || key === 'maker_checker'
                   const isFraud = key === 'fraud_officer'
                   return (
                     <button

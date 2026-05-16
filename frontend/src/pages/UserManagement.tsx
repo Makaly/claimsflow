@@ -68,7 +68,7 @@ interface Branch {
 const DEMO_USERS: MappedUser[] = [
   { id: '1', name: 'Admin User', email: 'admin@cic.co.ke', role: 'admin', isActive: true, twoFactorEnabled: true, lastLogin: '2026-04-10T08:00:00Z', createdAt: '2025-01-01' },
   { id: '2', name: 'Jane Mwangi', email: 'jane@cic.co.ke', role: 'claims_officer', isActive: true, twoFactorEnabled: true, lastLogin: '2026-04-10T09:30:00Z', createdAt: '2025-02-15' },
-  { id: '3', name: 'Sarah Wambui', email: 'sarah@cic.co.ke', role: 'supervisor', isActive: true, twoFactorEnabled: true, lastLogin: '2026-04-10T07:45:00Z', createdAt: '2025-01-20' },
+  { id: '3', name: 'Sarah Wambui', email: 'sarah@cic.co.ke', role: 'claims_officer', isActive: true, twoFactorEnabled: true, lastLogin: '2026-04-10T07:45:00Z', createdAt: '2025-01-20' },
   { id: '4', name: 'Dr. James Maina', email: 'admin@nairobihospital.co.ke', role: 'provider_admin', isActive: true, twoFactorEnabled: false, lastLogin: '2026-04-09T16:00:00Z', createdAt: '2025-05-15', providerId: 'p1', provider: { id: 'p1', name: 'Nairobi Hospital', type: 'hospital', licenseNumber: 'LIC-001', status: 'approved' } },
   { id: '5', name: 'Grace Njeri', email: 'claims@nairobihospital.co.ke', role: 'provider_user', isActive: true, twoFactorEnabled: false, lastLogin: '2026-04-08T11:00:00Z', createdAt: '2025-06-01', providerId: 'p1', branchId: 'b1', provider: { id: 'p1', name: 'Nairobi Hospital', type: 'hospital', licenseNumber: 'LIC-001', status: 'approved' }, branch: { name: 'Nairobi HQ', code: 'NBI-HQ' } },
   { id: '6', name: 'Dr. Fatima Omar', email: 'admin@agakhan.org', role: 'provider_admin', isActive: true, twoFactorEnabled: false, lastLogin: '2026-04-09T10:00:00Z', createdAt: '2025-05-20', providerId: 'p2', provider: { id: 'p2', name: 'Aga Khan University Hospital', type: 'hospital', licenseNumber: 'LIC-002', status: 'approved' } },
@@ -76,9 +76,10 @@ const DEMO_USERS: MappedUser[] = [
 
 const roleColors: Record<string, string> = {
   admin:          'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
-  supervisor:     'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
   claims_officer: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
-  checker:        'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300',
+  maker_checker:  'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300',
+  fraud_officer:  'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
+  finance:        'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
   provider_admin: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
   provider_user:  'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300',
 }
@@ -436,9 +437,10 @@ export default function UserManagement() {
                   <SelectContent>
                     <SelectItem value="all">All Roles</SelectItem>
                     <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="supervisor">Supervisor</SelectItem>
                     <SelectItem value="claims_officer">Claims Officer</SelectItem>
-                    <SelectItem value="checker">Checker</SelectItem>
+                    <SelectItem value="maker_checker">Maker-Checker</SelectItem>
+                    <SelectItem value="fraud_officer">Fraud Officer</SelectItem>
+                    <SelectItem value="finance">Finance</SelectItem>
                     <SelectItem value="provider_admin">Provider Admin</SelectItem>
                     <SelectItem value="provider_user">Provider User</SelectItem>
                   </SelectContent>
@@ -656,9 +658,10 @@ export default function UserManagement() {
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="supervisor">Supervisor</SelectItem>
                       <SelectItem value="claims_officer">Claims Officer</SelectItem>
-                      <SelectItem value="checker">Checker</SelectItem>
+                      <SelectItem value="maker_checker">Maker-Checker</SelectItem>
+                      <SelectItem value="fraud_officer">Fraud Officer</SelectItem>
+                      <SelectItem value="finance">Finance</SelectItem>
                       <SelectItem value="provider_admin">Provider Admin</SelectItem>
                       <SelectItem value="provider_user">Provider User</SelectItem>
                     </SelectContent>
