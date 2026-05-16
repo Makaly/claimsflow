@@ -25,15 +25,16 @@ export class AuthController {
   async login(@Body() loginDto: LoginDto, @Response({ passthrough: true }) res: any) {
     const result = await this.authService.login(loginDto);
     const isProduction = process.env.NODE_ENV === 'production';
-    // The Render static-site rewrite in render.yaml proxies /api/* and
-    // /socket.io/* from the frontend origin to the backend, so the browser
-    // sees same-origin requests. SameSite=Lax is therefore the correct,
-    // CSRF-resistant choice in both prod and dev. (Earlier this was
-    // SameSite=None to support cross-origin cookies before the proxy existed.)
+    // In production the frontend (claimsflow-frontend.onrender.com) calls the
+    // backend (claimsflow-backend.onrender.com) cross-origin — Render's static
+    // CDN does not proxy HTTP. SameSite=None;Secure is required so browsers
+    // send the cookie on credentialed cross-origin requests. In dev the Vite
+    // proxy makes requests same-origin, so Lax is fine (and Secure cannot be
+    // set without HTTPS).
     res.cookie('access_token', result.access_token, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: 'lax',
+      sameSite: isProduction ? 'none' : 'lax',
       maxAge: 24 * 60 * 60 * 1000,
       path: '/',
     });
@@ -119,7 +120,7 @@ export class AuthController {
     res.clearCookie('access_token', {
       httpOnly: true,
       secure: isProduction,
-      sameSite: 'lax',
+      sameSite: isProduction ? 'none' : 'lax',
       path: '/',
     });
     return { message: 'Logged out successfully.' };

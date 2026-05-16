@@ -127,18 +127,9 @@ services:
         name: Cache-Control
         value: public, max-age=31536000, immutable
     routes:
-      # Reverse-proxy /api/* and /socket.io/* to the backend service so the
-      # browser sees the frontend and backend as same-origin. This mirrors
-      # the Vite dev-proxy behaviour in prod, eliminates the cross-origin
-      # cookie / CORS surface entirely, and lets the existing
-      # `fetch('/api/...')` calls work without any code changes.
-      # Order matters — the SPA catch-all must come last.
-      - type: rewrite
-        source: /api/*
-        destination: https://claimsflow-backend.onrender.com/api/*
-      - type: rewrite
-        source: /socket.io/*
-        destination: https://claimsflow-backend.onrender.com/socket.io/*
+      # Render's static CDN does not proxy HTTP to external URLs, so there is
+      # no /api/* or /socket.io/* rewrite here. The frontend calls the backend
+      # directly via VITE_API_URL. The SPA catch-all must be the only rule.
       - type: rewrite
         source: /*
         destination: /index.html
@@ -147,8 +138,9 @@ services:
       # Using Node 20 LTS to match local dev and Dockerfile.
       - key: NODE_VERSION
         value: 20.19.4
-      # With the /api proxy above the frontend and backend are same-origin;
-      # axios picks up the default '/api' fallback so we don't bake an
-      # absolute backend URL into the bundle.
+      # Absolute backend URL — required because the Render static CDN cannot
+      # proxy /api/* HTTP requests. installFetchProxy() and axios both use
+      # this to route API calls directly to the backend service.
+      # In dev the Vite proxy handles /api/* so .env.local keeps VITE_API_URL=/api.
       - key: VITE_API_URL
-        value: /api
+        value: https://claimsflow-backend.onrender.com/api
