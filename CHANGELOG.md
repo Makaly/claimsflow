@@ -7,6 +7,96 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-05-16
+
+### Added
+
+- **ClaimsOfficerQueue page** — dedicated final-approval queue for Claims
+  Officers showing all claims that have cleared maker-checker verification and
+  are awaiting final sign-off. Supports inline document preview, approve /
+  reject / return-to-maker-checker / return-to-provider / escalate-to-fraud
+  actions, and notes capture per decision.
+- **Three-party appeal message thread UI** — real-time conversation panel on
+  every appeal record. Providers, Claims Officers, and Fraud Officers can
+  exchange threaded messages directly in the appeal drawer, with per-role
+  colour coding, sender badges, and timestamp display.
+- **`GET /api/appeals/:id/messages` and `POST /api/appeals/:id/messages`
+  endpoints** — backend API for the appeal message thread. Returns a
+  chronological list of messages on an appeal and persists new messages from
+  the authenticated user with their role stamped at write-time.
+- **Fraud-confirmed appeal path** — providers can now open an appeal on a
+  `fraud_confirmed` claim; the appeal is auto-routed to the fraud officer in
+  addition to the claims officer for joint adjudication.
+
+### Changed
+
+- **Workflow stage names aligned across the full stack:**
+  Completes the v1.7.0 model rename across every remaining backend service and
+  all frontend UI strings.
+  - `maker_review` → `maker_checker_review`
+  - `checker_review` → `claims_officer_review` (the claims-officer final gate)
+  - `final_approval` → `fraud_review` (reserved for active fraud investigations)
+  - SLA default budget: `initial_review`=4 h, `maker_checker_review`=24 h,
+    `claims_officer_review`=8 h, `fraud_review`=48 h.
+  - `system-config` default keys renamed to `sla_hours_maker_checker_review`,
+    `sla_hours_claims_officer_review`, and `sla_hours_fraud_review`.
+  - `AssignmentService.getReviewerWorkload` stage filter updated to the new
+    three-stage set.
+  - `ClaimsService` inline auto-assignment writes `maker_checker_review`
+    instead of `maker_review`.
+
+- **Frontend RBAC and navigation refactor:**
+  - `User.role`, `Claim.workflowStage`, and `ClaimApproval.level` TypeScript
+    unions updated — `supervisor` and `checker` removed; `maker_checker` and
+    `finance` added.
+  - Sidebar navigation items and `App.tsx` route guards updated throughout:
+    `supervisor` → `claims_officer`, `checker` → `maker_checker`, new `finance`
+    role wired to Payment and Finance nav sections.
+  - `ADMIN_ONLY` tightened to `['admin']` (was `['admin', 'supervisor']`).
+  - Workflow dashboard stage cards and quick-action buttons updated to
+    `maker_checker_review`, `claims_officer_review`, and `fraud_review`;
+    linked to the new `/workflow/claims-officer` route.
+  - `BulkActionsBar` `queueType` prop changed from `'maker' | 'checker'` to
+    `'maker_checker' | 'claims_officer'`.
+  - `useUnknownDocCount` badge guard corrected from `supervisor` to
+    `maker_checker`.
+  - Login quick-login panel and Register role dropdown updated: `supervisor` /
+    `checker` replaced with `claims_officer` / `maker_checker` / `finance`.
+  - `UserManagement`, `Profile`, `Reports` role colour maps and filter dropdowns
+    updated; demo seed row for Sarah Wambui corrected to `claims_officer`.
+  - Fraud-report recommendation text updated from "supervisor approval" /
+    "supervisor queue" to "claims officer approval" / "claims officer queue".
+
+### Fixed
+
+- **Production login failure (Render static-site proxy):**
+  Render's CDN does not proxy HTTP requests to external URLs — all `/api/*`
+  calls from the browser fell through to the SPA catch-all and returned
+  `index.html`. Users could not log in because the login response (and its
+  `Set-Cookie` header) was never received by the frontend JavaScript.
+  - `VITE_API_URL` in `render.yaml` changed from `/api` to the absolute backend
+    origin `https://claimsflow-backend.onrender.com/api` so `installFetchProxy`
+    and the axios client route calls directly to the backend.
+  - Auth cookie changed from `SameSite=Lax` to `SameSite=None; Secure` in
+    production so browsers honour the HttpOnly cookie on credentialed
+    cross-origin requests (`withCredentials: true` / `credentials: 'include'`).
+    Development retains `SameSite=Lax` through the Vite dev proxy.
+  - Defunct `/api/*` and `/socket.io/*` CDN rewrite rules removed from
+    `render.yaml`; the SPA catch-all is now the only frontend route rule.
+- **ClaimsOfficer approve/return actions writing wrong `approvalStage`**
+  (`claims_officer_review` was written as `checker`; corrected to
+  `claims_officer`).
+- **Dashboard stage card links** pointed at the removed `/workflow/maker` route;
+  re-wired to `/workflow/checker` (maker-checker queue) and the new
+  `/workflow/claims-officer` route.
+
+### Migration
+
+No new database schema changes in this release. Workflow stage renames are
+code-only; the data migration shipped in the v1.7.0 migration
+(`20260514000000_maker_checker_workflow_refactor`) already updated all
+existing rows.
+
 ## [1.7.0] - 2026-05-14
 
 ### Added
