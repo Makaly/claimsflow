@@ -4,7 +4,7 @@ A production-ready REST API for end-to-end medical insurance claims processing b
 
 ## Features
 
-- **Authentication & Authorization** — JWT-based auth with role-based access control (admin, claims officer, supervisor, provider admin, provider user)
+- **Authentication & Authorization** — JWT-based auth with role-based access control (admin, claims_officer, maker_checker, fraud_officer, finance, provider_admin, provider_user)
 - **Provider Management** — Full lifecycle: onboarding, approval workflow, branch management, suspension/reactivation
 - **Claims Processing** — Create, submit, assign, validate, approve/reject with a maker-checker workflow
 - **Document Management** — Secure upload, storage, watermarking, barcode/QR generation, PDF operations, TIFF conversion
@@ -194,6 +194,20 @@ npm run prisma:studio    # Open Prisma Studio (DB GUI)
 npm run prisma:seed      # Seed the database
 ```
 
+## Role Layout
+
+| Role | Display Name | Responsibility |
+|---|---|---|
+| `admin` | Administrator | Full system administration |
+| `claims_officer` | Claims Officer | Final invoice approver; brokers provider follow-up and appeals |
+| `maker_checker` | Maker-Checker | Verifies captured invoice data, merges/splits invoices, document QA |
+| `fraud_officer` | Fraud Officer | Investigates and confirms or clears fraud signals |
+| `finance` | Finance Officer | Confirms and records payments for approved invoices |
+| `provider_admin` | Provider Administrator | Provider org owner — uploads invoices, manages branches |
+| `provider_user` | Provider User | Provider branch staff — uploads invoices |
+
+> **Migration note (v1.7):** `supervisor` → `claims_officer` and `checker` → `maker_checker`. Existing users were migrated automatically via `20260514000000_maker_checker_workflow_refactor`.
+
 ## Project Structure
 
 ```
@@ -231,7 +245,7 @@ Every claim is automatically evaluated against ten signal rules at creation / OC
 |---|---|---|
 | Round-Amount Billing | warning / critical | Invoice total is an exact round thousand (≥ KES 10,000) |
 | Unknown / Missing Patient Identity | critical | Member number absent or name contains "Unknown" |
-| High-Value Claim | warning | Invoice total > KES 200,000 |
+| High-Value Claim | warning | Invoice total > KES 200,000 — requires claims officer approval and pre-auth letter |
 | Duplicate Invoice Number | critical | Same invoice number appears on another claim for the same provider |
 | Low OCR Confidence | warning | AI-extracted fields with < 70% confidence |
 | Impossible Date Sequence | critical | Service date is after invoice date (backdating indicator) |

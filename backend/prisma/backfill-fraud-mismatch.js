@@ -10,7 +10,7 @@
  *         for this entityId — that userId is the uploader
  *   2. If uploader is a provider user/admin whose providerId ≠ claim.providerId → flag
  *
- * CIC staff (admin, claims_officer, supervisor, checker) are exempt.
+ * CIC staff (admin, claims_officer, maker_checker, fraud_officer, finance) are exempt.
  *
  * Run: node prisma/backfill-fraud-mismatch.js
  */

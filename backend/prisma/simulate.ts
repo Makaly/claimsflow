@@ -50,8 +50,8 @@ async function ensureDemoUsers() {
   const users = [
     { email: 'admin@cic.co.ke',       name: 'Admin User',     role: 'admin' },
     { email: 'jane@cic.co.ke',        name: 'Jane Mwangi',    role: 'claims_officer' },
-    { email: 'sarah@cic.co.ke',       name: 'Sarah Wambui',   role: 'supervisor' },
-    { email: 'checker@cic.co.ke',     name: 'David Ochieng',  role: 'checker' },
+    { email: 'sarah@cic.co.ke',       name: 'Sarah Wambui',   role: 'claims_officer' },
+    { email: 'checker@cic.co.ke',     name: 'David Ochieng',  role: 'maker_checker' },
     { email: 'provider@demo.co.ke',   name: 'Grace Otieno',   role: 'provider_user' },
   ] as const;
 
@@ -174,7 +174,7 @@ async function makerApprove(claimId: string, actor: ActorCtx, comments: string) 
   });
   const after = await prisma.claim.update({
     where: { id: claimId },
-    data: { workflowStage: 'checker_review', assignedTo: null, reviewedAt: new Date() },
+    data: { workflowStage: 'maker_checker_review', assignedTo: null, reviewedAt: new Date() },
   });
   await prisma.claimStatusHistory.create({
     data: {
@@ -200,16 +200,16 @@ async function checkerApprove(claimId: string, actor: ActorCtx, comments: string
   });
   await prisma.claimApproval.create({
     data: {
-      claimId, level: 'checker', approvalStage: 'second_approval',
+      claimId, level: 'maker_checker', approvalStage: 'second_approval',
       approvedBy: actor.userId, decision: 'approved', comments,
     },
   });
   const after = await prisma.claim.update({
     where: { id: claimId },
     data: {
-      workflowStage: 'final_approval',
-      status: 'approved',
-      approvedAt: new Date(),
+      workflowStage: 'claims_officer_review',
+      status: 'under_review',
+      reviewedAt: new Date(),
       assignedTo: null,
     },
   });
@@ -237,7 +237,7 @@ async function checkerReject(claimId: string, actor: ActorCtx, reason: string) {
   });
   await prisma.claimApproval.create({
     data: {
-      claimId, level: 'checker', approvalStage: 'second_approval',
+      claimId, level: 'maker_checker', approvalStage: 'second_approval',
       approvedBy: actor.userId, decision: 'rejected', comments: reason,
     },
   });

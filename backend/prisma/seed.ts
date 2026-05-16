@@ -33,26 +33,29 @@ async function main() {
     },
   });
 
-  const supervisor = await prisma.user.upsert({
+  // Sarah was the seeded supervisor — under the new role layout she becomes
+  // a senior claims officer (final invoice approver).
+  const seniorClaimsOfficer = await prisma.user.upsert({
     where: { email: 'sarah@cic.co.ke' },
-    update: {},
+    update: { role: 'claims_officer' },
     create: {
       email: 'sarah@cic.co.ke',
       password,
       name: 'Sarah Wambui',
-      role: 'supervisor',
+      role: 'claims_officer',
       isActive: true,
     },
   });
 
-  const checker = await prisma.user.upsert({
+  // David was the seeded checker — becomes a maker_checker (capture verifier + QA).
+  const makerChecker = await prisma.user.upsert({
     where: { email: 'checker@cic.co.ke' },
-    update: {},
+    update: { role: 'maker_checker' },
     create: {
       email: 'checker@cic.co.ke',
       password,
       name: 'David Ochieng',
-      role: 'checker',
+      role: 'maker_checker',
       isActive: true,
     },
   });
@@ -65,6 +68,18 @@ async function main() {
       password,
       name: 'Peter Kariuki',
       role: 'fraud_officer',
+      isActive: true,
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { email: 'finance@cic.co.ke' },
+    update: {},
+    create: {
+      email: 'finance@cic.co.ke',
+      password,
+      name: 'Grace Njeri',
+      role: 'finance',
       isActive: true,
     },
   });
@@ -598,13 +613,13 @@ async function main() {
       dateOfService: new Date('2025-03-19'),
       diagnosis: 'Cardiac catheterization',
       status: 'under_review',
-      workflowStage: 'checker_review',
+      workflowStage: 'maker_checker_review',
       priority: 'urgent',
       isComplete: true,
       ocrStatus: 'completed',
       ocrConfidence: 0.91,
       submittedAt: new Date('2025-03-21'),
-      assignedTo: checker.id,
+      assignedTo: makerChecker.id,
       createdBy: officer.id,
     },
     {
@@ -686,8 +701,10 @@ async function main() {
     console.log('  CIC Staff:');
     console.log('    Admin              → admin@cic.co.ke');
     console.log('    Claims Officer     → jane@cic.co.ke');
-    console.log('    Supervisor         → sarah@cic.co.ke');
-    console.log('    Checker            → checker@cic.co.ke');
+    console.log('    Sr Claims Officer  → sarah@cic.co.ke');
+    console.log('    Maker-Checker      → checker@cic.co.ke');
+    console.log('    Fraud Officer      → fraud@cic.co.ke');
+    console.log('    Finance            → finance@cic.co.ke');
     console.log('  Provider Admins:');
     console.log('    Nairobi Hospital   → admin@nairobihospital.co.ke');
     console.log('    Aga Khan           → admin@agakhan.org');
