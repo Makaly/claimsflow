@@ -1699,7 +1699,7 @@ export default function FraudQueue() {
                         </Button>
                       </div>
                       <p className="text-[11px] text-muted-foreground text-center">
-                        <span className="text-emerald-600 font-medium">Clear</span> returns to maker review &amp; dumps files.&nbsp;&nbsp;
+                        <span className="text-emerald-600 font-medium">Clear</span> returns to claims officer review &amp; dumps files.&nbsp;&nbsp;
                         <span className="text-red-600 font-medium">Confirm Fraud</span> permanently rejects — irreversible.
                       </p>
                     </div>

@@ -267,9 +267,9 @@ export default function CheckerQueue() {
   }
 
   const actionTitle = {
-    approve: 'Approve Claim',
+    approve: 'Approve → Claims Officer',
     reject: 'Reject Claim',
-    return_maker: 'Return to Maker',
+    return_maker: 'Return for Revision',
     return_provider: 'Return to Provider',
     escalate_fraud: 'Escalate to Fraud Team',
     view: 'Claim Details',
@@ -279,8 +279,8 @@ export default function CheckerQueue() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Checker Queue</h1>
-          <p className="text-muted-foreground">Second-level review of maker-approved claims</p>
+          <h1 className="text-3xl font-bold tracking-tight">Maker-Checker Queue</h1>
+          <p className="text-muted-foreground">Verify captured data, merge documents, and QA invoices before claims officer approval</p>
         </div>
         <Badge variant="outline" className="text-lg px-4 py-2">
           <UserCog className="mr-2 h-4 w-4" /> {stats.total} Pending
@@ -353,8 +353,8 @@ export default function CheckerQueue() {
                   <TableHead>Provider</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
                   <TableHead>Priority</TableHead>
-                  <TableHead>Maker</TableHead>
-                  <TableHead>Maker Notes</TableHead>
+                  <TableHead>Reviewed By</TableHead>
+                  <TableHead>Notes</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -362,7 +362,7 @@ export default function CheckerQueue() {
                 {filtered.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
-                      No claims in checker queue
+                      No claims in maker-checker queue
                     </TableCell>
                   </TableRow>
                 ) : filtered.slice((page - 1) * pageSize, page * pageSize).map(claim => (
@@ -411,11 +411,11 @@ export default function CheckerQueue() {
                           onClick={() => openAction(claim, 'view')}>
                           <Eye className="h-3.5 w-3.5" />
                         </Button>
-                        <Button size="icon" variant="ghost" className="h-7 w-7 text-emerald-600" title="Final Approve"
+                        <Button size="icon" variant="ghost" className="h-7 w-7 text-emerald-600" title="Approve → Claims Officer"
                           onClick={() => openAction(claim, 'approve')}>
                           <CheckCircle className="h-3.5 w-3.5" />
                         </Button>
-                        <Button size="icon" variant="ghost" className="h-7 w-7 text-blue-500" title="Return to Maker"
+                        <Button size="icon" variant="ghost" className="h-7 w-7 text-blue-500" title="Return for Revision"
                           onClick={() => openAction(claim, 'return_maker')}>
                           <RotateCcw className="h-3.5 w-3.5" />
                         </Button>
@@ -488,7 +488,7 @@ export default function CheckerQueue() {
                 {/* Maker context */}
                 {selectedClaim.makerComments && (
                   <div className="rounded-lg bg-muted/50 p-3">
-                    <p className="text-xs font-medium text-muted-foreground">Maker Notes — {selectedClaim.makerApprovedBy}</p>
+                    <p className="text-xs font-medium text-muted-foreground">Prior Notes — {selectedClaim.makerApprovedBy}</p>
                     <p className="mt-1 text-sm">{selectedClaim.makerComments}</p>
                   </div>
                 )}
@@ -556,9 +556,9 @@ export default function CheckerQueue() {
                             : actionType === 'return_maker' ? 'text-sky-600'
                             : 'text-red-600'
                           }`} />
-                          {actionType === 'approve' ? 'Checker Comments'
+                          {actionType === 'approve' ? 'Maker-Checker Notes'
                             : actionType === 'return_provider' ? 'Message to Provider'
-                            : actionType === 'return_maker' ? 'Return Reason'
+                            : actionType === 'return_maker' ? 'Revision Reason'
                             : 'Rejection Reason'}
                           {actionType === 'approve'
                             ? <Badge variant="outline" className="ml-1 text-[10px] font-normal">optional</Badge>
@@ -570,9 +570,9 @@ export default function CheckerQueue() {
                       </div>
                       <Textarea
                         placeholder={
-                          actionType === 'approve' ? 'Add final review notes — e.g. verified amounts, audited documents, any special handling…'
+                          actionType === 'approve' ? 'Add verification notes — e.g. confirmed amounts, merged documents, QA checks performed…'
                           : actionType === 'return_provider' ? 'Explain clearly what must be corrected or supplied before resubmission…'
-                          : actionType === 'return_maker' ? 'Explain to the maker what to re-check or correct…'
+                          : actionType === 'return_maker' ? 'Explain what needs to be re-checked or corrected before re-submission to the claims officer…'
                           : 'Provide a clear, factual rejection reason. The provider will see this.'
                         }
                         value={comments}
@@ -582,10 +582,10 @@ export default function CheckerQueue() {
                       />
                       <p className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
                         <Mail className="h-3 w-3 mt-0.5 shrink-0" />
-                        {actionType === 'approve' ? 'Comments are saved to the audit trail. The provider, the original maker, and you will each receive an email.'
-                          : actionType === 'return_provider' ? 'This message is emailed to the provider/branch. You will also receive a confirmation email.'
-                          : actionType === 'return_maker' ? 'The maker who first reviewed this claim will receive an email with this reason. You will also get a confirmation.'
-                          : 'The provider, the original maker, and you will all receive an email. This is permanently recorded.'}
+                        {actionType === 'approve' ? 'Approval routes the invoice to the Claims Officer queue. Notes are saved to the audit trail and emailed to the claims officer.'
+                          : actionType === 'return_provider' ? 'This message is emailed to the provider/branch. The invoice returns to initial review.'
+                          : actionType === 'return_maker' ? 'The invoice stays in the maker-checker queue. Your revision reason is recorded and the assignee is notified.'
+                          : 'The provider and you will all receive an email. This decision is permanently recorded.'}
                       </p>
                     </div>
                   </>
@@ -626,9 +626,9 @@ export default function CheckerQueue() {
                 }
               >
                 {submitting && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-                {actionType === 'approve' && <><CheckCircle className="mr-2 h-3.5 w-3.5" /> Final Approve</>}
+                {actionType === 'approve' && <><CheckCircle className="mr-2 h-3.5 w-3.5" /> Approve → Claims Officer</>}
                 {actionType === 'reject' && <><XCircle className="mr-2 h-3.5 w-3.5" /> Reject Claim</>}
-                {actionType === 'return_maker' && <><RotateCcw className="mr-2 h-3.5 w-3.5" /> Return to Maker</>}
+                {actionType === 'return_maker' && <><RotateCcw className="mr-2 h-3.5 w-3.5" /> Return for Revision</>}
                 {actionType === 'return_provider' && (
                   <><AlertTriangle className="mr-2 h-3.5 w-3.5" /> Return to Provider ({missingDocs.length} item{missingDocs.length !== 1 ? 's' : ''})</>
                 )}

@@ -55,10 +55,10 @@ const DEMO_WORKLOAD: ReviewerWorkload[] = [
 ]
 
 const DEMO_ACTIVITY: RecentAction[] = [
-  { id: '1', action: 'Claim CLM-2026-00142 assigned to maker', performedBy: 'System', createdAt: new Date(Date.now() - 120000).toISOString(), type: 'assign' },
-  { id: '2', action: 'Claim CLM-2026-00138 approved by checker', performedBy: 'Jane Mwangi', createdAt: new Date(Date.now() - 900000).toISOString(), type: 'approve' },
-  { id: '3', action: 'Claim CLM-2026-00139 rejected by maker', performedBy: 'Peter Omondi', createdAt: new Date(Date.now() - 1800000).toISOString(), type: 'reject' },
-  { id: '4', action: 'Claim CLM-2026-00135 returned to maker', performedBy: 'Sarah Wambui', createdAt: new Date(Date.now() - 3600000).toISOString(), type: 'return' },
+  { id: '1', action: 'Claim CLM-2026-00142 assigned to maker-checker', performedBy: 'System', createdAt: new Date(Date.now() - 120000).toISOString(), type: 'assign' },
+  { id: '2', action: 'Claim CLM-2026-00138 approved by claims officer', performedBy: 'Jane Mwangi', createdAt: new Date(Date.now() - 900000).toISOString(), type: 'approve' },
+  { id: '3', action: 'Claim CLM-2026-00139 rejected by maker-checker', performedBy: 'Peter Omondi', createdAt: new Date(Date.now() - 1800000).toISOString(), type: 'reject' },
+  { id: '4', action: 'Claim CLM-2026-00135 returned to maker-checker', performedBy: 'Sarah Wambui', createdAt: new Date(Date.now() - 3600000).toISOString(), type: 'return' },
   { id: '5', action: 'Batch BTH-2026-0045 submitted (12 claims)', performedBy: 'Provider Admin', createdAt: new Date(Date.now() - 7200000).toISOString(), type: 'submit' },
   { id: '6', action: 'Claim CLM-2026-00131 EDMS sync completed', performedBy: 'System', createdAt: new Date(Date.now() - 10800000).toISOString(), type: 'edms' },
   { id: '7', action: 'Claim CLM-2026-00128 transferred to eOxegen', performedBy: 'System', createdAt: new Date(Date.now() - 14400000).toISOString(), type: 'eoxegen' },

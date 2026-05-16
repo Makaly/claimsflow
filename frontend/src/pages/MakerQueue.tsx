@@ -317,7 +317,7 @@ export default function MakerQueue() {
         body: JSON.stringify({ reason: reprocessReason }),
       })
       if (!res.ok) throw new Error((await res.json())?.message || 'Failed')
-      toast.success('Claim reprocessed — returned to maker queue')
+      toast.success('Claim reprocessed — returned to maker-checker queue')
       setFraudClaims(prev => prev.filter(c => c.id !== reprocessTarget.id))
       setFraudTotal(prev => Math.max(0, prev - 1))
       setReprocessTarget(null); setReprocessReason('')
@@ -425,8 +425,8 @@ export default function MakerQueue() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Maker Queue</h1>
-          <p className="text-muted-foreground">First-level review — verify documents and forward to checker</p>
+          <h1 className="text-3xl font-bold tracking-tight">Maker-Checker Queue</h1>
+          <p className="text-muted-foreground">Verify captured data, merge and QA documents, then forward to the claims officer</p>
         </div>
         <Badge variant="outline" className="text-lg px-4 py-2">
           <UserCheck className="mr-2 h-4 w-4" /> {stats.total} Assigned
@@ -526,7 +526,7 @@ export default function MakerQueue() {
                 {filtered.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
-                      No claims in maker queue
+                      No claims in maker-checker queue
                     </TableCell>
                   </TableRow>
                 ) : filtered.slice((page - 1) * pageSize, page * pageSize).map(claim => {
@@ -805,7 +805,7 @@ export default function MakerQueue() {
                         <Label className="flex items-center gap-2 text-sm font-semibold">
                           <MessageSquare className={`h-3.5 w-3.5 ${actionType === 'approve' ? 'text-emerald-600' : 'text-red-600'}`} />
                           {actionType === 'approve'
-                            ? 'Maker Review Notes'
+                            ? 'Maker-Checker Notes'
                             : actionType === 'escalate_fraud'
                               ? 'Reason for Fraud Escalation'
                               : 'Rejection Reason'}
@@ -1059,7 +1059,7 @@ export default function MakerQueue() {
               Reprocess Claim
             </DialogTitle>
             <DialogDescription>
-              This will return <span className="font-mono font-semibold">{reprocessTarget?.claimNumber}</span> to the maker queue for normal review after client consultation.
+              This will return <span className="font-mono font-semibold">{reprocessTarget?.claimNumber}</span> to the maker-checker queue for normal review after client consultation.
               The fraud history is preserved in the audit trail.
             </DialogDescription>
           </DialogHeader>
