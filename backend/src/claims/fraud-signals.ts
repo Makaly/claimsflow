@@ -82,7 +82,7 @@ export function computeFraudSignals(
     signals.push({
       level: 'warning',
       title: 'High-Value Claim',
-      detail: `Invoice amount KES ${amt.toLocaleString()} exceeds the KES 200,000 threshold. Requires mandatory 3rd-level supervisor approval and a matching pre-authorisation letter before processing.`,
+      detail: `Invoice amount KES ${amt.toLocaleString()} exceeds the KES 200,000 threshold. Requires mandatory claims officer approval and a matching pre-authorisation letter before processing.`,
       detectedAt: now,
     })
   }

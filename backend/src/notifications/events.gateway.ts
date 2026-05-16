@@ -116,12 +116,13 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   emitSlaBreached(claimNumber: string, stage: string) {
-    this.emitToRole('supervisor', 'sla:breach', { claimNumber, stage, timestamp: new Date() });
+    this.emitToRole('claims_officer', 'sla:breach', { claimNumber, stage, timestamp: new Date() });
     this.emitToRole('admin', 'sla:breach', { claimNumber, stage, timestamp: new Date() });
   }
 
   emitNewAppeal(claimNumber: string) {
-    this.emitToRole('supervisor', 'appeal:new', { claimNumber, timestamp: new Date() });
+    this.emitToRole('claims_officer', 'appeal:new', { claimNumber, timestamp: new Date() });
+    this.emitToRole('fraud_officer', 'appeal:new', { claimNumber, timestamp: new Date() });
     this.emitToRole('admin', 'appeal:new', { claimNumber, timestamp: new Date() });
   }
 

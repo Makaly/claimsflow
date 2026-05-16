@@ -127,7 +127,7 @@ export class BatchSubmissionController {
 
   @Post('scan-station/upload')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'claims_officer', 'supervisor')
+  @Roles('admin', 'claims_officer', 'maker_checker')
   @UseInterceptors(
     FilesInterceptor('files', 100, {
       storage: diskStorage({
@@ -184,7 +184,7 @@ export class BatchSubmissionController {
 
   @Get('scan-station/batches')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'claims_officer', 'supervisor')
+  @Roles('admin', 'claims_officer', 'maker_checker')
   async getScanStationBatches(
     @Query('stationId') stationId?: string,
     @Query('status') status?: string,

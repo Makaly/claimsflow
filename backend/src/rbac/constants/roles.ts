@@ -1,7 +1,20 @@
 // Default system roles mapped to their permission set.
 // These are seeded on startup and kept in sync with the string roles already
-// referenced throughout the codebase (admin, claims_officer, supervisor,
-// provider_admin, provider_user, fraud_officer).
+// referenced throughout the codebase.
+//
+// Role layout (2026-05-14 maker-checker refactor):
+//   - admin           : full system administration
+//   - claims_officer  : final invoice approver; brokers provider back-and-forth and appeals
+//   - maker_checker   : verifies captured invoice data, merges invoices, document QA
+//   - fraud_officer   : confirms or clears fraud; participates in three-party appeals
+//   - finance         : marks payments paid
+//   - provider_admin  : provider organisation owner (uploads invoices, manages branches)
+//   - provider_user   : provider staff at a branch (uploads invoices)
+//   - user            : read-only safe default
+//
+// `supervisor` and `checker` were removed in this refactor:
+//   - existing supervisor users are migrated to `claims_officer`
+//   - existing checker users are migrated to `maker_checker`
 
 import { PERMISSION_NAMES } from './permissions';
 
@@ -23,14 +36,14 @@ export const DEFAULT_ROLES: RoleDef[] = [
     permissions: ADMIN_PERMISSIONS,
   },
   {
-    name: 'supervisor',
-    displayName: 'Claims Supervisor',
-    description: 'Oversees claim processing; can approve and reassign.',
+    name: 'claims_officer',
+    displayName: 'Claims Officer',
+    description: 'Final approver of invoices; brokers provider follow-up and appeals.',
     permissions: [
       'claims.read', 'claims.update', 'claims.assign', 'claims.review',
       'claims.approve', 'claims.reject', 'claims.flag_fraud',
       'documents.read', 'documents.annotate', 'documents.stamp',
-      'documents.sign', 'documents.merge', 'documents.split',
+      'documents.sign',
       'users.read',
       'providers.read',
       'branches.read',
@@ -40,14 +53,14 @@ export const DEFAULT_ROLES: RoleDef[] = [
     ],
   },
   {
-    name: 'claims_officer',
-    displayName: 'Claims Officer',
-    description: 'Reviews and processes individual claims.',
+    name: 'maker_checker',
+    displayName: 'Maker-Checker',
+    description: 'Verifies captured invoice data, merges/splits invoices, performs document QA.',
     permissions: [
       'claims.read', 'claims.update', 'claims.review',
-      'claims.approve', 'claims.reject',
+      'claims.approve', 'claims.reject', 'claims.flag_fraud',
       'documents.read', 'documents.annotate', 'documents.stamp',
-      'documents.sign',
+      'documents.sign', 'documents.merge', 'documents.split',
       'providers.read', 'branches.read', 'batches.read',
       'reports.read', 'reports.run',
     ],
@@ -55,13 +68,24 @@ export const DEFAULT_ROLES: RoleDef[] = [
   {
     name: 'fraud_officer',
     displayName: 'Fraud Officer',
-    description: 'Investigates and flags fraudulent claims.',
+    description: 'Investigates and confirms or clears fraudulent claims.',
     permissions: [
       'claims.read', 'claims.flag_fraud', 'claims.reject',
       'documents.read', 'documents.annotate',
       'providers.read', 'branches.read',
       'reports.read', 'reports.run', 'reports.export',
       'activity_logs.read',
+    ],
+  },
+  {
+    name: 'finance',
+    displayName: 'Finance Officer',
+    description: 'Confirms and records payments for approved invoices.',
+    permissions: [
+      'claims.read',
+      'documents.read',
+      'providers.read', 'branches.read',
+      'reports.read', 'reports.run', 'reports.export',
     ],
   },
   {

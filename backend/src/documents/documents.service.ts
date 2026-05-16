@@ -603,8 +603,12 @@ Return ALL segments so that together they cover every page with no gaps or overl
   // Annotation type permissions per role
   private readonly annotationPermissions: Record<string, string[]> = {
     admin: ['stamp', 'redaction', 'highlight', 'comment', 'signature', 'drawing', 'whiteout', 'underline', 'strikethrough'],
-    supervisor: ['stamp', 'redaction', 'highlight', 'comment', 'signature', 'drawing', 'whiteout', 'underline', 'strikethrough'],
-    claims_officer: ['highlight', 'comment', 'signature', 'drawing', 'underline', 'strikethrough'],
+    // The maker_checker is the document-QA owner under the new role layout —
+    // they get every annotation type the old `supervisor` role had.
+    maker_checker: ['stamp', 'redaction', 'highlight', 'comment', 'signature', 'drawing', 'whiteout', 'underline', 'strikethrough'],
+    claims_officer: ['stamp', 'highlight', 'comment', 'signature', 'drawing', 'underline', 'strikethrough'],
+    fraud_officer: ['highlight', 'comment', 'redaction'],
+    finance: ['comment'],
     provider_admin: ['comment'],
     provider_user: ['comment'],
     user: [],
@@ -716,8 +720,8 @@ Return ALL segments so that together they cover every page with no gaps or overl
     const ann = await this.prisma.documentAnnotation.findUnique({ where: { id: annotationId } });
     if (!ann || ann.documentId !== documentId) throw new NotFoundException('Annotation not found');
 
-    // Only the creator, supervisors, or admins can edit
-    if (ann.createdBy !== user.userId && !['admin', 'supervisor'].includes(user.role)) {
+    // Only the creator, maker_checkers, or admins can edit
+    if (ann.createdBy !== user.userId && !['admin', 'maker_checker'].includes(user.role)) {
       throw new ForbiddenException('You can only edit your own annotations');
     }
 
@@ -766,8 +770,8 @@ Return ALL segments so that together they cover every page with no gaps or overl
       throw new ForbiddenException('Only the signer or an admin can remove signatures');
     }
 
-    // Other annotations: only creator, supervisors, or admins can delete
-    if (ann.createdBy !== user.userId && !['admin', 'supervisor'].includes(user.role)) {
+    // Other annotations: only creator, maker_checkers, or admins can delete
+    if (ann.createdBy !== user.userId && !['admin', 'maker_checker'].includes(user.role)) {
       throw new ForbiddenException('You can only delete your own annotations');
     }
 

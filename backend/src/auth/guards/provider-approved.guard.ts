@@ -11,7 +11,7 @@ import { PrismaService } from '../../prisma/prisma.service';
  * isn't fully approved yet. Providers can log in before approval, but they
  * may NOT submit claims/upload invoices until CIC staff approve their account.
  *
- * Non-provider users (admin, supervisor, claims_officer, etc.) always pass.
+ * Non-provider users (admin, claims_officer, maker_checker, fraud_officer, etc.) always pass.
  */
 @Injectable()
 export class ProviderApprovedGuard implements CanActivate {

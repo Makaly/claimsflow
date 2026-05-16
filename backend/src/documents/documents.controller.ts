@@ -165,7 +165,7 @@ export class DocumentsController {
   }
 
   @Post(':id/annotations')
-  @Roles('admin', 'claims_officer', 'supervisor')
+  @Roles('admin', 'claims_officer', 'maker_checker')
   createAnnotation(
     @Param('id') id: string,
     @Body() body: {
@@ -186,7 +186,7 @@ export class DocumentsController {
   }
 
   @Patch(':id/annotations/:annotationId')
-  @Roles('admin', 'claims_officer', 'supervisor')
+  @Roles('admin', 'claims_officer', 'maker_checker')
   updateAnnotation(
     @Param('id') id: string,
     @Param('annotationId') annotationId: string,
@@ -204,7 +204,7 @@ export class DocumentsController {
   }
 
   @Delete(':id/annotations/:annotationId')
-  @Roles('admin', 'claims_officer', 'supervisor')
+  @Roles('admin', 'claims_officer', 'maker_checker')
   deleteAnnotation(
     @Param('id') id: string,
     @Param('annotationId') annotationId: string,

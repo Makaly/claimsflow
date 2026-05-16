@@ -11,13 +11,13 @@ export class PaymentController {
   constructor(private readonly paymentService: PaymentService) {}
 
   @Get('pending')
-  @Roles('admin', 'supervisor', 'finance')
+  @Roles('admin', 'finance', 'claims_officer')
   getPending(@Query('providerId') providerId?: string) {
     return this.paymentService.getPendingPayment(providerId);
   }
 
   @Post('advices')
-  @Roles('admin', 'supervisor', 'finance')
+  @Roles('admin', 'finance', 'claims_officer')
   generateAdvice(
     @Body() body: { providerId: string; claimIds: string[]; notes?: string },
     @Request() req,
@@ -26,7 +26,7 @@ export class PaymentController {
   }
 
   @Get('advices')
-  @Roles('admin', 'supervisor', 'finance')
+  @Roles('admin', 'finance', 'claims_officer')
   getAdvices(
     @Query('status') status?: string,
     @Query('providerId') providerId?: string,
@@ -42,7 +42,7 @@ export class PaymentController {
   }
 
   @Patch('advices/:id/confirm')
-  @Roles('admin', 'supervisor', 'finance')
+  @Roles('admin', 'finance', 'claims_officer')
   confirm(
     @Param('id') id: string,
     @Body() body: { paymentReference: string; paymentDate?: string },
@@ -52,7 +52,7 @@ export class PaymentController {
   }
 
   @Get('advices/:id/export')
-  @Roles('admin', 'supervisor', 'finance')
+  @Roles('admin', 'finance', 'claims_officer')
   async exportCsv(@Param('id') id: string, @Res() res: Response) {
     const csv = await this.paymentService.exportPaymentFile(id);
     res.setHeader('Content-Type', 'text/csv');

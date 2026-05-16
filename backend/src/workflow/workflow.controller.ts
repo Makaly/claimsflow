@@ -20,7 +20,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 @Controller('workflow')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin', 'supervisor', 'claims_officer', 'checker', 'fraud_officer')
+@Roles('admin', 'claims_officer', 'maker_checker', 'fraud_officer', 'finance')
 export class WorkflowController {
   constructor(
     private workflowService: WorkflowService,
@@ -156,7 +156,7 @@ export class WorkflowController {
   }
 
   @Post('provider/resubmit')
-  @Roles('admin', 'supervisor', 'claims_officer', 'provider_admin', 'provider_user')
+  @Roles('admin', 'claims_officer', 'maker_checker', 'provider_admin', 'provider_user')
   async providerResubmit(
     @Body() body: { claimId: string; notes?: string },
     @Request() req,
@@ -249,7 +249,7 @@ export class WorkflowController {
 
   // Bulk actions
   @Post('bulk/assign')
-  @Roles('admin', 'supervisor')
+  @Roles('admin', 'claims_officer')
   async bulkAssign(@Body() body: { claimIds: string[]; assigneeId: string }, @Request() req) {
     const results: any[] = [];
     for (const claimId of body.claimIds) {
@@ -264,7 +264,7 @@ export class WorkflowController {
   }
 
   @Post('bulk/approve-maker')
-  @Roles('admin', 'supervisor', 'claims_officer')
+  @Roles('admin', 'claims_officer', 'maker_checker')
   async bulkMakerApprove(@Body() body: { claimIds: string[]; comments?: string }, @Request() req) {
     const results: any[] = [];
     for (const claimId of body.claimIds) {
@@ -279,7 +279,7 @@ export class WorkflowController {
   }
 
   @Post('bulk/approve-checker')
-  @Roles('admin', 'supervisor', 'checker')
+  @Roles('admin', 'maker_checker')
   async bulkCheckerApprove(@Body() body: { claimIds: string[]; comments?: string }, @Request() req) {
     const results: any[] = [];
     for (const claimId of body.claimIds) {
@@ -294,7 +294,7 @@ export class WorkflowController {
   }
 
   @Post('bulk/reject')
-  @Roles('admin', 'supervisor', 'claims_officer', 'checker')
+  @Roles('admin', 'claims_officer', 'maker_checker')
   async bulkReject(@Body() body: { claimIds: string[]; reason: string; stage: 'maker' | 'checker' }, @Request() req) {
     const results: any[] = [];
     for (const claimId of body.claimIds) {
@@ -314,7 +314,7 @@ export class WorkflowController {
   }
 
   @Post('bulk/assign-to-me')
-  @Roles('admin', 'supervisor', 'claims_officer', 'checker')
+  @Roles('admin', 'claims_officer', 'maker_checker')
   async bulkAssignToMe(@Body() body: { claimIds: string[] }, @Request() req) {
     const updates = await this.prisma.claim.updateMany({
       where: { id: { in: body.claimIds } },

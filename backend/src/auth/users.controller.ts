@@ -11,7 +11,7 @@ import { EmailService } from '../notifications/email.service';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin', 'supervisor')
+@Roles('admin')
 export class UsersController {
   constructor(
     private prisma: PrismaService,
@@ -194,9 +194,9 @@ export class UsersController {
   // ── Saved signatures ───────────────────────────────────────────────────────
   // Every authenticated user manages their own signatures, regardless of role.
   @Get(':id/signatures')
-  @Roles('admin', 'supervisor', 'claims_officer', 'checker', 'fraud_officer', 'provider_admin', 'provider_user')
+  @Roles('admin', 'claims_officer', 'maker_checker', 'fraud_officer', 'finance', 'provider_admin', 'provider_user')
   async getSignatures(@Param('id') id: string, @Request() req: any) {
-    if (req.user?.userId !== id && req.user?.role !== 'admin' && req.user?.role !== 'supervisor') {
+    if (req.user?.userId !== id && req.user?.role !== 'admin') {
       throw new ForbiddenException('Access denied');
     }
     const user = await this.prisma.user.findUnique({
@@ -208,7 +208,7 @@ export class UsersController {
   }
 
   @Patch(':id/signatures')
-  @Roles('admin', 'supervisor', 'claims_officer', 'checker', 'fraud_officer', 'provider_admin', 'provider_user')
+  @Roles('admin', 'claims_officer', 'maker_checker', 'fraud_officer', 'finance', 'provider_admin', 'provider_user')
   async saveSignatures(
     @Param('id') id: string,
     @Body() body: { signatures: any[] },

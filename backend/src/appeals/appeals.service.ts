@@ -53,15 +53,17 @@ export class AppealsService {
       }).catch(() => {});
     }
 
-    // Notify supervisors
-    const supervisors = await this.prisma.user.findMany({
-      where: { role: { in: ['admin', 'supervisor'] }, isActive: true },
+    // Notify claims officers (they broker appeals under the new role layout).
+    // Fraud officers are also notified so they're ready to join the thread if
+    // the appeal concerns a fraud verdict.
+    const reviewers = await this.prisma.user.findMany({
+      where: { role: { in: ['admin', 'claims_officer', 'fraud_officer'] }, isActive: true },
       select: { email: true, name: true },
-      take: 3,
+      take: 6,
     });
-    for (const sup of supervisors) {
+    for (const r of reviewers) {
       this.emailService.sendEmail(
-        sup.email,
+        r.email,
         `New Appeal Filed — Claim ${claim.claimNumber}`,
         `An appeal has been filed for claim ${claim.claimNumber} by ${claim.provider?.name}. Please review in the Appeals queue.`,
       ).catch(() => {});

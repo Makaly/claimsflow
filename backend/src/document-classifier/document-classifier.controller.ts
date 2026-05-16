@@ -36,7 +36,7 @@ const templateStorage = diskStorage({
 
 @Controller('document-classifiers')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin', 'supervisor')
+@Roles('admin', 'maker_checker')
 export class DocumentClassifierController {
   constructor(private readonly service: DocumentClassifierService) {}
 

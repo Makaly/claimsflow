@@ -113,7 +113,7 @@ export class UnknownDocumentService {
     // Create in-app notification for all admins
     try {
       const admins = await this.prisma.user.findMany({
-        where: { role: { in: ['admin', 'supervisor'] } },
+        where: { role: { in: ['admin', 'maker_checker'] } },
         select: { id: true },
       });
       if (admins.length) {

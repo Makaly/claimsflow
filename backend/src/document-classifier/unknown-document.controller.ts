@@ -10,7 +10,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 
 @Controller('unknown-documents')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin', 'supervisor')
+@Roles('admin', 'maker_checker')
 export class UnknownDocumentController {
   constructor(private readonly service: UnknownDocumentService) {}
 

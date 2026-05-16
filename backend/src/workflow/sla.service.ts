@@ -57,16 +57,17 @@ export class SlaService {
           }).catch(() => {});
         }
 
-        // Also notify supervisor
-        const supervisors = await this.prisma.user.findMany({
-          where: { role: { in: ['admin', 'supervisor'] }, isActive: true },
+        // Also notify claims officers — they own SLA visibility under the
+        // new role layout (supervisor role removed in the maker-checker refactor).
+        const escalation = await this.prisma.user.findMany({
+          where: { role: { in: ['admin', 'claims_officer'] }, isActive: true },
           select: { email: true, name: true },
-          take: 3,
+          take: 5,
         });
-        for (const sup of supervisors) {
+        for (const e of escalation) {
           this.emailService.sendSlaBreachAlert({
-            email: sup.email,
-            name: sup.name,
+            email: e.email,
+            name: e.name,
             claimNumber: claim.claimNumber,
             stage: claim.workflowStage,
             hoursElapsed: Math.round(elapsed),

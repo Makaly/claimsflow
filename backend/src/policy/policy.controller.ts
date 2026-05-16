@@ -23,21 +23,21 @@ export class PolicyController {
 
   @Post('plans')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'supervisor')
+  @Roles('admin', 'claims_officer')
   createPlan(@Body() body: any) {
     return this.policyService.createPlan(body);
   }
 
   @Patch('plans/:id')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'supervisor')
+  @Roles('admin', 'claims_officer')
   updatePlan(@Param('id') id: string, @Body() body: any) {
     return this.policyService.updatePlan(id, body);
   }
 
   @Patch('plans/:id/deactivate')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'supervisor')
+  @Roles('admin', 'claims_officer')
   deactivatePlan(@Param('id') id: string) {
     return this.policyService.deactivatePlan(id);
   }
@@ -63,14 +63,14 @@ export class PolicyController {
 
   @Post('members')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'supervisor')
+  @Roles('admin', 'claims_officer')
   createMember(@Body() body: any) {
     return this.policyService.createMember(body);
   }
 
   @Patch('members/:id')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'supervisor')
+  @Roles('admin', 'claims_officer')
   updateMember(@Param('id') id: string, @Body() body: any) {
     return this.policyService.updateMember(id, body);
   }

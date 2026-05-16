@@ -18,7 +18,8 @@ export class RegisterDto {
   name: string;
 
   // Public registration cannot self-assign privileged roles.
-  // admin / supervisor / claims_officer are created only by existing admins.
+  // admin / claims_officer / maker_checker / fraud_officer / finance are
+  // created only by existing admins.
   @IsString()
   @IsOptional()
   @IsIn(['provider_admin', 'provider_user'])

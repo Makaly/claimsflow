@@ -11,7 +11,7 @@ export class AppealsController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles('provider_admin', 'provider_user', 'admin', 'supervisor')
+  @Roles('provider_admin', 'provider_user', 'admin', 'claims_officer')
   fileAppeal(
     @Body() body: { claimId: string; reason: string; additionalNotes?: string },
     @Request() req,
@@ -21,7 +21,7 @@ export class AppealsController {
 
   @Get()
   @UseGuards(RolesGuard)
-  @Roles('admin', 'supervisor', 'claims_officer', 'checker', 'provider_admin', 'provider_user')
+  @Roles('admin', 'claims_officer', 'maker_checker', 'fraud_officer', 'provider_admin', 'provider_user')
   getAppeals(
     @Request() req,
     @Query('status') status?: string,
@@ -41,7 +41,7 @@ export class AppealsController {
 
   @Patch(':id/adjudicate')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'supervisor')
+  @Roles('admin', 'claims_officer')
   adjudicate(
     @Param('id') id: string,
     @Body() body: { outcome: 'upheld' | 'dismissed'; outcomeNotes?: string },
@@ -52,7 +52,7 @@ export class AppealsController {
 
   @Patch(':id/status')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'supervisor')
+  @Roles('admin', 'claims_officer')
   updateStatus(
     @Param('id') id: string,
     @Body() body: { status: 'under_review' | 'pending' },

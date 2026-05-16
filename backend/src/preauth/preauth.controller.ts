@@ -11,14 +11,14 @@ export class PreAuthController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles('provider_admin', 'provider_user', 'admin', 'supervisor', 'claims_officer')
+  @Roles('provider_admin', 'provider_user', 'admin', 'claims_officer')
   create(@Body() body: any, @Request() req: any) {
     return this.preAuthService.create({ ...body, requestedBy: req.user.userId });
   }
 
   @Get()
   @UseGuards(RolesGuard)
-  @Roles('admin', 'supervisor', 'claims_officer', 'checker', 'provider_admin', 'provider_user')
+  @Roles('admin', 'claims_officer', 'maker_checker', 'provider_admin', 'provider_user')
   getAll(
     @Request() req: any,
     @Query('status') status?: string,
@@ -38,14 +38,14 @@ export class PreAuthController {
 
   @Patch(':id/review')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'supervisor')
+  @Roles('admin', 'claims_officer')
   review(@Param('id') id: string, @Body() body: any, @Request() req: any) {
     return this.preAuthService.review(id, req.user.userId, body);
   }
 
   @Patch(':id/link-claim')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'supervisor', 'claims_officer')
+  @Roles('admin', 'claims_officer')
   linkClaim(@Param('id') id: string, @Body() body: { claimId: string }) {
     return this.preAuthService.linkToClaim(id, body.claimId);
   }
