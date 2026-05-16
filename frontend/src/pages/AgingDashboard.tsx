@@ -10,10 +10,11 @@ import api from '@/services/api'
 import { formatDate } from '@/lib/utils'
 
 const STAGE_LABELS: Record<string, string> = {
-  initial_review: 'Initial Review',
-  maker_review: 'Maker Review',
-  checker_review: 'Checker Review',
-  final_approval: 'Final Approval',
+  initial_review:        'Initial Review',
+  maker_checker_review:  'Maker-Checker',
+  claims_officer_review: 'Claims Officer',
+  fraud_review:          'Fraud Review',
+  payment_pending:       'Payment Pending',
 }
 
 const BUCKET_COLORS = ['#22c55e', '#f59e0b', '#f97316', '#ef4444']
@@ -66,9 +67,9 @@ export default function AgingDashboard() {
             <SelectContent>
               <SelectItem value="all">All Stages</SelectItem>
               <SelectItem value="initial_review">Initial Review</SelectItem>
-              <SelectItem value="maker_review">Maker Review</SelectItem>
-              <SelectItem value="checker_review">Checker Review</SelectItem>
-              <SelectItem value="final_approval">Final Approval</SelectItem>
+              <SelectItem value="maker_checker_review">Maker-Checker Review</SelectItem>
+              <SelectItem value="claims_officer_review">Claims Officer Review</SelectItem>
+              <SelectItem value="fraud_review">Fraud Review</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" size="sm" onClick={load} disabled={loading}>

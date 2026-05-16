@@ -119,7 +119,7 @@ export default function CheckerQueue() {
       try {
         const token = localStorage.getItem('token')
         const headers = { Authorization: `Bearer ${token}` }
-        const res = await fetch('/api/workflow/claims/checker_review', { headers })
+        const res = await fetch('/api/workflow/claims/maker_checker_review', { headers })
         if (!res.ok) { setClaims([]); return }
         const data = await res.json()
         const list: any[] = Array.isArray(data) ? data : Array.isArray(data?.claims) ? data.claims : []

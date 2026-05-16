@@ -51,9 +51,9 @@ interface ServerStats {
   totalAmount: number
   // workflow
   initial_review?: number
-  maker_review?: number
-  checker_review?: number
-  final_approval?: number
+  maker_checker_review?: number
+  claims_officer_review?: number
+  fraud_review?: number
 }
 
 const AUTO_REFRESH_SECS = 60
@@ -96,10 +96,10 @@ function CICDashboard() {
       }
       if (wRes.ok) {
         const w = await wRes.json()
-        s.initial_review = w.initial_review
-        s.maker_review = w.maker_review
-        s.checker_review = w.checker_review
-        s.final_approval = w.final_approval
+        s.initial_review        = w.initialReview        ?? w.initial_review        ?? 0
+        s.maker_checker_review  = w.makerCheckerReview   ?? w.maker_checker_review  ?? 0
+        s.claims_officer_review = w.claimsOfficerReview  ?? w.claims_officer_review ?? 0
+        s.fraud_review          = w.fraudReview          ?? w.fraud_review          ?? 0
       }
       if (cRes.ok || wRes.ok) {
         setServerStats(s)
@@ -133,9 +133,9 @@ function CICDashboard() {
 
   // ── Workflow stage counts ─────────────────────────────────────────────────
   const initialReview  = claims.filter(c => c.workflowStage === 'initial_review').length
-  const makerReview    = claims.filter(c => c.workflowStage === 'maker_review').length
-  const checkerReview  = claims.filter(c => c.workflowStage === 'checker_review').length
-  const finalApproval  = claims.filter(c => c.workflowStage === 'final_approval').length
+  const makerCheckerReview  = claims.filter(c => c.workflowStage === 'maker_checker_review').length
+  const claimsOfficerReview = claims.filter(c => c.workflowStage === 'claims_officer_review').length
+  const fraudReview         = claims.filter(c => c.workflowStage === 'fraud_review').length
   const completed      = claims.filter(c => c.workflowStage === 'completed').length
 
   // ── Batch stats ───────────────────────────────────────────────────────────
@@ -646,11 +646,11 @@ function CICDashboard() {
           <CardContent>
             <div className="space-y-4">
               {[
-                { stage: 'Initial Review', count: initialReview,  color: 'bg-blue-500'   },
-                { stage: 'Maker Review',   count: makerReview,    color: 'bg-violet-500' },
-                { stage: 'Checker Review', count: checkerReview,  color: 'bg-amber-500'  },
-                { stage: 'Final Approval', count: finalApproval,  color: 'bg-orange-500' },
-                { stage: 'Completed',      count: completed,      color: 'bg-emerald-500'},
+                { stage: 'Initial Review',   count: initialReview,        color: 'bg-blue-500'   },
+                { stage: 'Maker-Checker',    count: makerCheckerReview,   color: 'bg-violet-500' },
+                { stage: 'Claims Officer',   count: claimsOfficerReview,  color: 'bg-amber-500'  },
+                { stage: 'Fraud Review',     count: fraudReview,          color: 'bg-red-500'    },
+                { stage: 'Completed',        count: completed,            color: 'bg-emerald-500'},
               ].map((item) => (
                 <div key={item.stage} className="flex items-center gap-3">
                   <div className="w-32 text-sm font-medium">{item.stage}</div>
