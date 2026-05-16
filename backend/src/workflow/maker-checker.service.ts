@@ -36,7 +36,7 @@ export class MakerCheckerService {
       where: { id: claimId },
       data: {
         assignedTo: makerId,
-        workflowStage: 'maker_review',
+        workflowStage: 'maker_checker_review',
         status: 'under_review',
       },
     });
@@ -57,7 +57,7 @@ export class MakerCheckerService {
       entity: 'claim',
       entityId: claimId,
       oldValue: { assignedTo: claim.assignedTo, workflowStage: claim.workflowStage, status: claim.status },
-      newValue: { assignedTo: makerId, workflowStage: 'maker_review', status: 'under_review' },
+      newValue: { assignedTo: makerId, workflowStage: 'maker_checker_review', status: 'under_review' },
       metadata: { claimNumber: claim.claimNumber },
     });
 
@@ -77,7 +77,7 @@ export class MakerCheckerService {
     });
 
     if (!claim) throw new BadRequestException('Claim not found');
-    if (claim.workflowStage !== 'maker_review') throw new BadRequestException('Claim is not in maker review stage');
+    if (claim.workflowStage !== 'maker_checker_review') throw new BadRequestException('Claim is not in maker-checker review stage');
     if (claim.assignedTo !== makerId) throw new ForbiddenException('You are not assigned to this claim');
 
     await this.prisma.claimApproval.create({
@@ -94,7 +94,7 @@ export class MakerCheckerService {
     const updatedClaim = await this.prisma.claim.update({
       where: { id: claimId },
       data: {
-        workflowStage: 'checker_review',
+        workflowStage: 'maker_checker_review',
         assignedTo: null,
         reviewedAt: new Date(),
       },
@@ -116,7 +116,7 @@ export class MakerCheckerService {
       entity: 'claim',
       entityId: claimId,
       oldValue: { workflowStage: claim.workflowStage, assignedTo: claim.assignedTo },
-      newValue: { workflowStage: 'checker_review', assignedTo: null },
+      newValue: { workflowStage: 'maker_checker_review', assignedTo: null },
       metadata: { claimNumber: claim.claimNumber, decision: 'approved', comments },
     });
 
@@ -146,7 +146,7 @@ export class MakerCheckerService {
     });
 
     if (!claim) throw new BadRequestException('Claim not found');
-    if (claim.workflowStage !== 'maker_review') throw new BadRequestException('Claim is not in maker review stage');
+    if (claim.workflowStage !== 'maker_checker_review') throw new BadRequestException('Claim is not in maker-checker review stage');
     if (claim.assignedTo !== makerId) throw new ForbiddenException('You are not assigned to this claim');
 
     await this.prisma.claimApproval.create({
@@ -215,7 +215,7 @@ export class MakerCheckerService {
   async assignToChecker(claimId: string, checkerId: string, assignedBy: string) {
     const claim = await this.prisma.claim.findUnique({ where: { id: claimId } });
     if (!claim) throw new BadRequestException('Claim not found');
-    if (claim.workflowStage !== 'checker_review') throw new BadRequestException('Claim is not in checker review stage');
+    if (claim.workflowStage !== 'maker_checker_review') throw new BadRequestException('Claim is not in maker-checker review stage');
 
     const updatedClaim = await this.prisma.claim.update({
       where: { id: claimId },
@@ -248,28 +248,31 @@ export class MakerCheckerService {
     });
 
     if (!claim) throw new BadRequestException('Claim not found');
-    if (claim.workflowStage !== 'checker_review') throw new BadRequestException('Claim is not in checker review stage');
-    if (claim.assignedTo !== null && claim.assignedTo !== checkerId) throw new ForbiddenException('You are not assigned to this claim');
+    if (claim.workflowStage !== 'maker_checker_review') {
+      throw new BadRequestException('Claim is not in maker-checker review stage');
+    }
+    if (claim.assignedTo !== null && claim.assignedTo !== checkerId) {
+      throw new ForbiddenException('You are not assigned to this claim');
+    }
 
-    // Record checker approval
     await this.prisma.claimApproval.create({
       data: {
         claimId,
         level: 'maker_checker',
-        approvalStage: 'second_approval',
+        approvalStage: 'maker_checker_approval',
         approvedBy: checkerId,
         decision: 'approved',
         comments,
       },
     });
 
-    // Mark claim as approved
+    // Route to claims_officer_review — final approval gate is the claims officer.
     const updatedClaim = await this.prisma.claim.update({
       where: { id: claimId },
       data: {
-        workflowStage: 'final_approval',
-        status: 'approved',
-        approvedAt: new Date(),
+        workflowStage: 'claims_officer_review',
+        status: 'under_review',
+        reviewedAt: new Date(),
         assignedTo: null,
       },
     });
@@ -278,24 +281,97 @@ export class MakerCheckerService {
       data: {
         claimId,
         fromStatus: claim.status,
-        toStatus: 'approved',
+        toStatus: 'under_review',
         changedBy: checkerId,
-        reason: 'Approved by checker',
+        reason: 'Maker-checker verified — awaiting claims officer approval',
       },
     });
 
     await this.audit.record({
       actor: { userId: checkerId },
-      action: 'checker_approved',
+      action: 'maker_checker_approved',
       entity: 'claim',
       entityId: claimId,
       oldValue: { status: claim.status, workflowStage: claim.workflowStage },
-      newValue: { status: 'approved', workflowStage: 'final_approval' },
+      newValue: { status: 'under_review', workflowStage: 'claims_officer_review' },
       metadata: { claimNumber: claim.claimNumber, decision: 'approved', comments },
     });
 
-    // ─── ML LABEL: auto-label approved claim as legitimate ────────
-    // Non-blocking: a labelling failure must never abort the approval.
+    const notes = comments?.trim() ? `\n\nNotes:\n${comments.trim()}` : '';
+    const officerIds = await this.findClaimsOfficers();
+    await this.emailUsers(
+      officerIds,
+      `Invoice ready for final approval: ${claim.claimNumber}`,
+      `Claim ${claim.claimNumber} (${claim.provider?.name ?? 'Unknown provider'}) has passed maker-checker verification and is awaiting your final approval in the Claims Officer Queue.${notes}`,
+    );
+    await this.emailUser(
+      checkerId,
+      `You verified claim ${claim.claimNumber}`,
+      `You have approved claim ${claim.claimNumber} at the maker-checker stage. It has been forwarded to the claims officer for final approval.${notes}`,
+    );
+
+    return updatedClaim;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // CLAIMS OFFICER operations (final approval gate)
+  // ─────────────────────────────────────────────────────────────
+
+  async claimsOfficerApprove(claimId: string, officerId: string, comments?: string) {
+    const claim = await this.prisma.claim.findUnique({
+      where: { id: claimId },
+      include: { provider: true, documents: true },
+    });
+
+    if (!claim) throw new BadRequestException('Claim not found');
+    if (claim.workflowStage !== 'claims_officer_review') {
+      throw new BadRequestException('Claim is not in claims officer review stage');
+    }
+
+    await this.prisma.claimApproval.create({
+      data: {
+        claimId,
+        level: 'claims_officer',
+        approvalStage: 'final_approval',
+        approvedBy: officerId,
+        decision: 'approved',
+        comments,
+      },
+    });
+
+    const updatedClaim = await this.prisma.claim.update({
+      where: { id: claimId },
+      data: {
+        workflowStage: 'payment_pending',
+        status: 'approved',
+        approvedAt: new Date(),
+        assignedTo: null,
+        claimsOfficerApprovedAt: new Date(),
+        claimsOfficerApprovedBy: officerId,
+      },
+    });
+
+    await this.prisma.claimStatusHistory.create({
+      data: {
+        claimId,
+        fromStatus: claim.status,
+        toStatus: 'approved',
+        changedBy: officerId,
+        reason: 'Approved by claims officer — proceeding to payment',
+      },
+    });
+
+    await this.audit.record({
+      actor: { userId: officerId },
+      action: 'claims_officer_approved',
+      entity: 'claim',
+      entityId: claimId,
+      oldValue: { status: claim.status, workflowStage: claim.workflowStage },
+      newValue: { status: 'approved', workflowStage: 'payment_pending' },
+      metadata: { claimNumber: claim.claimNumber, decision: 'approved', comments },
+    });
+
+    // ─── ML label ─────────────────────────────────────────────────────────
     await this.prisma.claimLabel
       .upsert({
         where: { claimId },
@@ -303,67 +379,334 @@ export class MakerCheckerService {
           claimId,
           label: 'legitimate',
           source: 'auto_approve',
-          labelledBy: checkerId,
-          confidence: 0.7, // auto-labels less certain than manual reviews
+          labelledBy: officerId,
+          confidence: 0.85,
           featuresSnapshot: {
             invoiceAmount: claim.invoiceAmount,
             ocrConfidence: claim.ocrConfidence,
             fraudSignalCount: Array.isArray(claim.fraudSignals)
-              ? (claim.fraudSignals as any[]).length
-              : 0,
+              ? (claim.fraudSignals as any[]).length : 0,
           },
         },
-        update: {
-          label: 'legitimate',
-          source: 'auto_approve',
-          labelledBy: checkerId,
-        },
+        update: { label: 'legitimate', source: 'auto_approve', labelledBy: officerId },
       })
       .catch((err: any) =>
-        this.logger.warn(`Failed to label approved claim ${claimId}: ${err?.message}`),
+        this.logger.warn(`ML label failed for claim ${claimId}: ${err?.message}`),
       );
 
-    // ─── POST-APPROVAL PIPELINE (non-blocking) ───────────────────
-
-    // 1. Auto-stamp approved PDFs with "APPROVED" watermark
+    // ─── Post-approval pipeline ────────────────────────────────────────────
     this.stampApprovedDocuments(claim.documents, claim.claimNumber).catch((err) =>
       this.logger.warn(`Auto-stamp failed for claim ${claimId}: ${err?.message}`),
     );
-
-    // 2. Upload all documents to EDMS
     this.edmsService.uploadClaimDocuments(claimId).catch((err) =>
       this.logger.warn(`EDMS upload failed for claim ${claimId}: ${err?.message}`),
     );
-
-    // 3. Transfer to eOxegen / Smart system
     this.eoxegenService.transferApprovedClaim(claimId).catch((err) =>
       this.logger.warn(`eOxegen transfer failed for claim ${claimId}: ${err?.message}`),
     );
 
-    // ─────────────────────────────────────────────────────────────
-
-    // ─── Notifications: provider + checker (actor) + original maker ──
-    const checkerNotes = comments?.trim()
-      ? `\n\nChecker's notes:\n${comments.trim()}`
-      : '';
+    const notes = comments?.trim() ? `\n\nNotes:\n${comments.trim()}` : '';
     await this.notificationsService.sendEmail({
       recipient: claim.provider.email,
-      subject: `Claim Approved: ${claim.claimNumber}`,
-      message: `Your claim ${claim.claimNumber} has been approved and will be processed for payment.${checkerNotes}`,
+      subject: `Invoice Approved — Payment Processing: ${claim.claimNumber}`,
+      message: `Your invoice ${claim.claimNumber} has been approved by the claims officer and is now queued for payment.${notes}`,
     });
     await this.emailUser(
-      checkerId,
-      `You approved claim ${claim.claimNumber}`,
-      `You have given final approval to claim ${claim.claimNumber} (${claim.provider?.name ?? 'Unknown provider'}). The provider has been notified and the claim has moved into the payment pipeline.${checkerNotes}`,
+      officerId,
+      `You approved invoice ${claim.claimNumber}`,
+      `You approved invoice ${claim.claimNumber} (${claim.provider?.name ?? 'Unknown provider'}). The provider has been notified and it is now in the payment queue.${notes}`,
     );
-    const originalMakerId = await this.findOriginalMaker(claimId);
-    if (originalMakerId) {
-      await this.emailUser(
-        originalMakerId,
-        `Claim ${claim.claimNumber} has been approved`,
-        `A claim you previously reviewed (${claim.claimNumber} — ${claim.provider?.name ?? 'Unknown provider'}) has been given final approval by the checker.${checkerNotes}`,
-      );
+
+    return updatedClaim;
+  }
+
+  async claimsOfficerReject(claimId: string, officerId: string, reason: string) {
+    const claim = await this.prisma.claim.findUnique({
+      where: { id: claimId },
+      include: { provider: true },
+    });
+
+    if (!claim) throw new BadRequestException('Claim not found');
+    if (claim.workflowStage !== 'claims_officer_review') {
+      throw new BadRequestException('Claim is not in claims officer review stage');
     }
+
+    await this.prisma.claimApproval.create({
+      data: {
+        claimId,
+        level: 'claims_officer',
+        approvalStage: 'final_approval',
+        approvedBy: officerId,
+        decision: 'rejected',
+        comments: reason,
+      },
+    });
+
+    const updatedClaim = await this.prisma.claim.update({
+      where: { id: claimId },
+      data: {
+        status: 'rejected',
+        isRejected: true,
+        rejectionReason: reason,
+        rejectedBy: officerId,
+        rejectedAt: new Date(),
+        workflowStage: 'completed',
+        assignedTo: null,
+      },
+    });
+
+    await this.prisma.claimStatusHistory.create({
+      data: {
+        claimId,
+        fromStatus: claim.status,
+        toStatus: 'rejected',
+        changedBy: officerId,
+        reason,
+      },
+    });
+
+    await this.audit.record({
+      actor: { userId: officerId },
+      action: 'claims_officer_rejected',
+      entity: 'claim',
+      entityId: claimId,
+      oldValue: { status: claim.status, workflowStage: claim.workflowStage },
+      newValue: { status: 'rejected', workflowStage: 'completed', rejectionReason: reason },
+      metadata: { claimNumber: claim.claimNumber, decision: 'rejected', reason },
+    });
+
+    await this.prisma.claimLabel
+      .upsert({
+        where: { claimId },
+        create: {
+          claimId,
+          label: 'suspicious',
+          source: 'auto_reject',
+          labelledBy: officerId,
+          confidence: 0.75,
+          notes: reason,
+          featuresSnapshot: { invoiceAmount: claim.invoiceAmount },
+        },
+        update: { label: 'suspicious', source: 'auto_reject', labelledBy: officerId, notes: reason },
+      })
+      .catch((err: any) =>
+        this.logger.warn(`ML label failed for rejected claim ${claimId}: ${err?.message}`),
+      );
+
+    await this.notificationsService.sendEmail({
+      recipient: claim.provider.email,
+      subject: `Invoice Rejected: ${claim.claimNumber}`,
+      message: `Your invoice ${claim.claimNumber} has been rejected by the claims officer.\n\nReason: ${reason}\n\nYou may file an appeal within 30 days if you believe this decision is incorrect.`,
+    });
+    await this.emailUser(
+      officerId,
+      `You rejected invoice ${claim.claimNumber}`,
+      `You rejected invoice ${claim.claimNumber} (${claim.provider?.name ?? 'Unknown provider'}). The provider has been notified.\n\nReason: ${reason}`,
+    );
+
+    return updatedClaim;
+  }
+
+  async claimsOfficerReturnToMakerChecker(claimId: string, officerId: string, reason: string) {
+    const claim = await this.prisma.claim.findUnique({
+      where: { id: claimId },
+      include: { provider: true },
+    });
+    if (!claim) throw new BadRequestException('Claim not found');
+    if (claim.workflowStage !== 'claims_officer_review') {
+      throw new BadRequestException('Claim is not in claims officer review stage');
+    }
+
+    await this.prisma.claimApproval.create({
+      data: {
+        claimId,
+        level: 'claims_officer',
+        approvalStage: 'final_approval',
+        approvedBy: officerId,
+        decision: 'returned',
+        comments: reason,
+      },
+    });
+
+    const updatedClaim = await this.prisma.claim.update({
+      where: { id: claimId },
+      data: {
+        workflowStage: 'maker_checker_review',
+        status: 'under_review',
+        assignedTo: null,
+      },
+    });
+
+    await this.prisma.claimStatusHistory.create({
+      data: {
+        claimId,
+        fromStatus: claim.status,
+        toStatus: 'under_review',
+        changedBy: officerId,
+        reason: `Returned to maker-checker: ${reason}`,
+      },
+    });
+
+    await this.audit.record({
+      actor: { userId: officerId },
+      action: 'returned_to_maker_checker',
+      entity: 'claim',
+      entityId: claimId,
+      oldValue: { workflowStage: claim.workflowStage },
+      newValue: { workflowStage: 'maker_checker_review' },
+      metadata: { claimNumber: claim.claimNumber, reason },
+    });
+
+    const makerCheckerIds = await this.findCheckers();
+    await this.emailUsers(
+      makerCheckerIds,
+      `Invoice returned for re-verification: ${claim.claimNumber}`,
+      `Invoice ${claim.claimNumber} has been returned by the claims officer for additional verification.\n\nReason: ${reason}`,
+    );
+    await this.emailUser(
+      officerId,
+      `You returned invoice ${claim.claimNumber} to maker-checker`,
+      `You returned invoice ${claim.claimNumber} (${claim.provider?.name ?? 'Unknown provider'}) to the maker-checker team.\n\nReason: ${reason}`,
+    );
+
+    return updatedClaim;
+  }
+
+  async claimsOfficerReturnToProvider(
+    claimId: string,
+    officerId: string,
+    reason: string,
+    missingDocuments: string[] = [],
+  ) {
+    const claim = await this.prisma.claim.findUnique({
+      where: { id: claimId },
+      include: { provider: true },
+    });
+    if (!claim) throw new BadRequestException('Claim not found');
+
+    await this.prisma.claimApproval.create({
+      data: {
+        claimId,
+        level: 'claims_officer',
+        approvalStage: 'final_approval',
+        approvedBy: officerId,
+        decision: 'returned',
+        comments: `Returned to provider: ${reason}`,
+      },
+    });
+
+    const updatedClaim = await this.prisma.claim.update({
+      where: { id: claimId },
+      data: {
+        status: 'incomplete',
+        workflowStage: 'initial_review',
+        assignedTo: null,
+        isComplete: false,
+        missingDocuments,
+        rejectionReason: reason,
+      },
+    });
+
+    await this.prisma.claimStatusHistory.create({
+      data: {
+        claimId,
+        fromStatus: claim.status,
+        toStatus: 'incomplete',
+        changedBy: officerId,
+        reason: `Returned to provider by claims officer: ${reason}`,
+      },
+    });
+
+    await this.audit.record({
+      actor: { userId: officerId },
+      action: 'claims_officer_returned_to_provider',
+      entity: 'claim',
+      entityId: claimId,
+      oldValue: { status: claim.status, workflowStage: claim.workflowStage },
+      newValue: { status: 'incomplete', workflowStage: 'initial_review', missingDocuments },
+      metadata: { claimNumber: claim.claimNumber, reason },
+    });
+
+    const missingList = missingDocuments.length
+      ? `\n\nItems required:\n${missingDocuments.map((d) => `• ${d}`).join('\n')}`
+      : '';
+
+    await this.notificationsService.sendEmail({
+      recipient: claim.provider.email,
+      subject: `Invoice Returned — Action Required: ${claim.claimNumber}`,
+      message: `Your invoice ${claim.claimNumber} has been returned by the claims officer and requires additional information.\n\nReason: ${reason}${missingList}\n\nPlease log in to the provider portal to resubmit.`,
+    });
+    await this.emailUser(
+      officerId,
+      `You returned invoice ${claim.claimNumber} to provider`,
+      `You returned invoice ${claim.claimNumber} (${claim.provider?.name ?? 'Unknown provider'}) to the provider for additional information.\n\nReason: ${reason}${missingList}`,
+    );
+
+    return updatedClaim;
+  }
+
+  async claimsOfficerEscalateToFraud(claimId: string, officerId: string, reason: string) {
+    const claim = await this.prisma.claim.findUnique({
+      where: { id: claimId },
+      include: { provider: true },
+    });
+    if (!claim) throw new BadRequestException('Claim not found');
+    if (claim.workflowStage !== 'claims_officer_review') {
+      throw new BadRequestException('Claim is not in claims officer review stage');
+    }
+
+    const existingSignals = (claim.fraudSignals as any[]) || [];
+    const signal = {
+      level: 'critical',
+      title: 'Escalated by Claims Officer',
+      detail: `Escalated to fraud team by claims officer: ${reason.trim()}`,
+      detectedAt: new Date().toISOString(),
+    };
+
+    const updatedClaim = await this.prisma.claim.update({
+      where: { id: claimId },
+      data: {
+        status: 'fraud_hold',
+        workflowStage: 'fraud_review',
+        fraudSignals: [signal, ...existingSignals],
+        assignedTo: null,
+      },
+    });
+
+    await this.prisma.claimStatusHistory.create({
+      data: {
+        claimId,
+        fromStatus: claim.status,
+        toStatus: 'fraud_hold',
+        changedBy: officerId,
+        reason: `Escalated to fraud: ${reason}`,
+      },
+    });
+
+    await this.audit.record({
+      actor: { userId: officerId },
+      action: 'claims_officer_escalated_to_fraud',
+      entity: 'claim',
+      entityId: claimId,
+      oldValue: { status: claim.status, workflowStage: claim.workflowStage },
+      newValue: { status: 'fraud_hold', workflowStage: 'fraud_review' },
+      metadata: { claimNumber: claim.claimNumber, reason },
+    });
+
+    const fraudOfficers = await this.prisma.user.findMany({
+      where: { isActive: true, role: 'fraud_officer' },
+      select: { id: true },
+    });
+    await this.emailUsers(
+      fraudOfficers.map((u) => u.id),
+      `Fraud escalation from claims officer: ${claim.claimNumber}`,
+      `Invoice ${claim.claimNumber} (${claim.provider?.name ?? 'Unknown provider'}) has been escalated to the fraud team by a claims officer.\n\nReason: ${reason}\n\nPlease review in the Fraud Queue.`,
+    );
+    await this.emailUser(
+      officerId,
+      `You escalated invoice ${claim.claimNumber} to fraud`,
+      `Invoice ${claim.claimNumber} has been escalated to the fraud team. They will review and notify you of their verdict.`,
+    );
 
     return updatedClaim;
   }
@@ -375,7 +718,7 @@ export class MakerCheckerService {
     });
 
     if (!claim) throw new BadRequestException('Claim not found');
-    if (claim.workflowStage !== 'checker_review') throw new BadRequestException('Claim is not in checker review stage');
+    if (claim.workflowStage !== 'maker_checker_review') throw new BadRequestException('Claim is not in maker-checker review stage');
     if (claim.assignedTo !== null && claim.assignedTo !== checkerId) throw new ForbiddenException('You are not assigned to this claim');
 
     await this.prisma.claimApproval.create({
@@ -575,7 +918,7 @@ export class MakerCheckerService {
     const updatedClaim = await this.prisma.claim.update({
       where: { id: claimId },
       data: {
-        workflowStage: 'maker_review',
+        workflowStage: 'maker_checker_review',
         status: 'under_review',
         assignedTo: null,
       },
@@ -597,7 +940,7 @@ export class MakerCheckerService {
       entity: 'claim',
       entityId: claimId,
       oldValue: { workflowStage: claim.workflowStage, assignedTo: claim.assignedTo },
-      newValue: { workflowStage: 'maker_review', assignedTo: null },
+      newValue: { workflowStage: 'maker_checker_review', assignedTo: null },
       metadata: { claimNumber: claim.claimNumber, reason },
     });
 
@@ -740,7 +1083,7 @@ export class MakerCheckerService {
         where: { id: claim.id },
         data: {
           assignedTo: maker.id,
-          workflowStage: 'maker_review',
+          workflowStage: 'maker_checker_review',
           status: 'under_review',
         },
       });
@@ -761,7 +1104,7 @@ export class MakerCheckerService {
         entity: 'claim',
         entityId: claim.id,
         oldValue: { status: claim.status, workflowStage: claim.workflowStage, assignedTo: null },
-        newValue: { status: 'under_review', workflowStage: 'maker_review', assignedTo: maker.id },
+        newValue: { status: 'under_review', workflowStage: 'maker_checker_review', assignedTo: maker.id },
         metadata: { claimNumber: claim.claimNumber, makerName: maker.name, reason: 'reroute sweep' },
       });
 

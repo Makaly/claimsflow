@@ -936,11 +936,26 @@ export class ClaimsService {
     const updated = await this.prisma.claim.update({
       where: { id },
       data: {
-        status: 'submitted',
-        workflowStage: 'initial_review',
+        status: 'under_review',
+        workflowStage: 'claims_officer_review',
+        fraudVerdict: 'cleared',
+        fraudVerdictAt: new Date(),
+        fraudVerdictBy: actor?.userId || null,
+        fraudVerdictNotes: notes || null,
         internalNotes: notes
           ? `[Fraud cleared by ${actor?.email || 'fraud team'}]: ${notes}\n${claim.internalNotes || ''}`
           : claim.internalNotes,
+        assignedTo: null,
+      },
+    });
+
+    await this.prisma.claimStatusHistory.create({
+      data: {
+        claimId: id,
+        fromStatus: 'fraud_hold',
+        toStatus: 'under_review',
+        changedBy: actor?.userId || null,
+        reason: `Fraud cleared — forwarded to claims officer for final decision. ${notes || ''}`.trim(),
       },
     });
 
@@ -950,17 +965,11 @@ export class ClaimsService {
       entity: 'claim',
       entityId: id,
       oldValue: { status: 'fraud_hold' },
-      newValue: { status: 'submitted', notes },
+      newValue: { status: 'under_review', workflowStage: 'claims_officer_review', fraudVerdict: 'cleared' },
       metadata: { source: 'claims.service.clearFraud' },
     });
 
-    // Route back into normal maker queue and trigger the delayed file dump.
-    try {
-      await this.autoAssignToMaker(id, actor);
-    } catch { /* best effort */ }
-
-    // Now that the hold is lifted, write the files to the structured folder.
-    // Fire-and-forget — any failure is logged but must not fail the API response.
+    // Dump any held documents now that the fraud hold is lifted.
     this.documentsService
       .dumpHeldClaimDocuments(id)
       .catch((err) => {
@@ -971,23 +980,38 @@ export class ClaimsService {
   }
 
   /**
-   * Fraud team confirms the claim IS fraudulent — permanently reject it.
-   * No files are written, no approvals allowed, no resubmission flow.
+   * Fraud team confirms the claim IS fraudulent.
+   * Routes to claims_officer_review so the claims officer can relay the
+   * fraud verdict to the provider and handle any resulting appeal.
    */
   async confirmFraud(id: string, notes: string, actor?: AuditActor) {
-    const claim = await this.prisma.claim.findUnique({ where: { id } });
+    const claim = await this.prisma.claim.findUnique({
+      where: { id },
+      include: { provider: true },
+    });
     if (!claim) throw new NotFoundException('Claim not found');
 
     const updated = await this.prisma.claim.update({
       where: { id },
       data: {
         status: 'fraud_confirmed',
-        workflowStage: 'completed',
-        isRejected: true,
-        rejectedAt: new Date(),
-        rejectedBy: actor?.userId || null,
-        rejectionReason: notes || 'Confirmed fraud — claim permanently declined by fraud team',
+        workflowStage: 'claims_officer_review',
+        fraudVerdict: 'confirmed',
+        fraudVerdictAt: new Date(),
+        fraudVerdictBy: actor?.userId || null,
+        fraudVerdictNotes: notes || null,
         internalNotes: `[FRAUD CONFIRMED by ${actor?.email || 'fraud team'}]: ${notes || ''}\n${claim.internalNotes || ''}`,
+        assignedTo: null,
+      },
+    });
+
+    await this.prisma.claimStatusHistory.create({
+      data: {
+        claimId: id,
+        fromStatus: claim.status,
+        toStatus: 'fraud_confirmed',
+        changedBy: actor?.userId || null,
+        reason: `Fraud confirmed by fraud officer — awaiting claims officer to notify provider. ${notes || ''}`.trim(),
       },
     });
 
@@ -997,7 +1021,7 @@ export class ClaimsService {
       entity: 'claim',
       entityId: id,
       oldValue: { status: claim.status },
-      newValue: { status: 'fraud_confirmed', notes },
+      newValue: { status: 'fraud_confirmed', workflowStage: 'claims_officer_review', fraudVerdict: 'confirmed' },
       metadata: { source: 'claims.service.confirmFraud' },
     });
 

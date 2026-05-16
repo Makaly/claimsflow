@@ -168,6 +168,73 @@ export class WorkflowController {
     );
   }
 
+  // Claims Officer Operations (final approval gate)
+  @Post('claims-officer/approve')
+  @Roles('admin', 'claims_officer')
+  async claimsOfficerApprove(
+    @Body() body: { claimId: string; comments?: string },
+    @Request() req,
+  ) {
+    return this.makerCheckerService.claimsOfficerApprove(
+      body.claimId,
+      req.user.userId,
+      body.comments,
+    );
+  }
+
+  @Post('claims-officer/reject')
+  @Roles('admin', 'claims_officer')
+  async claimsOfficerReject(
+    @Body() body: { claimId: string; reason: string },
+    @Request() req,
+  ) {
+    return this.makerCheckerService.claimsOfficerReject(
+      body.claimId,
+      req.user.userId,
+      body.reason,
+    );
+  }
+
+  @Post('claims-officer/return-to-maker-checker')
+  @Roles('admin', 'claims_officer')
+  async claimsOfficerReturnToMakerChecker(
+    @Body() body: { claimId: string; reason: string },
+    @Request() req,
+  ) {
+    return this.makerCheckerService.claimsOfficerReturnToMakerChecker(
+      body.claimId,
+      req.user.userId,
+      body.reason,
+    );
+  }
+
+  @Post('claims-officer/return-to-provider')
+  @Roles('admin', 'claims_officer')
+  async claimsOfficerReturnToProvider(
+    @Body() body: { claimId: string; reason: string; missingDocuments?: string[] },
+    @Request() req,
+  ) {
+    return this.makerCheckerService.claimsOfficerReturnToProvider(
+      body.claimId,
+      req.user.userId,
+      body.reason,
+      body.missingDocuments || [],
+    );
+  }
+
+  @Post('claims-officer/escalate-to-fraud')
+  @Roles('admin', 'claims_officer')
+  async claimsOfficerEscalateToFraud(
+    @Body() body: { claimId: string; reason: string },
+    @Request() req,
+  ) {
+    return this.makerCheckerService.claimsOfficerEscalateToFraud(
+      body.claimId,
+      req.user.userId,
+      body.reason,
+    );
+  }
+
   @Get('approval-history/:claimId')
   async getApprovalHistory(@Param('claimId') claimId: string) {
     return this.makerCheckerService.getApprovalHistory(claimId);
