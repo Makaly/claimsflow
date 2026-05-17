@@ -360,6 +360,51 @@ export class WorkflowController {
     return { results, succeeded: results.filter(r => r.success).length, failed: results.filter(r => !r.success).length };
   }
 
+  /**
+   * Smart bulk approve for the maker-checker queue.
+   * Per claim: tries makerApprove (if assigned to caller), falls back to
+   * checkerApprove (for unassigned claims awaiting second-level sign-off).
+   */
+  @Post('bulk/approve-auto')
+  @Roles('admin', 'claims_officer', 'maker_checker')
+  async bulkApproveAuto(@Body() body: { claimIds: string[]; comments?: string }, @Request() req) {
+    const results: any[] = [];
+    for (const claimId of body.claimIds) {
+      try {
+        const claim = await this.prisma.claim.findUnique({
+          where: { id: claimId },
+          select: { assignedTo: true },
+        });
+        let result: any;
+        if (claim?.assignedTo === req.user.userId) {
+          result = await this.makerCheckerService.makerApprove(claimId, req.user.userId, body.comments);
+        } else {
+          result = await this.makerCheckerService.checkerApprove(claimId, req.user.userId, body.comments);
+        }
+        results.push({ claimId, success: true, claim: result });
+      } catch (e: any) {
+        results.push({ claimId, success: false, error: e.message });
+      }
+    }
+    return { results, succeeded: results.filter(r => r.success).length, failed: results.filter(r => !r.success).length };
+  }
+
+  /** Bulk approve for claims officer queue. */
+  @Post('bulk/approve-claims-officer')
+  @Roles('admin', 'claims_officer')
+  async bulkClaimsOfficerApprove(@Body() body: { claimIds: string[]; comments?: string }, @Request() req) {
+    const results: any[] = [];
+    for (const claimId of body.claimIds) {
+      try {
+        const result = await this.makerCheckerService.claimsOfficerApprove(claimId, req.user.userId, body.comments);
+        results.push({ claimId, success: true, claim: result });
+      } catch (e: any) {
+        results.push({ claimId, success: false, error: e.message });
+      }
+    }
+    return { results, succeeded: results.filter(r => r.success).length, failed: results.filter(r => !r.success).length };
+  }
+
   @Post('bulk/reject')
   @Roles('admin', 'claims_officer', 'maker_checker')
   async bulkReject(@Body() body: { claimIds: string[]; reason: string; stage: 'maker_checker' | 'claims_officer' }, @Request() req) {
@@ -368,9 +413,18 @@ export class WorkflowController {
       try {
         let result: any;
         if (body.stage === 'claims_officer') {
-          result = await this.makerCheckerService.checkerReject(claimId, req.user.userId, body.reason);
+          result = await this.makerCheckerService.claimsOfficerReject(claimId, req.user.userId, body.reason);
         } else {
-          result = await this.makerCheckerService.makerReject(claimId, req.user.userId, body.reason);
+          // Smart: try makerReject (assigned) first, fall back to checkerReject
+          const claim = await this.prisma.claim.findUnique({
+            where: { id: claimId },
+            select: { assignedTo: true },
+          });
+          if (claim?.assignedTo === req.user.userId) {
+            result = await this.makerCheckerService.makerReject(claimId, req.user.userId, body.reason);
+          } else {
+            result = await this.makerCheckerService.checkerReject(claimId, req.user.userId, body.reason);
+          }
         }
         results.push({ claimId, success: true, claim: result });
       } catch (e: any) {
@@ -384,8 +438,14 @@ export class WorkflowController {
   @Roles('admin', 'claims_officer', 'maker_checker')
   async bulkAssignToMe(@Body() body: { claimIds: string[] }, @Request() req) {
     const updates = await this.prisma.claim.updateMany({
-      where: { id: { in: body.claimIds } },
-      data: { assignedTo: req.user.userId },
+      where: {
+        id: { in: body.claimIds },
+        workflowStage: 'maker_checker_review',
+      },
+      data: {
+        assignedTo: req.user.userId,
+        status: 'under_review',
+      },
     });
     return { assigned: updates.count };
   }

@@ -15,6 +15,8 @@ interface BulkActionsBarProps {
   showApprove?: boolean
   showReject?: boolean
   showAssignToMe?: boolean
+  approveLabel?: string
+  rejectLabel?: string
 }
 
 export default function BulkActionsBar({
@@ -25,6 +27,8 @@ export default function BulkActionsBar({
   showApprove = true,
   showReject = true,
   showAssignToMe = true,
+  approveLabel = 'Approve All',
+  rejectLabel = 'Reject All',
 }: BulkActionsBarProps) {
   const [loading, setLoading] = useState(false)
   const [rejectDialog, setRejectDialog] = useState(false)
@@ -32,27 +36,36 @@ export default function BulkActionsBar({
 
   if (selectedIds.length === 0) return null
 
+  const approveEndpoint =
+    queueType === 'claims_officer'
+      ? '/workflow/bulk/approve-claims-officer'
+      : '/workflow/bulk/approve-auto'
+
   const bulkAction = async (type: 'approve' | 'reject' | 'assign') => {
     setLoading(true)
     try {
       if (type === 'approve') {
-        const endpoint = queueType === 'maker_checker' ? '/workflow/bulk/approve-maker' : '/workflow/bulk/approve-checker'
-        const res = await api.post(endpoint, { claimIds: selectedIds })
-        toast.success(`${res.data.succeeded} claim(s) approved, ${res.data.failed} failed`)
+        const res = await api.post(approveEndpoint, { claimIds: selectedIds })
+        const { succeeded, failed } = res.data
+        if (succeeded > 0 && failed === 0) toast.success(`${succeeded} claim${succeeded !== 1 ? 's' : ''} approved`)
+        else if (succeeded > 0) toast.success(`${succeeded} approved, ${failed} could not be processed`)
+        else toast.error(`Could not approve the selected claims — check they are in the correct stage`)
       } else if (type === 'reject') {
         if (!rejectReason.trim()) return
         const res = await api.post('/workflow/bulk/reject', { claimIds: selectedIds, reason: rejectReason, stage: queueType })
-        toast.success(`${res.data.succeeded} claim(s) rejected`)
+        const { succeeded, failed } = res.data
+        if (succeeded > 0) toast.success(`${succeeded} claim${succeeded !== 1 ? 's' : ''} rejected`)
+        if (failed > 0) toast.error(`${failed} could not be rejected`)
         setRejectDialog(false)
         setRejectReason('')
       } else if (type === 'assign') {
         const res = await api.post('/workflow/bulk/assign-to-me', { claimIds: selectedIds })
-        toast.success(`${res.data.assigned} claim(s) assigned to you`)
+        toast.success(`${res.data.assigned} claim${res.data.assigned !== 1 ? 's' : ''} assigned to you`)
       }
       onClear()
       onDone()
     } catch (e: any) {
-      toast.error(e.response?.data?.message || 'Bulk action failed')
+      toast.error(e.response?.data?.message || 'Bulk action failed — please try again')
     } finally {
       setLoading(false)
     }
@@ -71,12 +84,12 @@ export default function BulkActionsBar({
           )}
           {showApprove && (
             <Button size="sm" className="h-7 text-xs bg-green-600 hover:bg-green-700 text-white" onClick={() => bulkAction('approve')} disabled={loading}>
-              {loading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <ThumbsUp className="h-3 w-3 mr-1" />} Approve All
+              {loading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <ThumbsUp className="h-3 w-3 mr-1" />} {approveLabel}
             </Button>
           )}
           {showReject && (
             <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={() => setRejectDialog(true)} disabled={loading}>
-              <ThumbsDown className="h-3 w-3 mr-1" /> Reject All
+              <ThumbsDown className="h-3 w-3 mr-1" /> {rejectLabel}
             </Button>
           )}
         </div>

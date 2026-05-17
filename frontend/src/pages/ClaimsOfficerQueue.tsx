@@ -20,6 +20,7 @@ import { Separator } from '@/components/ui/separator'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Pagination } from '@/components/Pagination'
 import InlineDocumentPreview from '@/components/InlineDocumentPreview'
+import BulkActionsBar from '@/components/BulkActionsBar'
 import { formatCurrency, formatDate, getPriorityColor } from '@/lib/utils'
 
 function claimNumSubseq(claimNumber: string, query: string): boolean {
@@ -134,6 +135,36 @@ export default function ClaimsOfficerQueue() {
     }
     load()
   }, [])
+
+  const reloadClaims = () => {
+    setLoading(true)
+    const load = async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const headers = { Authorization: `Bearer ${token}` }
+        const res = await fetch('/api/workflow/claims/claims_officer_review', { headers })
+        if (!res.ok) { setClaims([]); return }
+        const data = await res.json()
+        const list: any[] = Array.isArray(data) ? data : Array.isArray(data?.claims) ? data.claims : []
+        setClaims(list.map((c: any) => ({
+          id: c.id,
+          claimNumber: c.claimNumber,
+          memberName: c.memberName || c.patientName || '—',
+          memberNumber: c.memberNumber,
+          provider: c.provider ? { name: c.provider.name } : undefined,
+          invoiceAmount: c.invoiceAmount || 0,
+          priority: c.priority || 'normal',
+          fraudVerdict: c.fraudVerdict ?? null,
+          documents: (c.documents || []).map((d: any) => ({
+            id: d.id, name: d.originalName || d.name || 'Document',
+            documentType: d.documentType, mimetype: d.mimetype,
+          })),
+          submittedAt: c.createdAt,
+        })))
+      } catch { setClaims([]) } finally { setLoading(false) }
+    }
+    load()
+  }
 
   const filtered = claims.filter(c => {
     if (!search) return true
@@ -282,6 +313,19 @@ export default function ClaimsOfficerQueue() {
             </div>
           ) : (
             <>
+            {bulkSelected.size > 0 && (
+              <div className="mb-3">
+                <BulkActionsBar
+                  selectedIds={Array.from(bulkSelected)}
+                  onClear={() => setBulkSelected(new Set())}
+                  onDone={() => { setBulkSelected(new Set()); reloadClaims() }}
+                  queueType="claims_officer"
+                  showAssignToMe={false}
+                  approveLabel="Approve All"
+                  rejectLabel="Reject All"
+                />
+              </div>
+            )}
             <Table>
               <TableHeader>
                 <TableRow>
