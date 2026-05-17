@@ -80,18 +80,12 @@ export class OcrProcessor extends WorkerHost {
       const rawServiceDate  = cmap.dateOfService || cmap.admissionDate || cf.service_date || cf.admission_date || primary?.serviceDate;
       const safeInvoiceDate = rawInvoiceDate && !isNaN(new Date(rawInvoiceDate).getTime())
         ? new Date(rawInvoiceDate) : null;
+      // Service date is always the upload date. OCR-extracted dates are not
+      // used here because the claim submission date is the authoritative
+      // record — users can correct it manually if needed.
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const twoYearsAgo = new Date(today);
-      twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
-      // Service date must be between two years ago and today. Future dates and
-      // dates older than 2 years are almost certainly OCR misreads — fall back
-      // to the upload date so the claim doesn't carry a nonsensical timestamp.
-      const parsedServiceDate = rawServiceDate ? new Date(rawServiceDate) : null;
-      const safeServiceDate = parsedServiceDate && !isNaN(parsedServiceDate.getTime())
-        && parsedServiceDate <= today && parsedServiceDate >= twoYearsAgo
-        ? parsedServiceDate
-        : today;
+      const safeServiceDate = today;
 
       // Confidence: average of classifier per-field scores (or Tesseract score as fallback)
       const classifierScores = Object.values(cc).filter((v): v is number => typeof v === 'number' && v > 0);
