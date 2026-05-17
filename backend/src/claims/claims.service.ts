@@ -431,11 +431,23 @@ export class ClaimsService {
           isProviderRole = true;
           // Provider admins see every claim belonging to their provider — and
           // nothing outside it. If the account has no providerId, show nothing.
+          // Branch-assigned admins (branch managers) are further scoped to their
+          // branch so they cannot view claims from sibling branches.
           if (!providerId) {
             where.id = '__no_access__';
             break;
           }
           where.providerId = providerId;
+          if (branchId) {
+            const branchUsers = await this.prisma.user.findMany({
+              where: { branchId, providerId },
+              select: { id: true },
+            });
+            where.OR = [
+              { branchId },
+              { branchId: null, createdBy: { in: [...branchUsers.map(u => u.id), userId] } },
+            ];
+          }
           break;
         case 'claims_officer':
           // Claims officers see: their assigned claims, unassigned submitted claims,
@@ -764,10 +776,16 @@ export class ClaimsService {
     // Build base where clause for role-based filtering
     const baseWhere: any = {};
     if (user) {
-      if (user.role === 'provider_user' && user.providerId) {
+      if ((user.role === 'provider_user' || user.role === 'provider_admin') && user.providerId) {
         baseWhere.providerId = user.providerId;
-      } else if (user.role === 'provider_admin' && user.providerId) {
-        baseWhere.providerId = user.providerId;
+        if (user.branchId) {
+          // Branch-scoped users see only their branch's claims in stats.
+          baseWhere.branchId = user.branchId;
+        } else if (user.role === 'provider_user') {
+          // Branchless provider_user: count only their own uploads.
+          baseWhere.createdBy = user.userId;
+        }
+        // provider_admin with no branch: provider-wide stats (no extra filter)
       }
       // admin/supervisor/claims_officer see all
     }
