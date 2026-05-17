@@ -8,6 +8,7 @@ interface SendEmailDto {
   recipient: string;
   subject: string;
   message: string;
+  html?: string;
 }
 
 interface SendSmsDto {
@@ -31,12 +32,16 @@ export class NotificationsService {
         recipientEmail: emailDto.recipient,
         subject: emailDto.subject,
         message: emailDto.message,
+        htmlContent: emailDto.html ?? null,
       },
     });
 
     this.notificationsQueue.add('send-email', {
       notificationId: notification.id,
-      ...emailDto,
+      recipient: emailDto.recipient,
+      subject: emailDto.subject,
+      message: emailDto.message,
+      html: emailDto.html,
     }, { attempts: 3, backoff: { type: 'exponential', delay: 2_000 } }).catch(() => {});
 
     return notification;

@@ -1107,6 +1107,35 @@ export class ClaimsService {
         console.warn(`Post-clear dump failed for claim ${id}:`, err?.message);
       });
 
+    // Notify claims officers: fraud cleared, ready for final decision
+    this.prisma.user
+      .findMany({ where: { role: 'claims_officer', isActive: true }, select: { email: true } })
+      .then((officers) =>
+        Promise.all(
+          officers.map((u) =>
+            this.emailService
+              .sendWorkflowEmail({
+                recipientEmail: u.email,
+                subject: `Fraud review complete — cleared: ${claim.claimNumber}`,
+                badgeText: 'Fraud Cleared', badgeStyle: 'green',
+                title: 'Invoice Cleared by Fraud Team',
+                subtitle: 'Fraud review complete · ready for your final decision',
+                claimNumber: claim.claimNumber,
+                providerName: claim.provider?.name ?? 'Unknown provider',
+                invoiceAmount: claim.invoiceAmount ?? undefined,
+                bodyLines: [
+                  `Invoice <strong style="color:#e4e4e7">${claim.claimNumber}</strong> has been reviewed by the Fraud Team and <strong style="color:#4ade80">cleared as legitimate</strong>.`,
+                  'The invoice is now in the Claims Officer Queue awaiting your final approval decision.',
+                ],
+                ...(notes ? { reasonLabel: 'Fraud team notes', reasonText: notes } : {}),
+                ctaText: 'Open Claims Queue', ctaUrl: process.env.APP_URL ? `${process.env.APP_URL}/workflow` : 'http://localhost:3000/workflow',
+              })
+              .catch(() => {}),
+          ),
+        ),
+      )
+      .catch(() => {});
+
     return updated;
   }
 
@@ -1158,6 +1187,35 @@ export class ClaimsService {
 
     // Feed human verdict back into training dataset: fraud officer confirmed this is fraud.
     this.claimLabelsService.upsertLabel(id, 'fraud', 'fraud_confirmed', actor?.userId, notes || undefined)
+      .catch(() => {});
+
+    // Notify claims officers: fraud confirmed, action required
+    this.prisma.user
+      .findMany({ where: { role: 'claims_officer', isActive: true }, select: { email: true } })
+      .then((officers) =>
+        Promise.all(
+          officers.map((u) =>
+            this.emailService
+              .sendWorkflowEmail({
+                recipientEmail: u.email,
+                subject: `Fraud confirmed — your action required: ${claim.claimNumber}`,
+                badgeText: 'Fraud Confirmed', badgeStyle: 'red',
+                title: 'Fraud Confirmed by Fraud Team',
+                subtitle: 'Claims officer action required',
+                claimNumber: claim.claimNumber,
+                providerName: claim.provider?.name ?? 'Unknown provider',
+                invoiceAmount: claim.invoiceAmount ?? undefined,
+                bodyLines: [
+                  `Invoice <strong style="color:#e4e4e7">${claim.claimNumber}</strong> has been reviewed by the Fraud Team and <strong style="color:#f87171">confirmed as fraudulent</strong>.`,
+                  'The invoice is now in the Claims Officer Queue. Please review the fraud verdict, notify the provider accordingly, and take the appropriate final action.',
+                ],
+                ...(notes ? { reasonLabel: 'Fraud team verdict notes', reasonText: notes } : {}),
+                ctaText: 'Open Claims Queue', ctaUrl: process.env.APP_URL ? `${process.env.APP_URL}/workflow` : 'http://localhost:3000/workflow',
+              })
+              .catch(() => {}),
+          ),
+        ),
+      )
       .catch(() => {});
 
     return updated;

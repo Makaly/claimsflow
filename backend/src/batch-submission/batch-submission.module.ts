@@ -6,6 +6,7 @@ import { BatchSubmissionProcessor } from './batch-submission.processor';
 import { BarcodeService } from '../common/services/barcode.service';
 import { PdfWatermarkService } from '../common/services/pdf-watermark.service';
 import { OcrModule } from '../ocr/ocr.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { OcrModule } from '../ocr/ocr.module';
       name: 'batch-processing',
     }),
     OcrModule,
+    NotificationsModule,
   ],
   controllers: [BatchSubmissionController],
   providers: [

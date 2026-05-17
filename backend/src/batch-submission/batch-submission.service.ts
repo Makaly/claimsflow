@@ -5,16 +5,20 @@ import { PrismaService } from '../prisma/prisma.service';
 import { BarcodeService } from '../common/services/barcode.service';
 import { PdfWatermarkService } from '../common/services/pdf-watermark.service';
 import { OcrService } from '../ocr/ocr.service';
+import { EmailService } from '../notifications/email.service';
 import * as fs from 'fs';
 import * as path from 'path';
 
 @Injectable()
 export class BatchSubmissionService {
+  private readonly appUrl = process.env.APP_URL || 'http://localhost:3000';
+
   constructor(
     private prisma: PrismaService,
     private barcodeService: BarcodeService,
     private pdfWatermarkService: PdfWatermarkService,
     private ocrService: OcrService,
+    private emailService: EmailService,
     @InjectQueue('batch-processing') private batchQueue: Queue,
   ) {}
 
@@ -72,6 +76,36 @@ export class BatchSubmissionService {
         mimetype: f.mimetype,
       })),
     }, { attempts: 1 }).catch(() => {});
+
+    // Notify all maker-checker users of new batch — non-blocking
+    const count = files.length;
+    const providerName = batch.provider?.name ?? 'Unknown provider';
+    this.prisma.user
+      .findMany({ where: { role: 'maker_checker', isActive: true }, select: { email: true } })
+      .then((makers) =>
+        Promise.all(
+          makers.map((u) =>
+            this.emailService
+              .sendWorkflowEmail({
+                recipientEmail: u.email,
+                subject: `New batch submitted for verification: ${batch.batchNumber}`,
+                badgeText: 'New Batch', badgeStyle: 'blue',
+                title: `${count} New Invoice${count !== 1 ? 's' : ''} Ready for Verification`,
+                subtitle: `Batch ${batch.batchNumber} · submitted by ${providerName}`,
+                claimNumber: batch.batchNumber,
+                providerName,
+                bodyLines: [
+                  `A new batch of <strong style="color:#e4e4e7">${count} invoice${count !== 1 ? 's' : ''}</strong> from <strong style="color:#e4e4e7">${providerName}</strong> has been submitted and is awaiting first-level (maker) verification.`,
+                  'Please open the Maker Queue to begin processing this batch.',
+                ],
+                ctaText: 'Open Maker Queue', ctaUrl: `${this.appUrl}/workflow`,
+                nextNote: `Batch reference: ${batch.batchNumber}. Individual claims will appear in the queue once document processing is complete (typically within a few minutes).`,
+              })
+              .catch(() => {}),
+          ),
+        ),
+      )
+      .catch(() => {});
 
     return batch;
   }

@@ -30,12 +30,12 @@ export class NotificationsProcessor extends WorkerHost {
   }
 
   private async handleSendEmail(job: Job) {
-    const { notificationId, recipient, subject, message } = job.data;
+    const { notificationId, recipient, subject, message, html } = job.data;
     const safeRecipient = redactEmail(recipient);
     this.logger.log(`Sending email to: ${safeRecipient}`);
 
     try {
-      await this.emailService.sendEmail(recipient, subject, message);
+      await this.emailService.sendEmail(recipient, subject, message, html || undefined);
       await this.prisma.notification.update({
         where: { id: notificationId },
         data: { status: 'sent', sentAt: new Date() },

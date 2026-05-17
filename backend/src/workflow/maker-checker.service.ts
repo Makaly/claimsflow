@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { EmailService, WorkflowEmailDto } from '../notifications/email.service';
 import { EdmsIntegrationService } from '../common/services/edms-integration.service';
 import { EoxegenIntegrationService } from '../common/services/eoxegen-integration.service';
 import { PdfWatermarkService } from '../common/services/pdf-watermark.service';
@@ -11,9 +12,12 @@ import { redactEmail } from '../common/services/pii-redaction';
 export class MakerCheckerService {
   private readonly logger = new Logger(MakerCheckerService.name);
 
+  private readonly appUrl = process.env.APP_URL || 'http://localhost:3000';
+
   constructor(
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
+    private emailService: EmailService,
     private edmsService: EdmsIntegrationService,
     private eoxegenService: EoxegenIntegrationService,
     private pdfWatermarkService: PdfWatermarkService,
@@ -61,11 +65,19 @@ export class MakerCheckerService {
       metadata: { claimNumber: claim.claimNumber },
     });
 
-    await this.emailUser(
-      makerId,
-      `New claim assigned: ${claim.claimNumber}`,
-      `You have been assigned claim ${claim.claimNumber} for first-level review. Please open the Maker Queue to proceed.`,
-    );
+    await this.emailUserHtml(makerId, {
+      subject: `New claim assigned to you: ${claim.claimNumber}`,
+      badgeText: 'Assigned', badgeStyle: 'blue',
+      title: 'Claim Assigned to You',
+      subtitle: `First-level (maker) review required`,
+      claimNumber: claim.claimNumber,
+      providerName: '',
+      bodyLines: [
+        `You have been assigned claim <strong style="color:#e4e4e7">${claim.claimNumber}</strong> for first-level (maker) review.`,
+        'Please open the Maker Queue to begin your review and verify all documentation before forwarding for second-level check.',
+      ],
+      ctaText: 'Open Maker Queue', ctaUrl: `${this.appUrl}/workflow`,
+    });
 
     return updatedClaim;
   }
@@ -121,20 +133,35 @@ export class MakerCheckerService {
     });
 
     // ─── Notifications: recipient (checkers) + actor (maker) ──────────
-    const commentBlock = comments?.trim()
-      ? `\n\nMaker's notes:\n${comments.trim()}`
-      : '';
     const checkerIds = await this.findCheckers();
-    await this.emailUsers(
-      checkerIds,
-      `New claim awaiting checker review: ${claim.claimNumber}`,
-      `Claim ${claim.claimNumber} (${claim.provider?.name ?? 'Unknown provider'}) has been approved by the maker and is now in the Checker Queue.${commentBlock}`,
-    );
-    await this.emailUser(
-      makerId,
-      `You approved claim ${claim.claimNumber}`,
-      `You have approved claim ${claim.claimNumber} and forwarded it to the Checker Queue. The checker team has been notified.${commentBlock}`,
-    );
+    const makerNotes = comments?.trim() ?? '';
+    await this.emailUsersHtml(checkerIds, {
+      subject: `Invoice awaiting second-level review: ${claim.claimNumber}`,
+      badgeText: 'Review Required', badgeStyle: 'blue',
+      title: 'Invoice in Checker Queue',
+      subtitle: `Passed first-level review · awaiting your verification`,
+      claimNumber: claim.claimNumber,
+      providerName: claim.provider?.name ?? 'Unknown provider',
+      invoiceAmount: claim.invoiceAmount ?? undefined,
+      bodyLines: [
+        `Invoice <strong style="color:#e4e4e7">${claim.claimNumber}</strong> has been approved at first-level (maker) review and is now awaiting your second-level verification.`,
+        'Please review the submission in the Checker Queue and either approve or return it for corrections.',
+      ],
+      ...(makerNotes ? { reasonLabel: "Maker's notes", reasonText: makerNotes } : {}),
+      ctaText: 'Open Checker Queue', ctaUrl: `${this.appUrl}/workflow`,
+    });
+    await this.emailUserHtml(makerId, {
+      subject: `You approved claim ${claim.claimNumber}`,
+      badgeText: 'Submitted', badgeStyle: 'green',
+      title: 'Claim Forwarded to Checker',
+      claimNumber: claim.claimNumber,
+      providerName: claim.provider?.name ?? 'Unknown provider',
+      bodyLines: [
+        `You approved claim <strong style="color:#e4e4e7">${claim.claimNumber}</strong> and forwarded it to the Checker Queue.`,
+        'The checker team has been notified and will complete second-level verification.',
+      ],
+      ...(makerNotes ? { reasonLabel: "Your notes", reasonText: makerNotes } : {}),
+    });
 
     return updatedClaim;
   }
@@ -193,17 +220,33 @@ export class MakerCheckerService {
       metadata: { claimNumber: claim.claimNumber, decision: 'rejected', reason },
     });
 
-    // Notify provider (branch) + confirmation to the actor (maker)
-    await this.notificationsService.sendEmail({
-      recipient: claim.provider.email,
-      subject: `Claim Rejected: ${claim.claimNumber}`,
-      message: `Your claim ${claim.claimNumber} has been rejected at first-level review.\n\nReason: ${reason}\n\nContact your branch for next steps.`,
+    await this.emailAddressHtml(claim.provider.email, {
+      subject: `Claim Rejected at First Review: ${claim.claimNumber}`,
+      badgeText: 'Rejected', badgeStyle: 'red',
+      title: 'Invoice Rejected',
+      subtitle: 'First-level review decision',
+      claimNumber: claim.claimNumber,
+      providerName: claim.provider?.name ?? 'Unknown provider',
+      invoiceAmount: claim.invoiceAmount ?? undefined,
+      bodyLines: [
+        `Your invoice <strong style="color:#e4e4e7">${claim.claimNumber}</strong> has been rejected at first-level (maker) review.`,
+        'Please contact your branch for guidance on next steps. You may be able to resubmit with corrected documentation.',
+      ],
+      reasonLabel: 'Reason for rejection', reasonText: reason,
+      ctaText: 'View in Provider Portal', ctaUrl: `${this.appUrl}/claims`,
     });
-    await this.emailUser(
-      makerId,
-      `You rejected claim ${claim.claimNumber}`,
-      `You have rejected claim ${claim.claimNumber} (${claim.provider?.name ?? 'Unknown provider'}). The provider has been notified.\n\nReason recorded: ${reason}`,
-    );
+    await this.emailUserHtml(makerId, {
+      subject: `You rejected claim ${claim.claimNumber}`,
+      badgeText: 'Rejected', badgeStyle: 'red',
+      title: 'Claim Rejected',
+      claimNumber: claim.claimNumber,
+      providerName: claim.provider?.name ?? 'Unknown provider',
+      bodyLines: [
+        `You rejected claim <strong style="color:#e4e4e7">${claim.claimNumber}</strong> (${claim.provider?.name ?? 'Unknown provider'}).`,
+        'The provider has been notified of the rejection and the reason recorded.',
+      ],
+      reasonLabel: 'Reason recorded', reasonText: reason,
+    });
 
     return updatedClaim;
   }
@@ -232,11 +275,19 @@ export class MakerCheckerService {
       metadata: { claimNumber: claim.claimNumber },
     });
 
-    await this.emailUser(
-      checkerId,
-      `Claim ready for checker review: ${claim.claimNumber}`,
-      `Claim ${claim.claimNumber} has passed maker review and awaits your second-level approval. Please open the Checker Queue to proceed.`,
-    );
+    await this.emailUserHtml(checkerId, {
+      subject: `Invoice assigned for checker review: ${claim.claimNumber}`,
+      badgeText: 'Assigned', badgeStyle: 'blue',
+      title: 'Invoice Awaits Your Review',
+      subtitle: 'Second-level (checker) verification required',
+      claimNumber: claim.claimNumber,
+      providerName: '',
+      bodyLines: [
+        `Invoice <strong style="color:#e4e4e7">${claim.claimNumber}</strong> has passed first-level maker review and awaits your second-level approval.`,
+        'Please open the Checker Queue to proceed with your verification.',
+      ],
+      ctaText: 'Open Checker Queue', ctaUrl: `${this.appUrl}/workflow`,
+    });
 
     return updatedClaim;
   }
@@ -297,18 +348,35 @@ export class MakerCheckerService {
       metadata: { claimNumber: claim.claimNumber, decision: 'approved', comments },
     });
 
-    const notes = comments?.trim() ? `\n\nNotes:\n${comments.trim()}` : '';
+    const checkerNotes = comments?.trim() ?? '';
     const officerIds = await this.findClaimsOfficers();
-    await this.emailUsers(
-      officerIds,
-      `Invoice ready for final approval: ${claim.claimNumber}`,
-      `Claim ${claim.claimNumber} (${claim.provider?.name ?? 'Unknown provider'}) has passed maker-checker verification and is awaiting your final approval in the Claims Officer Queue.${notes}`,
-    );
-    await this.emailUser(
-      checkerId,
-      `You verified claim ${claim.claimNumber}`,
-      `You have approved claim ${claim.claimNumber} at the maker-checker stage. It has been forwarded to the claims officer for final approval.${notes}`,
-    );
+    await this.emailUsersHtml(officerIds, {
+      subject: `Invoice ready for final approval: ${claim.claimNumber}`,
+      badgeText: 'Action Required', badgeStyle: 'blue',
+      title: 'Invoice Ready for Final Approval',
+      subtitle: 'Maker-checker verification complete · awaiting your decision',
+      claimNumber: claim.claimNumber,
+      providerName: claim.provider?.name ?? 'Unknown provider',
+      invoiceAmount: claim.invoiceAmount ?? undefined,
+      bodyLines: [
+        `Invoice <strong style="color:#e4e4e7">${claim.claimNumber}</strong> has successfully passed maker-checker verification and is now in the Claims Officer Queue awaiting your final approval.`,
+        'Please review the claim details and either approve it for payment processing, return it for re-verification, or escalate if required.',
+      ],
+      ...(checkerNotes ? { reasonLabel: "Checker's notes", reasonText: checkerNotes } : {}),
+      ctaText: 'Open Claims Queue', ctaUrl: `${this.appUrl}/workflow`,
+    });
+    await this.emailUserHtml(checkerId, {
+      subject: `You verified claim ${claim.claimNumber}`,
+      badgeText: 'Verified', badgeStyle: 'green',
+      title: 'Invoice Verified',
+      claimNumber: claim.claimNumber,
+      providerName: claim.provider?.name ?? 'Unknown provider',
+      bodyLines: [
+        `You approved invoice <strong style="color:#e4e4e7">${claim.claimNumber}</strong> at the maker-checker stage.`,
+        'It has been forwarded to the claims officer queue for final approval.',
+      ],
+      ...(checkerNotes ? { reasonLabel: 'Your notes', reasonText: checkerNotes } : {}),
+    });
 
     return updatedClaim;
   }
@@ -405,17 +473,36 @@ export class MakerCheckerService {
       this.logger.warn(`eOxegen transfer failed for claim ${claimId}: ${err?.message}`),
     );
 
-    const notes = comments?.trim() ? `\n\nNotes:\n${comments.trim()}` : '';
-    await this.notificationsService.sendEmail({
-      recipient: claim.provider.email,
+    const officerNotes = comments?.trim() ?? '';
+    await this.emailAddressHtml(claim.provider.email, {
       subject: `Invoice Approved — Payment Processing: ${claim.claimNumber}`,
-      message: `Your invoice ${claim.claimNumber} has been approved by the claims officer and is now queued for payment.${notes}`,
+      badgeText: 'Approved', badgeStyle: 'green',
+      title: 'Invoice Approved for Payment',
+      subtitle: 'Final approval granted · payment queued',
+      claimNumber: claim.claimNumber,
+      providerName: claim.provider?.name ?? 'Unknown provider',
+      invoiceAmount: claim.invoiceAmount ?? undefined,
+      bodyLines: [
+        `Congratulations — invoice <strong style="color:#e4e4e7">${claim.claimNumber}</strong> has been approved by the claims officer and is now queued for payment processing.`,
+        'Settlement will be processed within the agreed Service Level Agreement (SLA). You will receive confirmation once payment has been released.',
+      ],
+      ...(officerNotes ? { reasonLabel: "Officer's notes", reasonText: officerNotes } : {}),
+      ctaText: 'View Invoice Status', ctaUrl: `${this.appUrl}/claims`,
+      nextNote: 'For queries, quote the invoice reference above when contacting the Claims Department at claims@cic.co.ke or +254 703 099 000.',
     });
-    await this.emailUser(
-      officerId,
-      `You approved invoice ${claim.claimNumber}`,
-      `You approved invoice ${claim.claimNumber} (${claim.provider?.name ?? 'Unknown provider'}). The provider has been notified and it is now in the payment queue.${notes}`,
-    );
+    await this.emailUserHtml(officerId, {
+      subject: `You approved invoice ${claim.claimNumber}`,
+      badgeText: 'Approved', badgeStyle: 'green',
+      title: 'Invoice Approved',
+      claimNumber: claim.claimNumber,
+      providerName: claim.provider?.name ?? 'Unknown provider',
+      invoiceAmount: claim.invoiceAmount ?? undefined,
+      bodyLines: [
+        `You approved invoice <strong style="color:#e4e4e7">${claim.claimNumber}</strong> (${claim.provider?.name ?? 'Unknown provider'}).`,
+        'The provider has been notified and the invoice is now in the payment processing queue.',
+      ],
+      ...(officerNotes ? { reasonLabel: 'Your notes', reasonText: officerNotes } : {}),
+    });
 
     return updatedClaim;
   }
@@ -493,16 +580,34 @@ export class MakerCheckerService {
         this.logger.warn(`ML label failed for rejected claim ${claimId}: ${err?.message}`),
       );
 
-    await this.notificationsService.sendEmail({
-      recipient: claim.provider.email,
+    await this.emailAddressHtml(claim.provider.email, {
       subject: `Invoice Rejected: ${claim.claimNumber}`,
-      message: `Your invoice ${claim.claimNumber} has been rejected by the claims officer.\n\nReason: ${reason}\n\nYou may file an appeal within 30 days if you believe this decision is incorrect.`,
+      badgeText: 'Rejected', badgeStyle: 'red',
+      title: 'Invoice Rejected',
+      subtitle: 'Final decision by claims officer',
+      claimNumber: claim.claimNumber,
+      providerName: claim.provider?.name ?? 'Unknown provider',
+      invoiceAmount: claim.invoiceAmount ?? undefined,
+      bodyLines: [
+        `Invoice <strong style="color:#e4e4e7">${claim.claimNumber}</strong> has been rejected by the claims officer.`,
+        'If you believe this decision is incorrect, you may file a formal appeal within 30 days of this notification.',
+      ],
+      reasonLabel: 'Reason for rejection', reasonText: reason,
+      ctaText: 'View in Portal', ctaUrl: `${this.appUrl}/claims`,
+      nextNote: 'To file an appeal or for assistance, contact the Claims Department at claims@cic.co.ke or +254 703 099 000.',
     });
-    await this.emailUser(
-      officerId,
-      `You rejected invoice ${claim.claimNumber}`,
-      `You rejected invoice ${claim.claimNumber} (${claim.provider?.name ?? 'Unknown provider'}). The provider has been notified.\n\nReason: ${reason}`,
-    );
+    await this.emailUserHtml(officerId, {
+      subject: `You rejected invoice ${claim.claimNumber}`,
+      badgeText: 'Rejected', badgeStyle: 'red',
+      title: 'Invoice Rejected',
+      claimNumber: claim.claimNumber,
+      providerName: claim.provider?.name ?? 'Unknown provider',
+      bodyLines: [
+        `You rejected invoice <strong style="color:#e4e4e7">${claim.claimNumber}</strong> (${claim.provider?.name ?? 'Unknown provider'}).`,
+        'The provider has been notified of the rejection decision.',
+      ],
+      reasonLabel: 'Reason recorded', reasonText: reason,
+    });
 
     return updatedClaim;
   }
@@ -558,16 +663,33 @@ export class MakerCheckerService {
     });
 
     const makerCheckerIds = await this.findCheckers();
-    await this.emailUsers(
-      makerCheckerIds,
-      `Invoice returned for re-verification: ${claim.claimNumber}`,
-      `Invoice ${claim.claimNumber} has been returned by the claims officer for additional verification.\n\nReason: ${reason}`,
-    );
-    await this.emailUser(
-      officerId,
-      `You returned invoice ${claim.claimNumber} to maker-checker`,
-      `You returned invoice ${claim.claimNumber} (${claim.provider?.name ?? 'Unknown provider'}) to the maker-checker team.\n\nReason: ${reason}`,
-    );
+    await this.emailUsersHtml(makerCheckerIds, {
+      subject: `Invoice returned for re-verification: ${claim.claimNumber}`,
+      badgeText: 'Returned', badgeStyle: 'amber',
+      title: 'Invoice Returned for Re-verification',
+      subtitle: 'Returned by claims officer · additional review needed',
+      claimNumber: claim.claimNumber,
+      providerName: claim.provider?.name ?? 'Unknown provider',
+      invoiceAmount: claim.invoiceAmount ?? undefined,
+      bodyLines: [
+        `Invoice <strong style="color:#e4e4e7">${claim.claimNumber}</strong> has been returned by the claims officer for additional verification.`,
+        'Please open the Maker Queue to review the outstanding issues and re-submit for approval.',
+      ],
+      reasonLabel: 'Reason for return', reasonText: reason,
+      ctaText: 'Open Maker Queue', ctaUrl: `${this.appUrl}/workflow`,
+    });
+    await this.emailUserHtml(officerId, {
+      subject: `You returned invoice ${claim.claimNumber} to maker-checker`,
+      badgeText: 'Returned', badgeStyle: 'amber',
+      title: 'Invoice Returned to Maker-Checker',
+      claimNumber: claim.claimNumber,
+      providerName: claim.provider?.name ?? 'Unknown provider',
+      bodyLines: [
+        `You returned invoice <strong style="color:#e4e4e7">${claim.claimNumber}</strong> to the maker-checker team for re-verification.`,
+        'The team has been notified and will address the outstanding issues.',
+      ],
+      reasonLabel: 'Reason', reasonText: reason,
+    });
 
     return updatedClaim;
   }
@@ -627,20 +749,35 @@ export class MakerCheckerService {
       metadata: { claimNumber: claim.claimNumber, reason },
     });
 
-    const missingList = missingDocuments.length
-      ? `\n\nItems required:\n${missingDocuments.map((d) => `• ${d}`).join('\n')}`
-      : '';
-
-    await this.notificationsService.sendEmail({
-      recipient: claim.provider.email,
+    await this.emailAddressHtml(claim.provider.email, {
       subject: `Invoice Returned — Action Required: ${claim.claimNumber}`,
-      message: `Your invoice ${claim.claimNumber} has been returned by the claims officer and requires additional information.\n\nReason: ${reason}${missingList}\n\nPlease log in to the provider portal to resubmit.`,
+      badgeText: 'Action Required', badgeStyle: 'amber',
+      title: 'Invoice Returned — Additional Information Needed',
+      subtitle: 'Returned by claims officer',
+      claimNumber: claim.claimNumber,
+      providerName: claim.provider?.name ?? 'Unknown provider',
+      invoiceAmount: claim.invoiceAmount ?? undefined,
+      bodyLines: [
+        `Invoice <strong style="color:#e4e4e7">${claim.claimNumber}</strong> has been returned by the claims officer and requires additional information before it can proceed.`,
+        'Please log in to the provider portal, address the items listed below, and resubmit the claim with the required documentation.',
+      ],
+      reasonLabel: 'Reason for return', reasonText: reason,
+      ...(missingDocuments.length ? { missingDocuments } : {}),
+      ctaText: 'Resubmit in Portal', ctaUrl: `${this.appUrl}/claims`,
     });
-    await this.emailUser(
-      officerId,
-      `You returned invoice ${claim.claimNumber} to provider`,
-      `You returned invoice ${claim.claimNumber} (${claim.provider?.name ?? 'Unknown provider'}) to the provider for additional information.\n\nReason: ${reason}${missingList}`,
-    );
+    await this.emailUserHtml(officerId, {
+      subject: `You returned invoice ${claim.claimNumber} to provider`,
+      badgeText: 'Returned', badgeStyle: 'amber',
+      title: 'Invoice Returned to Provider',
+      claimNumber: claim.claimNumber,
+      providerName: claim.provider?.name ?? 'Unknown provider',
+      bodyLines: [
+        `You returned invoice <strong style="color:#e4e4e7">${claim.claimNumber}</strong> to the provider for additional information.`,
+        'The provider has been notified and will resubmit once they have addressed the outstanding requirements.',
+      ],
+      reasonLabel: 'Reason', reasonText: reason,
+      ...(missingDocuments.length ? { missingDocuments } : {}),
+    });
 
     return updatedClaim;
   }
@@ -697,16 +834,33 @@ export class MakerCheckerService {
       where: { isActive: true, role: 'fraud_officer' },
       select: { id: true },
     });
-    await this.emailUsers(
-      fraudOfficers.map((u) => u.id),
-      `Fraud escalation from claims officer: ${claim.claimNumber}`,
-      `Invoice ${claim.claimNumber} (${claim.provider?.name ?? 'Unknown provider'}) has been escalated to the fraud team by a claims officer.\n\nReason: ${reason}\n\nPlease review in the Fraud Queue.`,
-    );
-    await this.emailUser(
-      officerId,
-      `You escalated invoice ${claim.claimNumber} to fraud`,
-      `Invoice ${claim.claimNumber} has been escalated to the fraud team. They will review and notify you of their verdict.`,
-    );
+    await this.emailUsersHtml(fraudOfficers.map((u) => u.id), {
+      subject: `Fraud escalation — action required: ${claim.claimNumber}`,
+      badgeText: 'Fraud Escalation', badgeStyle: 'red',
+      title: 'Invoice Escalated for Fraud Review',
+      subtitle: 'Escalated by claims officer · immediate review required',
+      claimNumber: claim.claimNumber,
+      providerName: claim.provider?.name ?? 'Unknown provider',
+      invoiceAmount: claim.invoiceAmount ?? undefined,
+      bodyLines: [
+        `Invoice <strong style="color:#e4e4e7">${claim.claimNumber}</strong> has been escalated to the Fraud Team by a claims officer and requires your immediate attention.`,
+        'Please open the Fraud Queue to review the claim, examine any attached fraud signals, and record your verdict.',
+      ],
+      reasonLabel: 'Escalation reason', reasonText: reason,
+      ctaText: 'Open Fraud Queue', ctaUrl: `${this.appUrl}/workflow`,
+    });
+    await this.emailUserHtml(officerId, {
+      subject: `You escalated invoice ${claim.claimNumber} to fraud`,
+      badgeText: 'Escalated', badgeStyle: 'red',
+      title: 'Invoice Escalated to Fraud Team',
+      claimNumber: claim.claimNumber,
+      providerName: claim.provider?.name ?? 'Unknown provider',
+      bodyLines: [
+        `Invoice <strong style="color:#e4e4e7">${claim.claimNumber}</strong> has been escalated to the Fraud Team for investigation.`,
+        'The fraud officers have been notified. You will be informed once they have completed their review and recorded their verdict.',
+      ],
+      reasonLabel: 'Escalation reason', reasonText: reason,
+    });
 
     return updatedClaim;
   }
@@ -796,24 +950,47 @@ export class MakerCheckerService {
         this.logger.warn(`Failed to label rejected claim ${claimId}: ${err?.message}`),
       );
 
-    // ─── Notifications: provider + checker (actor) + original maker ──
-    await this.notificationsService.sendEmail({
-      recipient: claim.provider.email,
+    await this.emailAddressHtml(claim.provider.email, {
       subject: `Claim Rejected: ${claim.claimNumber}`,
-      message: `Your claim ${claim.claimNumber} has been rejected at second-level review.\n\nReason: ${reason}\n\nContact your branch for next steps.`,
+      badgeText: 'Rejected', badgeStyle: 'red',
+      title: 'Claim Rejected at Second-Level Review',
+      subtitle: 'Checker decision',
+      claimNumber: claim.claimNumber,
+      providerName: claim.provider?.name ?? 'Unknown provider',
+      invoiceAmount: claim.invoiceAmount ?? undefined,
+      bodyLines: [
+        `Claim <strong style="color:#e4e4e7">${claim.claimNumber}</strong> has been rejected at second-level (checker) review.`,
+        'Please contact your branch for guidance. An appeal may be filed within 30 days if you believe this decision is incorrect.',
+      ],
+      reasonLabel: 'Reason for rejection', reasonText: reason,
+      ctaText: 'View in Portal', ctaUrl: `${this.appUrl}/claims`,
     });
-    await this.emailUser(
-      checkerId,
-      `You rejected claim ${claim.claimNumber}`,
-      `You have rejected claim ${claim.claimNumber} (${claim.provider?.name ?? 'Unknown provider'}) at second-level review. The provider has been notified.\n\nReason recorded: ${reason}`,
-    );
+    await this.emailUserHtml(checkerId, {
+      subject: `You rejected claim ${claim.claimNumber}`,
+      badgeText: 'Rejected', badgeStyle: 'red',
+      title: 'Claim Rejected',
+      claimNumber: claim.claimNumber,
+      providerName: claim.provider?.name ?? 'Unknown provider',
+      bodyLines: [
+        `You rejected claim <strong style="color:#e4e4e7">${claim.claimNumber}</strong> at second-level review.`,
+        'The provider has been notified of the rejection decision.',
+      ],
+      reasonLabel: 'Reason recorded', reasonText: reason,
+    });
     const originalMakerId = await this.findOriginalMaker(claimId);
     if (originalMakerId) {
-      await this.emailUser(
-        originalMakerId,
-        `Claim ${claim.claimNumber} was rejected by the checker`,
-        `A claim you previously reviewed (${claim.claimNumber} — ${claim.provider?.name ?? 'Unknown provider'}) has been rejected at second-level review.\n\nReason: ${reason}`,
-      );
+      await this.emailUserHtml(originalMakerId, {
+        subject: `Claim ${claim.claimNumber} rejected by checker`,
+        badgeText: 'Rejected', badgeStyle: 'red',
+        title: 'Claim Rejected at Checker Stage',
+        claimNumber: claim.claimNumber,
+        providerName: claim.provider?.name ?? 'Unknown provider',
+        bodyLines: [
+          `A claim you previously reviewed — <strong style="color:#e4e4e7">${claim.claimNumber}</strong> (${claim.provider?.name ?? 'Unknown provider'}) — has been rejected at second-level (checker) review.`,
+          'No further action is required from you at this stage.',
+        ],
+        reasonLabel: 'Reason', reasonText: reason,
+      });
     }
 
     return updatedClaim;
@@ -875,21 +1052,35 @@ export class MakerCheckerService {
     });
 
     // Notify provider with list of missing documents
-    const missingList = missingDocuments.length > 0
-      ? `\n\nMissing documents:\n${missingDocuments.map((d) => `• ${d}`).join('\n')}`
-      : '';
-
-    // ─── Notifications: provider/branch (receiver) + checker (actor) ──
-    await this.notificationsService.sendEmail({
-      recipient: claim.provider.email,
-      subject: `Claim Returned - Action Required: ${claim.claimNumber}`,
-      message: `Your claim ${claim.claimNumber} has been returned and requires additional information.\n\nReason: ${reason}${missingList}\n\nPlease log in to the provider portal to resubmit the claim with the required documents.`,
+    await this.emailAddressHtml(claim.provider.email, {
+      subject: `Claim Returned — Action Required: ${claim.claimNumber}`,
+      badgeText: 'Action Required', badgeStyle: 'amber',
+      title: 'Claim Returned — Additional Documents Needed',
+      subtitle: 'Returned by checker at second-level review',
+      claimNumber: claim.claimNumber,
+      providerName: claim.provider?.name ?? 'Unknown provider',
+      invoiceAmount: claim.invoiceAmount ?? undefined,
+      bodyLines: [
+        `Claim <strong style="color:#e4e4e7">${claim.claimNumber}</strong> has been returned and requires additional information before it can proceed to the next stage.`,
+        'Please log in to the provider portal, provide the missing documents listed below, and resubmit your claim.',
+      ],
+      reasonLabel: 'Reason for return', reasonText: reason,
+      ...(missingDocuments.length ? { missingDocuments } : {}),
+      ctaText: 'Resubmit in Portal', ctaUrl: `${this.appUrl}/claims`,
     });
-    await this.emailUser(
-      checkerId,
-      `You returned claim ${claim.claimNumber} to the provider`,
-      `You have returned claim ${claim.claimNumber} (${claim.provider?.name ?? 'Unknown provider'}) to the provider for additional information.\n\nReason: ${reason}${missingList}`,
-    );
+    await this.emailUserHtml(checkerId, {
+      subject: `You returned claim ${claim.claimNumber} to the provider`,
+      badgeText: 'Returned', badgeStyle: 'amber',
+      title: 'Claim Returned to Provider',
+      claimNumber: claim.claimNumber,
+      providerName: claim.provider?.name ?? 'Unknown provider',
+      bodyLines: [
+        `You returned claim <strong style="color:#e4e4e7">${claim.claimNumber}</strong> to the provider for additional documentation.`,
+        'The provider has been notified and will resubmit once they have addressed the outstanding requirements.',
+      ],
+      reasonLabel: 'Reason', reasonText: reason,
+      ...(missingDocuments.length ? { missingDocuments } : {}),
+    });
 
     return updatedClaim;
   }
@@ -944,19 +1135,34 @@ export class MakerCheckerService {
       metadata: { claimNumber: claim.claimNumber, reason },
     });
 
-    // ─── Notifications: maker(s) receiving it back + checker (actor) ──
     const originalMakerId = await this.findOriginalMaker(claimId);
     const makerRecipients = originalMakerId ? [originalMakerId] : await this.findMakers();
-    await this.emailUsers(
-      makerRecipients,
-      `Claim returned for your review: ${claim.claimNumber}`,
-      `Claim ${claim.claimNumber} (${claim.provider?.name ?? 'Unknown provider'}) has been returned by the checker for corrections.\n\nReason: ${reason}\n\nPlease open the Maker Queue to address the issues and re-submit.`,
-    );
-    await this.emailUser(
-      checkerId,
-      `You returned claim ${claim.claimNumber} to the maker`,
-      `You have returned claim ${claim.claimNumber} (${claim.provider?.name ?? 'Unknown provider'}) to the maker for corrections.\n\nReason: ${reason}`,
-    );
+    await this.emailUsersHtml(makerRecipients, {
+      subject: `Claim returned for corrections: ${claim.claimNumber}`,
+      badgeText: 'Returned', badgeStyle: 'amber',
+      title: 'Claim Returned for Corrections',
+      subtitle: 'Returned by checker · please address and re-submit',
+      claimNumber: claim.claimNumber,
+      providerName: claim.provider?.name ?? 'Unknown provider',
+      bodyLines: [
+        `Claim <strong style="color:#e4e4e7">${claim.claimNumber}</strong> (${claim.provider?.name ?? 'Unknown provider'}) has been returned by the checker for corrections.`,
+        'Please open the Maker Queue to review the outstanding issues, make the necessary corrections, and re-submit for second-level approval.',
+      ],
+      reasonLabel: 'Reason for return', reasonText: reason,
+      ctaText: 'Open Maker Queue', ctaUrl: `${this.appUrl}/workflow`,
+    });
+    await this.emailUserHtml(checkerId, {
+      subject: `You returned claim ${claim.claimNumber} to the maker`,
+      badgeText: 'Returned', badgeStyle: 'amber',
+      title: 'Claim Returned to Maker',
+      claimNumber: claim.claimNumber,
+      providerName: claim.provider?.name ?? 'Unknown provider',
+      bodyLines: [
+        `You returned claim <strong style="color:#e4e4e7">${claim.claimNumber}</strong> to the maker for corrections.`,
+        'The maker has been notified and will address the issues before re-submitting.',
+      ],
+      reasonLabel: 'Reason', reasonText: reason,
+    });
 
     return updatedClaim;
   }
@@ -1013,19 +1219,37 @@ export class MakerCheckerService {
       metadata: { claimNumber: claim.claimNumber, notes },
     });
 
-    // ─── Notifications: maker queue (receiver) + provider (actor) ──────
-    const notesBlock = notes?.trim() ? `\n\nProvider notes:\n${notes.trim()}` : '';
+    const providerNotes = notes?.trim() ?? '';
     const makerIds = await this.findMakers();
-    await this.emailUsers(
-      makerIds,
-      `Claim resubmitted: ${claim.claimNumber}`,
-      `Claim ${claim.claimNumber} (${claim.provider?.name ?? 'Unknown provider'}) has been resubmitted by the provider with additional documents and is ready for review.${notesBlock}`,
-    );
+    await this.emailUsersHtml(makerIds, {
+      subject: `Claim resubmitted: ${claim.claimNumber}`,
+      badgeText: 'Resubmitted', badgeStyle: 'blue',
+      title: 'Provider Resubmission Received',
+      subtitle: 'Claim back in the maker queue · ready for review',
+      claimNumber: claim.claimNumber,
+      providerName: claim.provider?.name ?? 'Unknown provider',
+      invoiceAmount: claim.invoiceAmount ?? undefined,
+      bodyLines: [
+        `Claim <strong style="color:#e4e4e7">${claim.claimNumber}</strong> (${claim.provider?.name ?? 'Unknown provider'}) has been resubmitted by the provider with additional documents and is ready for first-level review.`,
+        'Please open the Maker Queue to begin your review.',
+      ],
+      ...(providerNotes ? { reasonLabel: "Provider's notes", reasonText: providerNotes } : {}),
+      ctaText: 'Open Maker Queue', ctaUrl: `${this.appUrl}/workflow`,
+    });
     if (claim.provider?.email) {
-      await this.notificationsService.sendEmail({
-        recipient: claim.provider.email,
+      await this.emailAddressHtml(claim.provider.email, {
         subject: `Resubmission received: ${claim.claimNumber}`,
-        message: `We have received your resubmission of claim ${claim.claimNumber}. It is back in the review queue and our team has been notified.${notesBlock}`,
+        badgeText: 'Received', badgeStyle: 'green',
+        title: 'Resubmission Successfully Received',
+        claimNumber: claim.claimNumber,
+        providerName: claim.provider?.name ?? 'Unknown provider',
+        invoiceAmount: claim.invoiceAmount ?? undefined,
+        bodyLines: [
+          `We have received your resubmission of claim <strong style="color:#e4e4e7">${claim.claimNumber}</strong>.`,
+          'It is back in the review queue and the claims team has been notified. You will receive an update once the review is complete.',
+        ],
+        ...(providerNotes ? { reasonLabel: 'Your notes', reasonText: providerNotes } : {}),
+        nextNote: 'For queries, quote the claim reference above when contacting the Claims Department at claims@cic.co.ke.',
       });
     }
 
@@ -1134,6 +1358,45 @@ export class MakerCheckerService {
   // Every workflow action emails both the receiving party and the actor.
   // The previous implementation passed user UUIDs to recipient fields —
   // these helpers look up the real email address first.
+
+  private async emailUserHtml(userId: string, dto: Omit<WorkflowEmailDto, 'recipientEmail'>) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, isActive: true },
+    });
+    if (!user?.email || !user.isActive) return;
+    try {
+      await this.emailService.sendWorkflowEmail({ ...dto, recipientEmail: user.email });
+    } catch (err: any) {
+      this.logger.warn(`HTML email to user ${userId} failed: ${err?.message}`);
+    }
+  }
+
+  private async emailUsersHtml(userIds: string[], dto: Omit<WorkflowEmailDto, 'recipientEmail'>) {
+    if (!userIds.length) return;
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: userIds }, isActive: true, email: { not: '' } },
+      select: { email: true },
+    });
+    await Promise.all(
+      users.map((u) =>
+        this.emailService
+          .sendWorkflowEmail({ ...dto, recipientEmail: u.email })
+          .catch((err: any) =>
+            this.logger.warn(`HTML fan-out email to ${redactEmail(u.email)} failed: ${err?.message}`),
+          ),
+      ),
+    );
+  }
+
+  private async emailAddressHtml(email: string, dto: Omit<WorkflowEmailDto, 'recipientEmail'>) {
+    if (!email) return;
+    try {
+      await this.emailService.sendWorkflowEmail({ ...dto, recipientEmail: email });
+    } catch (err: any) {
+      this.logger.warn(`HTML email to ${redactEmail(email)} failed: ${err?.message}`);
+    }
+  }
 
   private async emailUser(userId: string, subject: string, message: string) {
     const user = await this.prisma.user.findUnique({

@@ -3,6 +3,26 @@ import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import { redactEmail } from '../common/services/pii-redaction';
 
+export interface WorkflowEmailDto {
+  recipientEmail: string;
+  subject: string;
+  badgeText: string;
+  badgeStyle: 'green' | 'blue' | 'amber' | 'red' | 'purple' | 'cyan';
+  title: string;
+  subtitle?: string;
+  claimNumber: string;
+  providerName: string;
+  invoiceAmount?: number;
+  greeting?: string;
+  bodyLines: string[];
+  reasonLabel?: string;
+  reasonText?: string;
+  missingDocuments?: string[];
+  ctaText?: string;
+  ctaUrl?: string;
+  nextNote?: string;
+}
+
 export interface BatchClaimRow {
   claimNumber: string;
   barcode: string;
@@ -509,6 +529,164 @@ export class EmailService {
       text,
       html,
     );
+  }
+
+  // ─── Workflow Notification Emails ────────────────────────────────────────────
+
+  async sendWorkflowEmail(dto: WorkflowEmailDto): Promise<void> {
+    const {
+      recipientEmail, subject, badgeText, badgeStyle,
+      title, subtitle, claimNumber, providerName, invoiceAmount,
+      greeting, bodyLines, reasonLabel, reasonText, missingDocuments,
+      ctaText, ctaUrl, nextNote,
+    } = dto;
+
+    const THEMES: Record<WorkflowEmailDto['badgeStyle'], {
+      gradA: string; gradB: string; badgeBg: string;
+      badgeBorder: string; badgeTextColor: string; ctaA: string; ctaB: string;
+    }> = {
+      green:  { gradA: '#065f46', gradB: '#10b981', badgeBg: '#052e16', badgeBorder: '#166534', badgeTextColor: '#4ade80', ctaA: '#059669', ctaB: '#0891b2' },
+      blue:   { gradA: '#1e3a8a', gradB: '#3b82f6', badgeBg: '#0c1524', badgeBorder: '#1d4ed8', badgeTextColor: '#60a5fa', ctaA: '#1d4ed8', ctaB: '#4338ca' },
+      amber:  { gradA: '#78350f', gradB: '#d97706', badgeBg: '#1a0e00', badgeBorder: '#b45309', badgeTextColor: '#fbbf24', ctaA: '#d97706', ctaB: '#b45309' },
+      red:    { gradA: '#7f1d1d', gradB: '#dc2626', badgeBg: '#1a0404', badgeBorder: '#991b1b', badgeTextColor: '#f87171', ctaA: '#dc2626', ctaB: '#991b1b' },
+      purple: { gradA: '#4c1d95', gradB: '#7c3aed', badgeBg: '#130a1f', badgeBorder: '#6d28d9', badgeTextColor: '#a78bfa', ctaA: '#7c3aed', ctaB: '#6d28d9' },
+      cyan:   { gradA: '#164e63', gradB: '#0ea5e9', badgeBg: '#00131a', badgeBorder: '#0284c7', badgeTextColor: '#22d3ee', ctaA: '#0ea5e9', ctaB: '#0284c7' },
+    };
+
+    const t = THEMES[badgeStyle];
+    const fmt = (n: number) =>
+      'KES ' + n.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    const subtitleHtml = subtitle
+      ? `<p style="margin:4px 0 0;color:#71717a;font-size:12px;line-height:1.5">${subtitle}</p>`
+      : '';
+    const greetingHtml = greeting
+      ? `<p style="margin:0 0 14px;color:#e4e4e7;font-size:14px;font-weight:600">${greeting}</p>`
+      : '';
+    const bodyHtml = bodyLines
+      .map(l => `<p style="margin:0 0 12px;color:#a1a1aa;font-size:13px;line-height:1.7">${l}</p>`)
+      .join('');
+    const missingListHtml = missingDocuments?.length
+      ? `<ul style="margin:8px 0 0;padding-left:18px">${missingDocuments.map(d => `<li style="color:#e4e4e7;font-size:13px;margin-bottom:4px">${d}</li>`).join('')}</ul>`
+      : '';
+    const reasonHtml = reasonText
+      ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+               style="background:#18181b;border:1px solid #27272a;border-left:3px solid ${t.badgeBorder};border-radius:8px;margin:16px 0;overflow:hidden">
+           <tr><td style="padding:14px 16px">
+             <p style="margin:0 0 5px;font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:1px">${reasonLabel || 'Reason'}</p>
+             <p style="margin:0;font-size:13px;color:#e4e4e7;line-height:1.6">${reasonText}</p>
+             ${missingListHtml}
+           </td></tr>
+         </table>`
+      : '';
+    const amountCell = invoiceAmount !== undefined
+      ? `<td align="right" style="white-space:nowrap"><span style="font-size:14px;color:#34d399;font-weight:700">${fmt(invoiceAmount)}</span></td>`
+      : '';
+    const ctaHtml = ctaText && ctaUrl
+      ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0 4px">
+           <tr>
+             <td style="background:linear-gradient(135deg,${t.ctaA},${t.ctaB});border-radius:10px;padding:13px 26px">
+               <a href="${ctaUrl}" style="color:#fff;font-size:13px;font-weight:700;text-decoration:none;letter-spacing:0.3px">${ctaText} &rarr;</a>
+             </td>
+           </tr>
+         </table>`
+      : '';
+    const nextNoteHtml = nextNote
+      ? `<p style="margin:16px 0 0;font-size:12px;color:#52525b;background:#18181b;border:1px solid #27272a;border-radius:8px;padding:12px 16px;line-height:1.6">${nextNote}</p>`
+      : '';
+
+    const html = `<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta name="color-scheme" content="dark"/>
+  <meta name="supported-color-schemes" content="dark"/>
+  <title>${subject}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#09090b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+         style="background-color:#09090b;min-height:100vh;padding:32px 12px">
+    <tr><td align="center" valign="top">
+    <table role="presentation" width="640" cellpadding="0" cellspacing="0" border="0"
+           style="max-width:640px;width:100%;border-radius:16px;overflow:hidden;border:1px solid #27272a">
+
+      <tr><td style="background:linear-gradient(90deg,${t.gradA} 0%,${t.gradB} 100%);height:3px;font-size:0;line-height:0">&nbsp;</td></tr>
+
+      <tr>
+        <td style="background-color:#111113;padding:28px 36px 24px">
+          <div style="display:inline-block;background:#1c1c1f;border:1px solid #3f3f46;border-radius:8px;padding:4px 12px;margin-bottom:12px">
+            <span style="color:#71717a;font-size:10px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase">CIC Insurance Group</span>
+          </div><br/>
+          <span style="display:inline-block;background:${t.badgeBg};border:1px solid ${t.badgeBorder};border-radius:20px;padding:3px 11px;font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:${t.badgeTextColor};margin-bottom:14px">${badgeText}</span>
+          <h1 style="margin:0 0 6px;color:#fafafa;font-size:22px;font-weight:700;letter-spacing:-0.3px;line-height:1.25">${title}</h1>
+          ${subtitleHtml}
+        </td>
+      </tr>
+
+      <tr>
+        <td style="background-color:#0d1117;border-top:1px solid #27272a;border-bottom:1px solid #27272a;padding:10px 36px">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td>
+                <span style="font-size:11px;color:#52525b;font-weight:500">Ref&nbsp;</span>
+                <span style="font-size:12px;color:#a78bfa;font-family:'Courier New',monospace;font-weight:700">${claimNumber}</span>
+                <span style="font-size:11px;color:#3f3f46"> &nbsp;&bull;&nbsp; </span>
+                <span style="font-size:12px;color:#a1a1aa">${providerName}</span>
+              </td>
+              ${amountCell}
+            </tr>
+          </table>
+        </td>
+      </tr>
+
+      <tr>
+        <td style="background-color:#0f0f11;padding:26px 36px">
+          ${greetingHtml}
+          ${bodyHtml}
+          ${reasonHtml}
+          ${ctaHtml}
+          ${nextNoteHtml}
+        </td>
+      </tr>
+
+      <tr>
+        <td style="background-color:#111113;border-top:1px solid #27272a;padding:20px 36px;text-align:center">
+          <div style="width:40px;height:2px;background:linear-gradient(90deg,#10b981,#06b6d4);margin:0 auto 14px;border-radius:2px"></div>
+          <p style="margin:0 0 3px;color:#52525b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px">CIC Insurance Group</p>
+          <p style="margin:0 0 3px;color:#3f3f46;font-size:10px">Medical Claims Division</p>
+          <p style="margin:0 0 12px;color:#3f3f46;font-size:10px">P.O. Box 59485-00200, Nairobi &nbsp;&bull;&nbsp; claims@cic.co.ke &nbsp;&bull;&nbsp; +254 703 099 000</p>
+          <p style="margin:0;color:#27272a;font-size:10px">This is an automated message — please do not reply &nbsp;&bull;&nbsp; &copy; ${new Date().getFullYear()} CIC Insurance Group</p>
+        </td>
+      </tr>
+
+      <tr><td style="background:linear-gradient(90deg,${t.gradB} 0%,${t.gradA} 100%);height:3px;font-size:0;line-height:0">&nbsp;</td></tr>
+
+    </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+    const text = [
+      `CIC Insurance Group — ${title}`,
+      '',
+      claimNumber ? `Ref: ${claimNumber}${providerName ? ` · ${providerName}` : ''}` : '',
+      invoiceAmount !== undefined ? `Amount: ${fmt(invoiceAmount)}` : '',
+      '',
+      ...bodyLines,
+      reasonText ? `\n${reasonLabel || 'Reason'}: ${reasonText}` : '',
+      missingDocuments?.length
+        ? `Required documents:\n${missingDocuments.map(d => `  • ${d}`).join('\n')}`
+        : '',
+      ctaText && ctaUrl ? `\n${ctaText}: ${ctaUrl}` : '',
+      nextNote ? `\n${nextNote}` : '',
+      '',
+      'CIC Insurance Group — Medical Claims Division',
+      'claims@cic.co.ke | +254 703 099 000',
+    ].filter(Boolean).join('\n');
+
+    await this.sendEmail(recipientEmail, subject, text, html);
   }
 
   // ─── Existing methods ─────────────────────────────────────────────────────
