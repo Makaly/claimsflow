@@ -230,6 +230,7 @@ model Provider {
   parentProvider         Provider?                    @relation("ProviderBranches", fields: [parentProviderId], references: [id])
   branches               Provider[]                   @relation("ProviderBranches")
   users                  User[]
+  aliases                ProviderAlias[]
 
   @@index([status])
   @@index([type])
@@ -1041,4 +1042,36 @@ model SystemConfig {
 
   @@index([category])
   @@map("system_config")
+}
+
+/// Normalised aliases for provider names extracted by OCR.
+/// One row per alias variant → canonical provider. Allows the
+/// mismatch fraud signal to survive spelling differences and
+/// abbreviations without false positives.
+model ProviderAlias {
+  id         String   @id @default(uuid())
+  providerId String
+  alias      String   @unique // normalised: lowercase, no punctuation, collapsed spaces
+  createdAt  DateTime @default(now())
+  provider   Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId])
+  @@map("provider_aliases")
+}
+
+/// Persists the calibrated per-factor weights produced by
+/// AnomalyScoringService.calibrateWeights(). One row is the current
+/// active model; older rows are kept for audit / rollback.
+model FraudModelWeights {
+  id          String   @id @default(uuid())
+  weights     Json     // { factorName: weight, ... }
+  sampleSize  Int
+  fraudCount  Int
+  legitimateCount Int
+  trainedAt   DateTime @default(now())
+  isActive    Boolean  @default(false)
+
+  @@index([isActive])
+  @@index([trainedAt])
+  @@map("fraud_model_weights")
 }
