@@ -7,6 +7,7 @@ import { EligibilityService } from './eligibility.service';
 import { AnomalyScoringService } from './anomaly-scoring.service';
 import { ClaimLabelsService } from './claim-labels.service';
 import { ClaimLabelsController } from './claim-labels.controller';
+import { MlScoringService } from './ml-scoring.service';
 import { OcrModule } from '../ocr/ocr.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { DocumentsModule } from '../documents/documents.module';
@@ -19,7 +20,7 @@ import { DocumentsModule } from '../documents/documents.module';
     DocumentsModule,
   ],
   controllers: [ClaimsController, ClaimLabelsController],
-  providers: [ClaimsService, ClaimsProcessor, EligibilityService, AnomalyScoringService, ClaimLabelsService],
-  exports: [ClaimsService, ClaimLabelsService],
+  providers: [ClaimsService, ClaimsProcessor, EligibilityService, AnomalyScoringService, ClaimLabelsService, MlScoringService],
+  exports: [ClaimsService, ClaimLabelsService, MlScoringService],
 })
 export class ClaimsModule {}

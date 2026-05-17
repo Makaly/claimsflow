@@ -1,6 +1,8 @@
 import { Controller, Get, Post, Body, Param, Query, UseGuards, Request, Res } from '@nestjs/common';
 import { Response } from 'express';
 import { ClaimLabelsService } from './claim-labels.service';
+import { AnomalyScoringService } from './anomaly-scoring.service';
+import { MlScoringService } from './ml-scoring.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -8,7 +10,11 @@ import { Roles } from '../auth/decorators/roles.decorator';
 @Controller('claim-labels')
 @UseGuards(JwtAuthGuard)
 export class ClaimLabelsController {
-  constructor(private readonly labelsService: ClaimLabelsService) {}
+  constructor(
+    private readonly labelsService: ClaimLabelsService,
+    private readonly anomalyService: AnomalyScoringService,
+    private readonly mlService: MlScoringService,
+  ) {}
 
   @Get()
   @UseGuards(RolesGuard)
@@ -50,5 +56,48 @@ export class ClaimLabelsController {
     @Request() req,
   ) {
     return this.labelsService.upsertLabel(claimId, body.label, 'manual_review', req.user.userId, body.notes);
+  }
+
+  @Get('ml/factor-effectiveness')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'fraud_officer')
+  factorEffectiveness() {
+    return this.anomalyService.getFactorEffectiveness();
+  }
+
+  @Post('ml/calibrate-weights')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
+  calibrateWeights() {
+    return this.anomalyService.calibrateWeights();
+  }
+
+  @Post('ml/train-sidecar')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
+  async trainSidecar() {
+    const dataset = await this.labelsService.exportDataset();
+    const rows = dataset.data
+      .filter(r => r.features && r.label)
+      .map(r => ({
+        label: r.label as string,
+        features: {
+          invoiceAmount: (r.features as any)?.invoiceAmount ?? 0,
+          ocrConfidence: (r.features as any)?.ocrConfidence ?? 1,
+          anomalyScore: (r.features as any)?.anomalyScore ?? 0,
+          fraudSignalCount: (r.features as any)?.fraudSignalCount ?? 0,
+          fraudSignalCritical: (r.features as any)?.fraudSignalCritical ?? 0,
+          resubmissionCount: (r.features as any)?.resubmissionCount ?? 0,
+          memberNumberPresent: (r.features as any)?.memberNumberPresent === false ? 0 : 1,
+        },
+      }));
+    return this.mlService.train(rows);
+  }
+
+  @Get('ml/sidecar-weights')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'fraud_officer')
+  sidecarWeights() {
+    return this.mlService.getWeights();
   }
 }
