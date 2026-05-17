@@ -88,6 +88,22 @@ export function getStatusColor(status: string): string {
   return colors[status] || 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
 }
 
+/** Returns "—" when OCR stored a filesystem path or other clearly-invalid value instead of a real name/number. */
+export function sanitizeMemberField(value: string | null | undefined): string {
+  if (!value) return '—'
+  const v = value.trim()
+  if (!v) return '—'
+  // Absolute OS paths (Unix or Windows) are never valid member fields
+  if (/^(\/|~\/|[A-Za-z]:[/\\])/.test(v)) return '—'
+  // Leftover OCR noise: bare punctuation, single chars, or known garbage patterns
+  if (v.length < 2) return '—'
+  return v
+}
+
+export function plural(count: number, singular: string, pluralForm?: string): string {
+  return count === 1 ? singular : (pluralForm ?? `${singular}s`)
+}
+
 export function getPriorityColor(priority: string): string {
   const colors: Record<string, string> = {
     urgent: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300',

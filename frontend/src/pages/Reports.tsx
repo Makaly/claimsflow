@@ -26,7 +26,7 @@ import {
 } from 'recharts'
 import { useClaimsStore } from '@/store/claimsStore'
 import { Pagination } from '@/components/Pagination'
-import { formatCurrency, formatDate, getStatusColor } from '@/lib/utils'
+import { formatCurrency, formatDate, getStatusColor, plural } from '@/lib/utils'
 import { useReportData } from '@/hooks/useReportData'
 
 const COLORS = ['hsl(160,60%,45%)', 'hsl(30,80%,55%)', 'hsl(340,75%,55%)', 'hsl(220,70%,50%)', 'hsl(280,65%,60%)', 'hsl(170,60%,45%)']
@@ -647,7 +647,7 @@ ${unknownPat.slice(0,30).map(c => `<tr><td class="flag-cell">${c.claimNumber}</t
           <CardContent className="pt-5">
             <p className="text-sm text-muted-foreground">Total Invoice Value</p>
             <p className="text-3xl font-bold mt-0.5">{formatCurrency(stats.totalAmount)}</p>
-            <p className="text-xs text-muted-foreground mt-1">{stats.batchCount} batches &middot; {uniqueProviders.length} providers</p>
+            <p className="text-xs text-muted-foreground mt-1">{stats.batchCount} {plural(stats.batchCount, 'batch', 'batches')} &middot; {uniqueProviders.length} {plural(uniqueProviders.length, 'provider')}</p>
           </CardContent>
         </Card>
         <Card>

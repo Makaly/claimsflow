@@ -39,7 +39,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { formatCurrency, formatDate, formatRelativeDate, getStatusColor, getPriorityColor } from '@/lib/utils'
+import { formatCurrency, formatDate, formatRelativeDate, getStatusColor, getPriorityColor, sanitizeMemberField } from '@/lib/utils'
 import { useClaimsStore, type ClaimRecord, generateSystemBarcode } from '@/store/claimsStore'
 import { useAuthStore } from '@/store/authStore'
 import { stampBarcodeOnPdf, stampBarcodeOnImage } from '@/lib/pdfBarcode'
@@ -1194,8 +1194,8 @@ export default function Claims() {
       case 'member': return (
         <TableCell key={colId}>
           <div>
-            <p className="font-medium">{claim.memberName}</p>
-            <p className="text-xs text-muted-foreground">{claim.memberNumber}</p>
+            <p className="font-medium">{sanitizeMemberField(claim.memberName)}</p>
+            <p className="text-xs text-muted-foreground">{sanitizeMemberField(claim.memberNumber)}</p>
           </div>
         </TableCell>
       )
@@ -1940,8 +1940,8 @@ export default function Claims() {
                                           </div>
                                         </TableCell>
                                         <TableCell>
-                                          <p className="font-medium">{c.memberName}</p>
-                                          <p className="text-[10px] text-muted-foreground">{c.memberNumber}</p>
+                                          <p className="font-medium">{sanitizeMemberField(c.memberName)}</p>
+                                          <p className="text-[10px] text-muted-foreground">{sanitizeMemberField(c.memberNumber)}</p>
                                         </TableCell>
                                         <TableCell>{formatCurrency(c.invoiceAmount)}</TableCell>
                                         <TableCell><Badge className={`text-[10px] ${getStatusColor(c.status)}`} variant="secondary">{c.status.replace(/_/g, ' ')}</Badge></TableCell>
@@ -2044,8 +2044,8 @@ export default function Claims() {
                                 </div>
                               </TableCell>
                               <TableCell>
-                                <p className="font-medium">{c.memberName}</p>
-                                <p className="text-[10px] text-muted-foreground">{c.memberNumber}</p>
+                                <p className="font-medium">{sanitizeMemberField(c.memberName)}</p>
+                                <p className="text-[10px] text-muted-foreground">{sanitizeMemberField(c.memberNumber)}</p>
                               </TableCell>
                               <TableCell>{formatCurrency(c.invoiceAmount)}</TableCell>
                               <TableCell><Badge className={`text-[10px] ${getStatusColor(c.status)}`} variant="secondary">{c.status.replace(/_/g, ' ')}</Badge></TableCell>
@@ -3063,7 +3063,7 @@ export default function Claims() {
             return c ? (
               <div className="rounded-lg border p-3 bg-muted/50 text-sm space-y-1">
                 <p><span className="text-muted-foreground">Claim:</span> <span className="font-medium">{c.claimNumber}</span></p>
-                <p><span className="text-muted-foreground">Member:</span> <span className="font-medium">{c.memberName}</span></p>
+                <p><span className="text-muted-foreground">Member:</span> <span className="font-medium">{sanitizeMemberField(c.memberName)}</span></p>
                 <p><span className="text-muted-foreground">Amount:</span> <span className="font-medium">{formatCurrency(c.invoiceAmount)}</span></p>
               </div>
             ) : null
@@ -3107,7 +3107,7 @@ export default function Claims() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Member</span>
-                  <span>{denialClaim.memberName || '—'}</span>
+                  <span>{sanitizeMemberField(denialClaim.memberName)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Amount</span>
