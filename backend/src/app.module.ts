@@ -33,6 +33,7 @@ import { PreAuthModule } from './preauth/preauth.module';
 import { PolicyModule } from './policy/policy.module';
 import { MockIntegrationsModule } from './mock-integrations/mock-integrations.module';
 import { GdprModule } from './gdpr/gdpr.module';
+import { ScannerModule } from './scanner/scanner.module';
 
 @Module({
   imports: [
@@ -79,6 +80,7 @@ import { GdprModule } from './gdpr/gdpr.module';
     PolicyModule,
     MockIntegrationsModule,
     GdprModule,
+    ScannerModule,
   ],
   controllers: [AppController],
   providers: [
