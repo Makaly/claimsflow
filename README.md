@@ -34,9 +34,10 @@ ClaimsFlow digitises the full medical claims lifecycle — from provider intake 
 - **Real-time notifications** via WebSockets
 - **Two-factor authentication**, password reset, role-based access
 - **Reporting** — operational, financial, fraud, provider scorecards
-- **ML fraud scoring** — gradient-boosting classifier (scikit-learn) trained on labelled claims, with heuristic fallback, self-calibrating factor weights, and a closed human-in-the-loop feedback pipeline
-- **Hardened security** — HttpOnly JWT cookies, Helmet CSP, HSTS, global rate limiting, magic-byte file verification
-- **GDPR / KDPA compliance** — data-subject rights (access, portability, erasure, objection), consent ledger, AES-256-GCM field encryption for special-category data, structured request-ID tracing
+- **ML fraud scoring** — gradient-boosting classifier trained on labelled claims with self-calibrating weights, cross-provider duplicate detection, procedure-code unbundling checks, and a closed human-in-the-loop feedback pipeline
+- **ML Labelling dashboard** — multi-format export (Excel, CSV, JSON), deep analysis tab with fraud rate by invoice band and OCR confidence tier, rotating insight panel during extraction
+- **Hardened security** — HttpOnly JWT cookies, Helmet CSP, HSTS, global rate limiting, magic-byte file verification, AES-256-GCM field-level encryption for special-category data
+- **GDPR / KDPA compliance** — data-subject rights (access, portability, erasure, objection), consent ledger, structured request-ID tracing
 
 ---
 
@@ -142,11 +143,11 @@ cd claimsflow
 
 # 2. Backend
 cd backend
-cp .env.example .env       # fill in DATABASE_URL, JWT_SECRET, etc.
+cp .env.example .env       # fill in DATABASE_URL, JWT_SECRET, DATA_ENCRYPTION_KEY, etc.
 npm install
 npx prisma migrate deploy
 npx prisma db seed
-npm run start:dev          # http://localhost:3000
+npm run start:dev          # ts-node, no build step, works on Node 20–22
 
 # 3. Frontend (new shell)
 cd ../frontend
@@ -207,9 +208,9 @@ The backend reads configuration from `.env`. See [backend/.env.example](backend/
 ### Backend
 
 ```bash
-npm run start:dev       # nest start --watch
-npm run build           # production build to dist/
-npm run start:prod      # node dist/main
+npm run start:dev       # ts-node (no build, hot-reload friendly, Node 20–22)
+npm run build           # tsc → dist/
+npm run start:prod      # node dist/main.js (requires prior build)
 npm run prisma:migrate  # apply pending migrations
 npm run prisma:seed     # seed demo users + reference data
 npm run test            # unit tests

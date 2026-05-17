@@ -7,6 +7,123 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.9.2] - 2026-05-17
+
+### Added
+
+- **Multi-format dataset export** (`GET /api/claim-labels/export/csv`,
+  `GET /api/claim-labels/export/excel`) — ML Labelling page now exposes a
+  dropdown with three export formats:
+  - **Excel (.xlsx)** — two-sheet workbook: full colour-coded dataset with
+    auto-filter + Analysis Summary sheet (label averages, source breakdown,
+    top-10 fraud signals). Recommended for analysts.
+  - **CSV** — RFC 4180-compliant with UTF-8 BOM for correct Excel rendering.
+    Universal compatibility with R, Python, and BI tools.
+  - **JSON** — existing training-dataset format; unchanged, accessible at
+    `/export` for ML pipeline ingestion.
+
+- **Deep analysis tab on ML Labelling page** — pulls from
+  `GET /api/claim-labels/analysis/deep` and renders six panels:
+  1. Feature averages by label class — legitimate vs suspicious vs fraud across
+     avg invoice amount, anomaly score, OCR confidence, and signal counts.
+  2. Monthly label trend — stacked proportional bars per `YYYY-MM` bucket.
+  3. Fraud rate by invoice amount — five tiers from 0–50k to 500k+.
+  4. Fraud rate by OCR confidence — five tiers from <50% to ≥95%.
+  5. Most frequent fraud signals — ranked by occurrence with per-signal fraud
+     rate bar, identifying which rules fire most reliably.
+  6. Label source breakdown — card grid showing counts by source
+     (`fraud_confirmed`, `manual_review`, `auto_approve`, etc.).
+
+- **Animated OCR processing panel** — replaces the plain spinner + file list
+  shown during `ai_extracting` and `manual_processing` batch steps with a
+  fully animated `ProcessingInsightCard` component:
+  - Shimmer gradient progress bar tracks real percentage with smooth transition.
+  - Scan-beam animation sweeps top-to-bottom on the active file card.
+  - Pulse rings radiate from the Brain/Scan icon during processing.
+  - Stage pipeline chips (`Reading → Extracting → Fraud Checks → Verifying`)
+    shift from grey to active (spinner) to done (green checkmark) as progress
+    crosses each threshold.
+  - Rotating insight panel cycles through 10 educational facts every 5 seconds
+    (fraud patterns, OCR quality tips, cross-provider analysis, ML model
+    explanation) with a fade-slide transition and dot-position indicator.
+  - Live stat pills show `X/N done` and average confidence in the header.
+
+- **Expanded `/api/claims/statistics` response** — six new server-computed
+  fields so the Dashboard never depends on a potentially-empty Zustand store:
+  `avgAmount`, `providerCount`, `batchCount`, `aiExtracted`, `fraudHold`,
+  `fraudConfirmed`. Dashboard stat cards (Avg Claim, Providers, Total Batches,
+  AI Extracted, Approval Rate) now read from `serverStats` with the store as
+  a fallback only.
+
+### Fixed
+
+- **Fraud detection inactive for batch-submitted claims** — batch claims are
+  created as bare records and populated by OCR later. `ClaimsService.create()`
+  — which runs `computeFraudSignals()` — was never called for batch claims, so
+  the Fraud column showed `—` permanently. Fix: `OcrProcessor` now runs the
+  full fraud detection pipeline (all four parallel queries + anomaly scoring)
+  after each claim update, exactly as single-claim uploads do. KES 500,000
+  round-amount claims, batch member velocity, and cross-provider duplicates
+  are now flagged correctly.
+
+- **`dateOfService` blank after OCR extraction** — when OCR found no service
+  date in a document, `safeServiceDate` was `null` and the `|| undefined`
+  shortcut in the Prisma update silently skipped writing the field.
+  Fix: `safeServiceDate` now falls back to `new Date()` (upload date). The
+  fraud-signal checker's existing 2-day guard prevents false positives.
+
+- **Dashboard Avg Claim, Providers, Batches, AI Extracted showing 0** — these
+  four stat cards derived from the Zustand claims store, which is empty when
+  landing directly on the Dashboard without first visiting the Claims page.
+  Fix: values are now server-computed and returned by the statistics endpoint.
+  The Pending count was also corrected to include `submitted + under_review +
+  incomplete` (previously only `submitted` was counted).
+
+- **HTTP 500 on claim publish when `DATA_ENCRYPTION_KEY` is absent** —
+  `encryptField()` threw an uncaught error when `DATA_ENCRYPTION_KEY` was not
+  set. The Prisma middleware did not catch it, causing every claim creation or
+  update touching `diagnosis` or `treatment` to return 500. Fix: `encryptField`
+  now wraps the encryption block in try/catch — if the key is missing, it logs
+  a warning and stores the value as plaintext so the application remains
+  functional in development. The startup warning in `PrismaService` already
+  alerts operators to set the key before production use.
+
+- **Role guard 403 on ML Labelling page** — `GET /claim-labels/ml/factor-
+  effectiveness` and `GET /claim-labels/ml/sidecar-weights` were restricted to
+  `admin` and `fraud_officer` only. The ML Labelling page is accessible to
+  `claims_officer` and `maker_checker`, causing `Promise.all` to reject and
+  blank the entire page. Fix: both endpoints now include `claims_officer` and
+  `maker_checker`; `Promise.allSettled` is used so a single 403 never blanks
+  the page.
+
+- **`npm run start:dev` crashing on Node 22** — NestJS CLI 11's watch runner
+  spawns child processes as `node dist/main` (no `.js` extension) which fails
+  consistently on Node 22.22.1. Fix: all npm start scripts now bypass the CLI
+  runner — `start:dev` uses `ts-node --transpile-only` (already a project
+  devDependency), `start:prod` uses `node dist/main.js` with explicit
+  extension, and `start` builds first then runs.
+
+### Changed
+
+- **ML Labelling dataset table** — added OCR Confidence and Fraud Signals
+  columns; anomaly scores are colour-coded (red ≥60%, amber ≥30%, green <30%);
+  label distribution cards show percentage of total dataset alongside count;
+  header shows progress note ("X more needed to calibrate") when below 50
+  labelled claims.
+
+- **`featuresSnapshot` now captures `fraudSignalTitles`** — `ClaimLabelsService.
+  upsertLabel()` includes the list of fraud signal titles in the snapshot so the
+  analysis panels can show which specific signals appeared on each labelled claim.
+
+- **BatchUpload dropzone UI polished** — extraction mode selector, file list,
+  and progress panel refined for cleaner layout and consistent spacing.
+
+### Database
+
+- No schema changes in this release.
+
+---
+
 ## [1.9.1] - 2026-05-17
 
 ### Added
