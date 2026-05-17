@@ -3341,40 +3341,56 @@ export default function BatchUpload() {
 
                   <div className="relative mb-5">
                     {isDragActive && (
-                      <span className="absolute inset-0 animate-ping rounded-2xl bg-violet-500/20" />
+                      <>
+                        <span className="absolute inset-0 animate-ping rounded-3xl bg-violet-500/15" />
+                        <span className="absolute inset-0 animate-pulse rounded-3xl bg-blue-500/10" style={{ animationDelay: '0.3s' }} />
+                      </>
                     )}
                     <div className={cn(
-                      'relative flex h-16 w-16 items-center justify-center rounded-2xl transition-all duration-300',
+                      'relative flex h-20 w-20 items-center justify-center rounded-3xl transition-all duration-300',
                       isDragActive
-                        ? 'bg-gradient-to-br from-violet-500 to-blue-600 text-white shadow-xl shadow-violet-500/40 scale-110'
-                        : 'bg-background shadow-sm ring-1 ring-border group-hover:shadow-md group-hover:ring-violet-300/50'
+                        ? 'bg-gradient-to-br from-violet-500 to-blue-600 shadow-2xl shadow-violet-500/50 scale-110'
+                        : 'bg-gradient-to-br from-violet-50 to-blue-50/50 dark:from-violet-950/30 dark:to-blue-950/20 shadow-md ring-1 ring-violet-200/60 dark:ring-violet-700/30 group-hover:shadow-lg group-hover:ring-violet-400/40 group-hover:from-violet-100 group-hover:to-blue-100/50 dark:group-hover:from-violet-950/50 dark:group-hover:to-blue-950/30'
                     )}>
                       <CloudUpload className={cn(
-                        'h-8 w-8 transition-transform duration-300',
-                        isDragActive ? 'text-white' : 'text-muted-foreground/60 group-hover:text-violet-500 group-hover:-translate-y-0.5'
+                        'h-9 w-9 transition-all duration-300',
+                        isDragActive ? 'text-white drop-shadow-lg' : 'text-violet-500/70 dark:text-violet-400/70 group-hover:text-violet-600 group-hover:-translate-y-1'
                       )} />
+                      {!isDragActive && (
+                        <div className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-blue-600 shadow-sm">
+                          <span className="text-[9px] font-bold text-white">+</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   {isDragActive ? (
                     <>
-                      <p className="text-lg font-semibold bg-gradient-to-r from-violet-600 to-blue-600 bg-clip-text text-transparent">
+                      <p className="text-xl font-bold bg-gradient-to-r from-violet-600 to-blue-600 bg-clip-text text-transparent">
                         Release to upload
                       </p>
-                      <p className="mt-1 text-sm text-muted-foreground">We'll start processing right away</p>
+                      <p className="mt-1.5 text-sm text-muted-foreground">We'll start processing right away</p>
                     </>
                   ) : (
                     <>
-                      <p className="text-lg font-semibold">Drag &amp; drop invoice files here</p>
-                      <p className="mt-1 text-sm text-muted-foreground">or <span className="text-violet-600 font-medium">click to browse</span></p>
+                      <p className="text-base font-semibold text-foreground">Drag &amp; drop invoice files here</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        or <span className="text-violet-600 dark:text-violet-400 font-semibold underline underline-offset-2 decoration-dotted">click to browse</span>
+                      </p>
                       <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5">
-                        {['PDF', 'TIFF', 'JPG', 'PNG'].map(t => (
-                          <span key={t} className="rounded-md border bg-background/50 px-2 py-0.5 text-[10px] font-mono font-semibold text-muted-foreground">
-                            {t}
+                        {([
+                          { ext: 'PDF', color: 'bg-red-500' },
+                          { ext: 'TIFF', color: 'bg-blue-500' },
+                          { ext: 'JPG', color: 'bg-amber-500' },
+                          { ext: 'PNG', color: 'bg-emerald-500' },
+                        ]).map(({ ext, color }) => (
+                          <span key={ext} className="flex items-center gap-1 rounded-md border border-border/60 bg-background/70 px-2 py-1 text-[10px] font-mono font-bold text-muted-foreground shadow-sm">
+                            <span className={cn('h-1.5 w-1.5 rounded-full', color)} />
+                            {ext}
                           </span>
                         ))}
                       </div>
-                      <p className="mt-3 text-xs text-muted-foreground">Up to 50&nbsp;MB per file · Max 100 files per batch</p>
+                      <p className="mt-3 text-[11px] text-muted-foreground/70">Up to 50 MB per file · Max 100 files per batch</p>
                     </>
                   )}
                 </div>}
@@ -3446,31 +3462,43 @@ export default function BatchUpload() {
                 )}
 
                 {uploadedFiles.length > 0 && (
-                  <div className="flex flex-col gap-2 pt-1">
+                  <div className="flex flex-col gap-3 pt-1">
                     {/* Extraction mode selector */}
-                    <div className="flex flex-col gap-1.5 rounded-lg border border-slate-200/60 bg-slate-50/40 p-3 dark:border-slate-700/40 dark:bg-slate-900/20">
-                      <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                    <div className="rounded-xl border border-slate-200/80 dark:border-slate-700/50 bg-gradient-to-b from-slate-50/60 to-background dark:from-slate-900/20 overflow-hidden">
+                      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-200/60 dark:border-slate-700/40">
                         <Scan className="h-3.5 w-3.5 text-slate-500" />
-                        Extraction mode
-                      </Label>
-                      <div className="grid grid-cols-1 min-[480px]:grid-cols-3 gap-1">
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Extraction mode</span>
+                      </div>
+                      <div className="grid grid-cols-3 divide-x divide-slate-200/60 dark:divide-slate-700/40">
                         {([
-                          { value: 'ocr', label: 'OCR Only', desc: 'Tesseract regex — fast, no API key' },
-                          { value: 'ai', label: 'AI Only', desc: 'Vision model — best for complex docs' },
-                          { value: 'combined', label: 'OCR + AI', desc: 'Run both and merge best fields' },
-                        ] as const).map(opt => (
+                          { value: 'ocr', icon: ScanLine, label: 'OCR Only', desc: 'Fast · no API key' },
+                          { value: 'ai', icon: Brain, label: 'AI Only', desc: 'Best for complex docs' },
+                          { value: 'combined', icon: Sparkles, label: 'OCR + AI', desc: 'Merges best fields' },
+                        ] as const).map(({ value, icon: Icon, label, desc }) => (
                           <button
-                            key={opt.value}
+                            key={value}
                             type="button"
-                            onClick={() => setExtractionMode(opt.value)}
-                            className={`rounded-md border px-2 py-1.5 text-xs font-medium transition-colors text-left ${
-                              extractionMode === opt.value
-                                ? 'border-violet-500 bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300'
-                                : 'border-slate-200 bg-background text-muted-foreground hover:border-slate-300 dark:border-slate-700'
-                            }`}
+                            onClick={() => setExtractionMode(value)}
+                            className={cn(
+                              'flex flex-col items-center gap-1.5 px-2 py-3 text-xs font-medium transition-all duration-150',
+                              extractionMode === value
+                                ? 'bg-gradient-to-b from-violet-50 to-violet-50/40 dark:from-violet-950/40 dark:to-violet-950/10 text-violet-700 dark:text-violet-300'
+                                : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground',
+                            )}
                           >
-                            {opt.label}
-                            <span className="block text-[10px] font-normal opacity-70 mt-0.5 leading-tight">{opt.desc}</span>
+                            <div className={cn(
+                              'flex h-7 w-7 items-center justify-center rounded-lg transition-all',
+                              extractionMode === value
+                                ? 'bg-gradient-to-br from-violet-500 to-blue-600 text-white shadow-sm shadow-violet-500/30'
+                                : 'bg-muted text-muted-foreground',
+                            )}>
+                              <Icon className="h-3.5 w-3.5" />
+                            </div>
+                            <span className="font-semibold leading-none">{label}</span>
+                            <span className={cn('text-[10px] leading-tight text-center', extractionMode === value ? 'opacity-70' : 'opacity-50')}>{desc}</span>
+                            {extractionMode === value && (
+                              <div className="h-0.5 w-6 rounded-full bg-gradient-to-r from-violet-500 to-blue-500 mt-0.5" />
+                            )}
                           </button>
                         ))}
                       </div>
@@ -3478,49 +3506,69 @@ export default function BatchUpload() {
 
                     {/* AI model picker — hidden when OCR-only mode */}
                     {visionModels.length > 0 && extractionMode !== 'ocr' && (
-                      <div className="flex flex-col gap-1.5 rounded-lg border border-violet-200/50 bg-violet-50/40 p-3 dark:border-violet-800/40 dark:bg-violet-950/20">
-                        <Label htmlFor="vision-model" className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                      <div className="flex flex-col gap-2 rounded-xl border border-violet-200/60 dark:border-violet-800/40 bg-gradient-to-b from-violet-50/50 to-background dark:from-violet-950/15 overflow-hidden">
+                        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-violet-200/40 dark:border-violet-800/30">
                           <Sparkles className="h-3.5 w-3.5 text-violet-500" />
-                          {extractionMode === 'combined' ? 'AI model (for combined pass)' : 'AI model'}
-                        </Label>
-                        <Select value={selectedModel} onValueChange={setSelectedModel}>
-                          <SelectTrigger id="vision-model" className="h-9 bg-background">
-                            <SelectValue placeholder="Select model" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {visionModels.filter(m => m.id !== 'tesseract').map(m => (
-                              <SelectItem key={m.id} value={m.id} disabled={!m.available}>
-                                <div className="flex items-center gap-2">
-                                  <span>{m.label}</span>
-                                  {m.tier === 'best' && <Badge variant="secondary" className="h-4 text-[9px] bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">BEST</Badge>}
-                                  {m.tier === 'recommended' && <Badge variant="secondary" className="h-4 text-[9px] bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">REC</Badge>}
-                                  {m.tier === 'fast' && <Badge variant="secondary" className="h-4 text-[9px] bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">FAST</Badge>}
-                                  {m.tier === 'local' && <Badge variant="secondary" className="h-4 text-[9px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">LOCAL</Badge>}
-                                  {!m.available && <Badge variant="outline" className="h-4 text-[9px]">key missing</Badge>}
-                                </div>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {selectedModel && (
-                          <p className="text-[11px] text-muted-foreground leading-snug">
-                            {visionModels.find(m => m.id === selectedModel)?.description}
-                          </p>
-                        )}
+                          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                            {extractionMode === 'combined' ? 'AI model — combined pass' : 'AI model'}
+                          </span>
+                        </div>
+                        <div className="px-4 pb-3 space-y-2">
+                          <Select value={selectedModel} onValueChange={setSelectedModel}>
+                            <SelectTrigger id="vision-model" className="h-9 bg-background border-violet-200/60 dark:border-violet-800/40 text-sm">
+                              <SelectValue placeholder="Select model" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {visionModels.filter(m => m.id !== 'tesseract').map(m => (
+                                <SelectItem key={m.id} value={m.id} disabled={!m.available}>
+                                  <div className="flex items-center gap-2">
+                                    <span>{m.label}</span>
+                                    {m.tier === 'best' && <Badge variant="secondary" className="h-4 text-[9px] bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">BEST</Badge>}
+                                    {m.tier === 'recommended' && <Badge variant="secondary" className="h-4 text-[9px] bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">REC</Badge>}
+                                    {m.tier === 'fast' && <Badge variant="secondary" className="h-4 text-[9px] bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">FAST</Badge>}
+                                    {m.tier === 'local' && <Badge variant="secondary" className="h-4 text-[9px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">LOCAL</Badge>}
+                                    {!m.available && <Badge variant="outline" className="h-4 text-[9px]">key missing</Badge>}
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {selectedModel && (
+                            <p className="text-[11px] text-muted-foreground leading-snug">
+                              {visionModels.find(m => m.id === selectedModel)?.description}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     )}
-                    <Button
-                      className="w-full bg-gradient-to-r from-violet-600 to-blue-600 text-white shadow-lg shadow-violet-500/20 hover:from-violet-500 hover:to-blue-500 hover:shadow-violet-500/40"
-                      size="lg"
-                      onClick={startAiExtraction}
-                    >
-                      {extractionMode === 'ocr' ? <Scan className="mr-2 h-4 w-4" /> : <Brain className="mr-2 h-4 w-4" />}
-                      <span className="hidden sm:inline">{extractionMode === 'ocr' ? 'Extract with OCR' : extractionMode === 'combined' ? 'Extract with OCR + AI' : 'Extract data with AI'}</span>
-                      <span className="sm:hidden">{extractionMode === 'ocr' ? 'Run OCR' : extractionMode === 'combined' ? 'OCR + AI' : 'Run AI'}</span>
-                      <Badge className="ml-2 bg-white/20 text-white hover:bg-white/20">{uploadedFiles.length} file{uploadedFiles.length !== 1 ? 's' : ''}</Badge>
-                      <ArrowRight className="ml-2 h-4 w-4" />
-                    </Button>
-                    <Button variant="outline" className="w-full" size="lg" onClick={startManualEntry}>
+
+                    {/* Primary CTA */}
+                    <div className="relative group/cta">
+                      <div className="absolute -inset-0.5 rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 opacity-30 blur-sm group-hover/cta:opacity-50 transition-opacity" />
+                      <Button
+                        className="relative w-full bg-gradient-to-r from-violet-600 to-blue-600 text-white shadow-lg shadow-violet-500/25 hover:from-violet-500 hover:to-blue-500 hover:shadow-xl hover:shadow-violet-500/35 transition-all duration-200 h-12 text-[15px]"
+                        size="lg"
+                        onClick={startAiExtraction}
+                      >
+                        {extractionMode === 'ocr'
+                          ? <Scan className="mr-2 h-4.5 w-4.5" />
+                          : extractionMode === 'combined'
+                          ? <Sparkles className="mr-2 h-4.5 w-4.5" />
+                          : <Brain className="mr-2 h-4.5 w-4.5" />}
+                        <span className="hidden sm:inline font-semibold">
+                          {extractionMode === 'ocr' ? 'Extract with OCR' : extractionMode === 'combined' ? 'Extract with OCR + AI' : 'Extract data with AI'}
+                        </span>
+                        <span className="sm:hidden font-semibold">
+                          {extractionMode === 'ocr' ? 'Run OCR' : extractionMode === 'combined' ? 'OCR + AI' : 'Run AI'}
+                        </span>
+                        <span className="ml-2 inline-flex items-center justify-center rounded-full bg-white/20 px-2 py-0.5 text-xs font-bold">
+                          {uploadedFiles.length} {uploadedFiles.length !== 1 ? 'files' : 'file'}
+                        </span>
+                        <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover/cta:translate-x-0.5" />
+                      </Button>
+                    </div>
+
+                    <Button variant="outline" className="w-full border-dashed text-muted-foreground hover:text-foreground hover:border-solid" size="lg" onClick={startManualEntry}>
                       <ClipboardList className="mr-2 h-4 w-4" />
                       Manual entry
                     </Button>
