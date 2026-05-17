@@ -55,11 +55,19 @@ export function encryptField(plaintext: string | null | undefined): string | nul
   if (plaintext === null || plaintext === undefined) return plaintext;
   if (plaintext === '') return plaintext;
   if (isEncrypted(plaintext)) return plaintext; // already encrypted — idempotent
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv(ALGORITHM, getKey(), iv);
-  const ct = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return `${PREFIX}${iv.toString('base64')}:${tag.toString('base64')}:${ct.toString('base64')}`;
+  try {
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv(ALGORITHM, getKey(), iv);
+    const ct = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return `${PREFIX}${iv.toString('base64')}:${tag.toString('base64')}:${ct.toString('base64')}`;
+  } catch (err: any) {
+    // Key missing or invalid — store plaintext with a warning so the app
+    // remains functional in dev. Production deployments must set
+    // DATA_ENCRYPTION_KEY; the startup check in PrismaService logs loudly.
+    console.warn('[field-encryption] Encryption skipped — DATA_ENCRYPTION_KEY not set:', err.message);
+    return plaintext;
+  }
 }
 
 export function decryptField(value: string | null | undefined): string | null | undefined {
