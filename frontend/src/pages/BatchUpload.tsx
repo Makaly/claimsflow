@@ -14,6 +14,7 @@ import {
   Pen, FileSignature, Eraser, Square, Stamp,
   Underline, Strikethrough, ChevronDown, Save, MapPin,
   Copy, Check, AlertTriangle, Trash2,
+  ScanLine, Printer, RefreshCw, WifiOff,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -1956,6 +1957,18 @@ export default function BatchUpload() {
   type ExtractionMode = 'ai' | 'ocr' | 'combined'
   const [extractionMode, setExtractionMode] = useState<ExtractionMode>('ai')
 
+  // ── Document scanner (hardware) ────────────────────────────────────────────
+  type ScannerDevice = { id: string; name: string; vendor: string; model: string; type: string }
+  const [inputTab, setInputTab] = useState<'upload' | 'scanner'>('upload')
+  const [scanners, setScanners] = useState<ScannerDevice[]>([])
+  const [scannersLoading, setScannersLoading] = useState(false)
+  const [saneAvailable, setSaneAvailable] = useState(true)
+  const [selectedScanner, setSelectedScanner] = useState('')
+  const [scanDpi, setScanDpi] = useState('300')
+  const [scanMode, setScanMode] = useState('Color')
+  const [scanning, setScanning] = useState(false)
+  const [scanError, setScanError] = useState<string | null>(null)
+
   // Animated progress during extraction — ticks every 500 ms from 0→92 % over
   // EXPECTED_MS, then jumps to the real percentage once files finish.
   const [aiExtractPct, setAiExtractPct] = useState(0)
@@ -2317,6 +2330,53 @@ export default function BatchUpload() {
   const removeFile = (index: number) => {
     setUploadedFiles(prev => prev.filter((_, i) => i !== index))
   }
+
+  // ── Scanner helpers ────────────────────────────────────────────────────────
+  const fetchScanners = useCallback(async () => {
+    setScannersLoading(true)
+    setScanError(null)
+    try {
+      const { data } = await api.get('/scanner/devices')
+      const devs: ScannerDevice[] = data.devices ?? []
+      setScanners(devs)
+      setSaneAvailable(data.saneAvailable ?? true)
+      if (devs.length > 0 && !selectedScanner) setSelectedScanner(devs[0].id)
+    } catch {
+      setScanners([])
+    } finally {
+      setScannersLoading(false)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedScanner])
+
+  useEffect(() => {
+    if (inputTab === 'scanner') fetchScanners()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inputTab])
+
+  const handleScan = useCallback(async () => {
+    if (!selectedScanner || scanning) return
+    setScanning(true)
+    setScanError(null)
+    try {
+      const resp = await api.post(
+        '/scanner/scan',
+        { deviceId: selectedScanner, resolution: parseInt(scanDpi, 10), mode: scanMode },
+        { responseType: 'blob' },
+      )
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+      const file = new File([resp.data], `scan-${ts}.pdf`, { type: 'application/pdf' })
+      setUploadedFiles(prev => [...prev, file])
+      const sid = session?.sessionId ?? `ses-${Date.now()}`
+      upsertSession({ sessionId: sid })
+      cacheFile(sid, file).catch(() => {})
+      setInputTab('upload')
+    } catch (err: any) {
+      setScanError(err?.response?.data?.message ?? 'Scan failed. Check scanner connection and try again.')
+    } finally {
+      setScanning(false)
+    }
+  }, [selectedScanner, scanning, scanDpi, scanMode, session, upsertSession])
 
   // Step 2: AI extracts data from each uploaded PDF (handles multi-invoice splitting)
   const startAiExtraction = async () => {
@@ -3115,7 +3175,156 @@ export default function BatchUpload() {
                   </div>
                 )}
 
-                <div
+                {/* ── Input source tabs: Upload vs. Scanner ── */}
+                <div className="flex rounded-xl border-2 border-violet-100/70 dark:border-violet-900/30 bg-gradient-to-r from-violet-50/50 via-background to-blue-50/50 dark:from-violet-950/10 dark:via-background dark:to-blue-950/10 p-1.5 gap-1.5 shadow-inner">
+                  {([
+                    { key: 'upload', icon: CloudUpload, label: 'Upload Files' },
+                    { key: 'scanner', icon: Printer, label: 'Scan Document' },
+                  ] as const).map(({ key, icon: Icon, label }) => (
+                    <button
+                      key={key}
+                      onClick={() => setInputTab(key)}
+                      className={cn(
+                        'flex-1 relative flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold transition-all duration-200',
+                        inputTab === key
+                          ? 'bg-gradient-to-r from-violet-600 to-blue-600 text-white shadow-md shadow-violet-500/30'
+                          : 'text-muted-foreground hover:text-violet-700 dark:hover:text-violet-300 hover:bg-white/60 dark:hover:bg-white/5',
+                      )}
+                    >
+                      <Icon className={cn('h-4 w-4 transition-all duration-200', inputTab === key && 'scale-110 drop-shadow-sm')} />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* ── Scanner panel ── */}
+                {inputTab === 'scanner' && (
+                  <div className="rounded-xl border bg-muted/20 p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold">Connected Scanners</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">TWAIN / SANE compatible devices</p>
+                      </div>
+                      <Button variant="ghost" size="sm" onClick={fetchScanners} disabled={scannersLoading} className="h-8 gap-1.5">
+                        <RefreshCw className={cn('h-3.5 w-3.5', scannersLoading && 'animate-spin')} />
+                        Refresh
+                      </Button>
+                    </div>
+
+                    {scannersLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                        <span className="ml-2 text-sm text-muted-foreground">Detecting scanners…</span>
+                      </div>
+                    ) : !saneAvailable ? (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-4">
+                        <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-medium text-sm">
+                          <AlertTriangle className="h-4 w-4 shrink-0" />
+                          SANE scanner driver not installed
+                        </div>
+                        <p className="text-amber-600 dark:text-amber-500 text-xs mt-1.5">
+                          Run <code className="bg-amber-100 dark:bg-amber-900/40 px-1 rounded font-mono">sudo apt install sane-utils</code> on the server to enable hardware scanner support.
+                        </p>
+                      </div>
+                    ) : scanners.length === 0 ? (
+                      <div className="rounded-xl border-2 border-dashed p-8 text-center">
+                        <WifiOff className="h-8 w-8 text-muted-foreground/40 mx-auto mb-3" />
+                        <p className="text-sm font-medium text-muted-foreground">No scanners detected</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Connect a scanner via USB or network and click Refresh.<br />
+                          Supports all TWAIN/SANE devices including Kodak Alaris, Epson, HP, Canon, Fujitsu.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {scanners.map(s => (
+                          <label
+                            key={s.id}
+                            className={cn(
+                              'flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all',
+                              selectedScanner === s.id
+                                ? 'border-violet-400 bg-violet-50/50 dark:bg-violet-950/20'
+                                : 'border-border hover:border-violet-300/60',
+                            )}
+                          >
+                            <input
+                              type="radio"
+                              name="scanner-device"
+                              value={s.id}
+                              checked={selectedScanner === s.id}
+                              onChange={() => setSelectedScanner(s.id)}
+                              className="accent-violet-600"
+                            />
+                            <Printer className="h-5 w-5 text-violet-600 shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{s.model}</p>
+                              <p className="text-[11px] text-muted-foreground font-mono truncate">{s.id}</p>
+                            </div>
+                            {selectedScanner === s.id && (
+                              <Badge variant="secondary" className="text-[10px] shrink-0">Selected</Badge>
+                            )}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+
+                    {scanners.length > 0 && (
+                      <div className="grid grid-cols-2 gap-3 pt-1">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Resolution</Label>
+                          <Select value={scanDpi} onValueChange={setScanDpi}>
+                            <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="75">75 DPI — Draft</SelectItem>
+                              <SelectItem value="150">150 DPI — Fast</SelectItem>
+                              <SelectItem value="300">300 DPI — Standard</SelectItem>
+                              <SelectItem value="600">600 DPI — High quality</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Color Mode</Label>
+                          <Select value={scanMode} onValueChange={setScanMode}>
+                            <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Color">Color</SelectItem>
+                              <SelectItem value="Gray">Grayscale</SelectItem>
+                              <SelectItem value="Lineart">Black &amp; White</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
+
+                    {scanError && (
+                      <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 p-3 text-sm text-red-700 dark:text-red-400 flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 shrink-0" />
+                        {scanError}
+                      </div>
+                    )}
+
+                    {scanners.length > 0 && (
+                      <Button
+                        className="w-full bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white gap-2 h-11"
+                        disabled={!selectedScanner || scanning}
+                        onClick={handleScan}
+                      >
+                        {scanning ? (
+                          <><Loader2 className="h-4 w-4 animate-spin" />Scanning document…</>
+                        ) : (
+                          <><ScanLine className="h-4 w-4" />Scan Document</>
+                        )}
+                      </Button>
+                    )}
+
+                    <p className="text-xs text-muted-foreground text-center">
+                      Scanned pages are converted to PDF and processed identically to uploaded files
+                    </p>
+                  </div>
+                )}
+
+                {/* ── Dropzone (file upload) ── */}
+                {inputTab === 'upload' && <div
                   {...getRootProps()}
                   className={cn(
                     'group relative flex flex-col items-center justify-center overflow-hidden rounded-xl sm:rounded-2xl border-2 border-dashed p-6 sm:p-10 text-center transition-all duration-300 cursor-pointer',
@@ -3168,51 +3377,63 @@ export default function BatchUpload() {
                       <p className="mt-3 text-xs text-muted-foreground">Up to 50&nbsp;MB per file · Max 100 files per batch</p>
                     </>
                   )}
-                </div>
+                </div>}
 
                 {uploadedFiles.length > 0 && (
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Queued files <span className="ml-1 rounded-full bg-violet-500/10 px-2 py-0.5 text-violet-700 dark:text-violet-300">{uploadedFiles.length}</span>
-                      </p>
+                    <div className="flex items-center justify-between px-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Queued files</span>
+                        <span className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-violet-500 to-blue-500 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm shadow-violet-500/30">
+                          {uploadedFiles.length}
+                        </span>
+                      </div>
                       {uploadedFiles.length > 1 && (
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                          className="h-7 text-xs text-muted-foreground hover:text-destructive hover:bg-red-50 dark:hover:bg-red-950/20"
                           onClick={() => uploadedFiles.forEach((_, i) => removeFile(0))}
                         >
+                          <Trash2 className="h-3 w-3 mr-1" />
                           Clear all
                         </Button>
                       )}
                     </div>
-                    <div className="space-y-2 max-h-[320px] overflow-y-auto rounded-xl border bg-muted/20 p-2">
+                    <div className="space-y-1.5 max-h-[300px] overflow-y-auto rounded-xl border bg-gradient-to-b from-muted/30 to-muted/10 p-2">
                       {uploadedFiles.map((f, i) => {
                         const ext = f.name.split('.').pop()?.toUpperCase() || 'FILE'
                         const sizeLabel = f.size < 1024 * 1024
                           ? `${(f.size / 1024).toFixed(1)} KB`
                           : `${(f.size / 1024 / 1024).toFixed(2)} MB`
+                        const isPdf = ext === 'PDF'
                         return (
-                          <div key={i} className="group flex items-center gap-3 rounded-lg border bg-card p-3 transition-all hover:border-violet-300/50 hover:shadow-sm">
-                            <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500/10 to-blue-500/10 ring-1 ring-inset ring-violet-500/20">
-                              <FileText className="h-5 w-5 text-violet-600 dark:text-violet-400" />
-                              <span className="absolute -bottom-1 rounded bg-violet-600 px-1 py-0 text-[8px] font-bold leading-none text-white">{ext}</span>
+                          <div key={i} className="group flex items-center gap-3 rounded-lg border border-border/60 bg-card/80 backdrop-blur-sm px-3 py-2.5 transition-all duration-150 hover:border-violet-300/60 hover:shadow-sm hover:bg-card">
+                            <div className="w-1 self-stretch rounded-full bg-gradient-to-b from-violet-500 to-blue-500 shrink-0 opacity-70" />
+                            <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500/15 to-blue-500/10 ring-1 ring-inset ring-violet-400/20">
+                              <FileText className="h-4.5 w-4.5 text-violet-600 dark:text-violet-400" />
+                              <span className={cn(
+                                'absolute -bottom-1 -right-1 rounded px-1 py-px text-[8px] font-bold leading-none text-white shadow-sm',
+                                isPdf ? 'bg-red-500' : 'bg-violet-600'
+                              )}>{ext}</span>
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{f.name}</p>
-                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                <span>{sizeLabel}</span>
-                                <span className="text-muted-foreground/40">·</span>
-                                <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-                                  <CheckCircle className="h-3 w-3" /> Ready
+                              <p className="text-sm font-medium truncate leading-snug">{f.name}</p>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="text-[11px] text-muted-foreground bg-muted/60 rounded px-1.5 py-px font-mono">{sizeLabel}</span>
+                                <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                                  <span className="relative flex h-1.5 w-1.5">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+                                  </span>
+                                  Ready
                                 </span>
                               </div>
                             </div>
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-7 w-7 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive"
+                              className="h-7 w-7 shrink-0 rounded-full opacity-0 transition-all group-hover:opacity-100 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30"
                               onClick={() => removeFile(i)}
                             >
                               <X className="h-3.5 w-3.5" />
