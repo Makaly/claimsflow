@@ -55,6 +55,7 @@ services:
       JWT_EXPIRES_IN: "7d"
       PORT: 4000
       API_PREFIX: "api"
+      ML_SIDECAR_URL: "http://ml-sidecar:8000"
     depends_on:
       - postgres
       - redis
@@ -65,6 +66,22 @@ services:
     networks:
       - cic_network
     command: npm run start:dev
+
+  # ML Fraud Scoring Sidecar (Python / scikit-learn)
+  ml-sidecar:
+    build:
+      context: ./ml-sidecar
+      dockerfile: Dockerfile
+    container_name: cic_ml_sidecar
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      MODEL_PATH: /data/fraud_model.pkl
+    volumes:
+      - ml_model_data:/data
+    networks:
+      - cic_network
 
   # Frontend
   frontend:
@@ -90,6 +107,7 @@ volumes:
   postgres_data:
   redis_data:
   uploads:
+  ml_model_data:
 
 networks:
   cic_network:
