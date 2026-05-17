@@ -7,6 +7,40 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- **OCR knowledge base `GET /classifier/zone-hits/best-values`** — new endpoint
+  backed by `getBestKnownValues()` that returns the highest-quality known value
+  per field for a given document type (confirmed-correct hits first, then
+  high-confidence recent extractions). Designed to pre-populate fields on
+  re-uploads of the same template without a second round-trip.
+
+- **`templateId` surfaced in OCR extraction result** — the matched classifier
+  template ID is now included in the OCR response payload so the frontend can
+  immediately query the knowledge-base endpoint without an extra lookup.
+
+### Fixed
+
+- **Batch upload did not trigger OCR or fraud detection** — `BatchSubmissionService`
+  stored documents but never enqueued an OCR job, so the `OcrProcessor` (which
+  runs `computeFraudSignals` and anomaly scoring) was never invoked. `OcrService`
+  is now injected into `BatchSubmissionService` and `processDocument()` is called
+  immediately after each document is persisted. The Fraud column now populates
+  for all batch-uploaded claims.
+
+- **`dateOfService` blank for admission invoices** — `dateOfService` / `admissionDate`
+  zone-mapped values were not forwarded to the `serviceDate` claim field. The
+  merge step now includes both aliases, ensuring service dates on admission forms
+  are written to the claim record.
+
+- **`sane` missing from production Docker image** — the `sane` package was
+  installed in the builder stage but omitted from the runtime stage of
+  `Dockerfile.prod`, causing `scanimage` to be absent in deployed containers.
+  The scanner service returned `saneAvailable: false` and the UI showed a
+  driver-not-installed warning even on hosts with a scanner attached.
+
+---
+
 ## [1.9.2] - 2026-05-17
 
 ### Added
