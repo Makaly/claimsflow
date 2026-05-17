@@ -414,7 +414,7 @@ Focus on: invoice/claim numbers, dates, amounts, patient demographics, provider 
   async classifyAndExtract(
     filePath: string,
     mimetype: string,
-    context?: { fileName?: string; claimId?: string; uploadedBy?: string },
+    context?: { fileName?: string; claimId?: string; documentId?: string; uploadedBy?: string },
   ): Promise<{
     templateId: string | null;
     templateName?: string;
@@ -611,11 +611,38 @@ Focus on: invoice/claim numbers, dates, amounts, patient demographics, provider 
     // ── STEP 3: AI validation ─────────────────────────────────────────────────
     const validation = await this.validateExtractedFields(fields, docBlock, model, client);
 
-    // Increment usage count
+    // ── Increment usage count + record per-zone hits ──────────────────────────
+    const avgConf = Object.values(confidence).length
+      ? Object.values(confidence).reduce((s, v) => s + v, 0) / Object.values(confidence).length
+      : 0;
+    const isSuccessful = avgConf >= 0.7 && Object.keys(fields).filter(k => fields[k]).length >= 3;
+
     await this.prisma.ocrTemplate.update({
       where: { id: matchedId },
-      data: { usageCount: { increment: 1 } },
+      data: {
+        usageCount: { increment: 1 },
+        ...(isSuccessful ? { successCount: { increment: 1 } } : {}),
+        accuracy: isSuccessful ? { set: await this.recomputeAccuracy(matchedId, true) } : undefined,
+      },
     }).catch(() => {});
+
+    // Persist a zone hit row for every zone that was attempted — this is the
+    // knowledge base that drives the zone accuracy analytics dashboard.
+    const engine = this.getActiveProvider() === 'gemini' ? 'gemini' : 'anthropic';
+    const zoneHitData = matchedTemplate.zones.map(zone => ({
+      zoneId:         zone.id,
+      templateId:     matchedId,
+      claimId:        context?.claimId   ?? null,
+      documentId:     context?.documentId ?? null,
+      fieldName:      zone.fieldName,
+      fieldLabel:     zone.fieldLabel,
+      extractedValue: fields[zone.fieldName] || null,
+      confidence:     confidence[zone.fieldName] ?? null,
+      engine,
+    }));
+    if (zoneHitData.length) {
+      await this.prisma.ocrZoneHit.createMany({ data: zoneHitData }).catch(() => {});
+    }
 
     // Build claimFieldMap: zone.claimField (or implicit default) → extracted value
     const claimFieldMap: Record<string, string> = {};
@@ -855,5 +882,164 @@ Return an empty array if everything looks correct. Only flag genuine issues, not
 
     this.logger.log(`Merged ${samplePaths.length} template samples → document ${doc.id}`);
     return { document: doc, mergedCount: samplePaths.length };
+  }
+
+  // ── Zone hit tracking & analytics ────────────────────────────────────────────
+
+  private async recomputeAccuracy(templateId: string, latestWasSuccess: boolean): Promise<number> {
+    const t = await this.prisma.ocrTemplate.findUnique({
+      where: { id: templateId },
+      select: { usageCount: true, successCount: true },
+    });
+    if (!t) return 0;
+    const successes = (t.successCount ?? 0) + (latestWasSuccess ? 1 : 0);
+    const total     = (t.usageCount  ?? 0) + 1;
+    return total > 0 ? parseFloat((successes / total).toFixed(4)) : 0;
+  }
+
+  /** Record user correction on an extracted zone hit — closes the feedback loop. */
+  async recordZoneCorrection(hitId: string, correctedValue: string, userId: string) {
+    return this.prisma.ocrZoneHit.update({
+      where: { id: hitId },
+      data: {
+        wasCorrect:     false,
+        correctedValue,
+        correctedBy:    userId,
+        correctedAt:    new Date(),
+      },
+    });
+  }
+
+  /** Mark a zone hit as confirmed correct (reviewer verified the extraction). */
+  async confirmZoneHit(hitId: string, userId: string) {
+    return this.prisma.ocrZoneHit.update({
+      where: { id: hitId },
+      data: { wasCorrect: true, correctedBy: userId, correctedAt: new Date() },
+    });
+  }
+
+  /** Per-template and per-zone accuracy analytics — the knowledge base view. */
+  async getZoneAnalytics(templateId?: string) {
+    const where = templateId ? { templateId } : {};
+
+    const [templates, recentHits, fieldStats] = await Promise.all([
+      this.prisma.ocrTemplate.findMany({
+        where: templateId ? { id: templateId } : { isActive: true },
+        select: {
+          id: true, name: true, documentType: true, specificProvider: true,
+          usageCount: true, successCount: true, accuracy: true,
+          zones: { select: { id: true, fieldName: true, fieldLabel: true } },
+        },
+        orderBy: { usageCount: 'desc' },
+      }),
+
+      // Last 500 hits for trend analysis
+      this.prisma.ocrZoneHit.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: 500,
+        select: {
+          id: true, zoneId: true, templateId: true, fieldName: true, fieldLabel: true,
+          confidence: true, wasCorrect: true, engine: true, createdAt: true,
+          extractedValue: true,
+        },
+      }),
+
+      // Aggregate per-field across all hits
+      this.prisma.ocrZoneHit.groupBy({
+        by: ['fieldName', 'fieldLabel', 'templateId'],
+        where,
+        _count:  { id: true },
+        _avg:    { confidence: true },
+        _sum:    { confidence: true },
+      }),
+    ]);
+
+    // Correction rate per field
+    const correctionCounts = await this.prisma.ocrZoneHit.groupBy({
+      by: ['fieldName', 'templateId'],
+      where: { ...where, wasCorrect: false },
+      _count: { id: true },
+    });
+    const corrMap: Record<string, number> = {};
+    correctionCounts.forEach(r => { corrMap[`${r.templateId}:${r.fieldName}`] = r._count.id; });
+
+    // Build per-field rows
+    const fieldRows = fieldStats.map(r => {
+      const key = `${r.templateId}:${r.fieldName}`;
+      const corrections = corrMap[key] ?? 0;
+      const total = r._count.id;
+      const correctionRate = total > 0 ? parseFloat((corrections / total * 100).toFixed(1)) : 0;
+      const avgConf = r._avg.confidence != null ? parseFloat((r._avg.confidence * 100).toFixed(1)) : null;
+      const template = templates.find(t => t.id === r.templateId);
+      return {
+        templateId: r.templateId,
+        templateName: template?.name ?? 'Unknown',
+        fieldName: r.fieldName,
+        fieldLabel: r.fieldLabel,
+        totalExtractions: total,
+        avgConfidence: avgConf,
+        correctionRate,
+        corrections,
+        needsAttention: avgConf !== null && (avgConf < 70 || correctionRate > 20),
+      };
+    }).sort((a, b) => (b.needsAttention ? 1 : 0) - (a.needsAttention ? 1 : 0) || b.totalExtractions - a.totalExtractions);
+
+    // Confidence trend — bucket last 200 hits by week
+    const weekBuckets: Record<string, { hits: number; confSum: number; corrections: number }> = {};
+    recentHits.slice(0, 200).forEach(h => {
+      const d = new Date(h.createdAt);
+      const wk = `${d.getFullYear()}-W${String(Math.ceil(d.getDate() / 7)).padStart(2,'0')}`;
+      if (!weekBuckets[wk]) weekBuckets[wk] = { hits: 0, confSum: 0, corrections: 0 };
+      weekBuckets[wk].hits++;
+      weekBuckets[wk].confSum += h.confidence ?? 0;
+      if (h.wasCorrect === false) weekBuckets[wk].corrections++;
+    });
+    const trend = Object.entries(weekBuckets)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([week, b]) => ({
+        week,
+        hits: b.hits,
+        avgConfidence: b.hits > 0 ? parseFloat((b.confSum / b.hits * 100).toFixed(1)) : 0,
+        correctionRate: b.hits > 0 ? parseFloat((b.corrections / b.hits * 100).toFixed(1)) : 0,
+      }));
+
+    // Summary
+    const totalHits    = recentHits.length;
+    const avgConf      = totalHits > 0 ? recentHits.reduce((s, h) => s + (h.confidence ?? 0), 0) / totalHits : 0;
+    const corrections  = recentHits.filter(h => h.wasCorrect === false).length;
+    const unverified   = recentHits.filter(h => h.wasCorrect === null).length;
+
+    return {
+      summary: {
+        totalHits,
+        avgConfidence:  parseFloat((avgConf * 100).toFixed(1)),
+        correctionRate: totalHits > 0 ? parseFloat((corrections / totalHits * 100).toFixed(1)) : 0,
+        unverifiedHits: unverified,
+        templatesActive: templates.length,
+      },
+      templates: templates.map(t => ({
+        id:             t.id,
+        name:           t.name,
+        documentType:   t.documentType,
+        provider:       t.specificProvider,
+        usageCount:     t.usageCount,
+        successCount:   t.successCount,
+        accuracy:       t.accuracy != null ? parseFloat((t.accuracy * 100).toFixed(1)) : null,
+        zoneCount:      t.zones.length,
+      })),
+      fields:   fieldRows,
+      trend,
+      recentHits: recentHits.slice(0, 50).map(h => ({
+        id:             h.id,
+        fieldName:      h.fieldName,
+        fieldLabel:     h.fieldLabel,
+        confidence:     h.confidence != null ? parseFloat((h.confidence * 100).toFixed(1)) : null,
+        wasCorrect:     h.wasCorrect,
+        engine:         h.engine,
+        extractedValue: h.extractedValue?.slice(0, 80) ?? null,
+        createdAt:      h.createdAt,
+      })),
+    };
   }
 }

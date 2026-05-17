@@ -41,6 +41,7 @@ import UnknownDocuments from '@/pages/UnknownDocuments'
 import ScanStation from '@/pages/ScanStation'
 import PolicyPlans from '@/pages/PolicyPlans'
 import MLLabelling from '@/pages/MLLabelling'
+import ZoneAnalytics from '@/pages/ZoneAnalytics'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -146,6 +147,7 @@ function AppRoutes() {
         <Route path="/scan-station" element={<ProtectedRoute allowedRoles={['admin','claims_officer','maker_checker']}><ScanStation /></ProtectedRoute>} />
         <Route path="/policy-plans" element={<ProtectedRoute allowedRoles={['admin','claims_officer']}><PolicyPlans /></ProtectedRoute>} />
         <Route path="/ml-labelling" element={<ProtectedRoute allowedRoles={['admin','claims_officer','fraud_officer']}><MLLabelling /></ProtectedRoute>} />
+        <Route path="/zone-analytics" element={<ProtectedRoute allowedRoles={['admin','claims_officer','fraud_officer','maker_checker']}><ZoneAnalytics /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

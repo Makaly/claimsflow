@@ -599,6 +599,7 @@ model OcrTemplate {
   sampleFileName   String?
   sampleFilePath   String?
   zones            DocumentZone[]
+  zoneHits         OcrZoneHit[]
 
   @@index([documentType])
   @@index([isActive])
@@ -626,6 +627,7 @@ model DocumentZone {
   parent          DocumentZone?  @relation("ZoneHierarchy", fields: [parentZoneId], references: [id])
   children        DocumentZone[] @relation("ZoneHierarchy")
   template        OcrTemplate    @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  hits            OcrZoneHit[]
 
   @@index([templateId])
   @@index([parentZoneId])
@@ -1057,6 +1059,38 @@ model ProviderAlias {
 
   @@index([providerId])
   @@map("provider_aliases")
+}
+
+/// Records every OCR zone extraction attempt — the knowledge base for
+/// zone accuracy analytics. One row per zone × document extraction.
+/// When a reviewer corrects a field value, wasCorrect is set to false
+/// and correctedValue captures what the field should have been, creating
+/// a supervised training signal for future zone refinement.
+model OcrZoneHit {
+  id             String        @id @default(uuid())
+  zoneId         String
+  templateId     String
+  claimId        String?
+  documentId     String?
+  fieldName      String        // e.g. "invoice_amount"
+  fieldLabel     String        // e.g. "Invoice Amount"
+  extractedValue String?
+  confidence     Float?        // 0–1
+  engine         String?       // "gemini" | "anthropic" | "tesseract"
+  wasCorrect     Boolean?      // null = unverified; true = confirmed correct; false = corrected
+  correctedValue String?       // what the user set it to
+  correctedBy    String?       // userId
+  correctedAt    DateTime?
+  createdAt      DateTime      @default(now())
+  zone           DocumentZone  @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  template       OcrTemplate   @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([zoneId])
+  @@index([templateId])
+  @@index([claimId])
+  @@index([fieldName])
+  @@index([createdAt])
+  @@map("ocr_zone_hits")
 }
 
 /// Persists the calibrated per-factor weights produced by

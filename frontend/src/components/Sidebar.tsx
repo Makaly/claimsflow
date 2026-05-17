@@ -5,7 +5,7 @@ import {
   UserCheck, UserCog, Users, Activity, BarChart3, Shield,
   Settings, ChevronLeft, ChevronRight, Network, AlertOctagon,
   KeyRound, ShieldCheck, FileQuestion, Scale, CreditCard, Clock, SlidersHorizontal,
-  ScanLine, Database,
+  ScanLine, Database, ScanBarcode,
 } from 'lucide-react'
 import { useUnknownDocCount } from '@/hooks/useUnknownDocCount'
 import { cn } from '@/lib/utils'
@@ -56,7 +56,8 @@ const navigation: NavItem[] = [
   { name: 'Permissions', href: '/permissions', icon: KeyRound, roles: ['admin'] },
   { name: 'Policy Plans', href: '/policy-plans', icon: Shield, roles: ['admin', 'claims_officer'] },
   { name: 'Activity Logs', href: '/activity-logs', icon: Activity, roles: ['admin', 'claims_officer', 'fraud_officer'] },
-  { name: 'ML Labelling', href: '/ml-labelling', icon: Database, roles: ['admin', 'claims_officer', 'fraud_officer'] },
+  { name: 'ML Labelling',   href: '/ml-labelling',   icon: Database,     roles: ['admin', 'claims_officer', 'fraud_officer'] },
+  { name: 'Zone Analytics', href: '/zone-analytics', icon: ScanBarcode,  roles: ['admin', 'claims_officer', 'fraud_officer', 'maker_checker'] },
   { name: 'Reports', href: '/reports', icon: BarChart3, roles: ['admin', 'claims_officer'] },
   { name: 'Provider Scorecard', href: '/provider-scorecard', icon: BarChart3, roles: ['admin', 'claims_officer'] },
   { name: 'Unknown Docs', href: '/unknown-documents', icon: FileQuestion, roles: ['admin', 'maker_checker'] },

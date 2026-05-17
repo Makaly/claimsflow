@@ -6,6 +6,7 @@ import {
   Delete,
   Param,
   Body,
+  Query,
   Request,
   UseGuards,
   UseInterceptors,
@@ -221,5 +222,26 @@ export class DocumentClassifierController {
     @Request() req: any,
   ) {
     return this.service.splitTemplateSample(id, body.pageRanges, req.user?.userId);
+  }
+
+  // ── Zone analytics & feedback ─────────────────────────────────────────────────
+
+  @Get('zone-analytics')
+  getZoneAnalytics(@Query('templateId') templateId?: string) {
+    return this.service.getZoneAnalytics(templateId || undefined);
+  }
+
+  @Patch('zone-hits/:hitId/correct')
+  recordCorrection(
+    @Param('hitId') hitId: string,
+    @Body() body: { correctedValue: string },
+    @Request() req: any,
+  ) {
+    return this.service.recordZoneCorrection(hitId, body.correctedValue, req.user?.userId);
+  }
+
+  @Patch('zone-hits/:hitId/confirm')
+  confirmHit(@Param('hitId') hitId: string, @Request() req: any) {
+    return this.service.confirmZoneHit(hitId, req.user?.userId);
   }
 }
