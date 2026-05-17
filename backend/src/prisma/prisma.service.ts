@@ -84,6 +84,19 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   async onModuleInit() {
     await this.$connect();
     console.log('Database connected');
+    // Validate encryption key at startup so mis-configured deployments fail
+    // loudly rather than producing a 500 on the first claim with a diagnosis
+    // or treatment value. DATA_ENCRYPTION_KEY must be 64 lowercase hex chars
+    // (openssl rand -hex 32). Render's generateValue does not guarantee this
+    // format — set it manually in the Render dashboard.
+    const dek = process.env.DATA_ENCRYPTION_KEY;
+    if (!dek || !/^[0-9a-f]{64}$/i.test(dek)) {
+      console.error(
+        '[startup] DATA_ENCRYPTION_KEY is missing or not a 64-char hex string. ' +
+        'Generate one with: openssl rand -hex 32  and set it in the Render dashboard. ' +
+        'Claims with diagnosis/treatment fields will 500 until this is fixed.',
+      );
+    }
   }
 
   async onModuleDestroy() {

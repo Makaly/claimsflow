@@ -4,12 +4,14 @@ import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateClaimDto } from './dto/create-claim.dto';
 import { UpdateClaimDto } from './dto/update-claim.dto';
-import { computeFraudSignals, providerMismatchSignal, DuplicateClaimRef } from './fraud-signals';
+import { computeFraudSignals, providerMismatchSignal, DuplicateClaimRef, CrossProviderMatch } from './fraud-signals';
 import { AuditService, AuditActor } from '../common/services/audit.service';
 import { DocumentsService } from '../documents/documents.service';
 import { EmailService } from '../notifications/email.service';
 import { EligibilityService } from './eligibility.service';
 import { AnomalyScoringService } from './anomaly-scoring.service';
+import { ClaimLabelsService } from './claim-labels.service';
+import { MlScoringService } from './ml-scoring.service';
 
 @Injectable()
 export class ClaimsService {
@@ -21,7 +23,64 @@ export class ClaimsService {
     private emailService: EmailService,
     private eligibilityService: EligibilityService,
     private anomalyScoringService: AnomalyScoringService,
+    private claimLabelsService: ClaimLabelsService,
+    private mlScoringService: MlScoringService,
   ) {}
+
+  /** Normalise a provider name for alias matching: lowercase, strip punctuation, collapse spaces. */
+  private normaliseProviderName(name: string): string {
+    return name.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+  }
+
+  /**
+   * Resolve a provider by name using alias table first, then fuzzy contains match.
+   * When a new name is seen, register it as an alias for the resolved provider.
+   */
+  private async resolveProviderByName(name: string): Promise<string> {
+    const normalised = this.normaliseProviderName(name);
+
+    // 1. Exact alias hit
+    const aliasHit = await this.prisma.providerAlias.findUnique({ where: { alias: normalised } });
+    if (aliasHit) return aliasHit.providerId;
+
+    // 2. Fuzzy name match
+    const provider = await this.prisma.provider.findFirst({
+      where: { name: { contains: name, mode: 'insensitive' } },
+    });
+
+    if (provider) {
+      // Register this variant so future lookups resolve instantly
+      await this.prisma.providerAlias.upsert({
+        where: { alias: normalised },
+        create: { alias: normalised, providerId: provider.id },
+        update: {},
+      }).catch(() => {}); // ignore race-condition duplicates
+      return provider.id;
+    }
+
+    // 3. Auto-create unknown provider
+    const created = await this.prisma.provider.create({
+      data: {
+        name,
+        type: 'hospital',
+        licenseNumber: `AUTO-${Date.now()}`,
+        contactPerson: 'Pending',
+        email: `pending-${Date.now()}@provider.local`,
+        phone: '000',
+        physicalAddress: 'Pending',
+        status: 'pending',
+        approvalStatus: 'pending_approval',
+        isActive: false,
+        canSubmitClaims: false,
+      },
+    });
+    await this.prisma.providerAlias.upsert({
+      where: { alias: normalised },
+      create: { alias: normalised, providerId: created.id },
+      update: {},
+    }).catch(() => {});
+    return created.id;
+  }
 
   /**
    * Enforce provider-scoped access for per-claim operations.
@@ -90,32 +149,10 @@ export class ClaimsService {
     // Barcode: use provided value if unique, otherwise generate a fresh one.
     const barcode = dtoBarcode || this.generateBarcode();
 
-    // Resolve providerId: look up by name, or create provider if not found
+    // Resolve providerId using alias-aware normalisation to avoid false provider-mismatch signals.
     let resolvedProviderId = restDto.providerId;
     if (!resolvedProviderId) {
-      const nameToFind = providerName || 'Unknown Provider';
-      let provider = await this.prisma.provider.findFirst({
-        where: { name: { contains: nameToFind, mode: 'insensitive' } },
-      });
-      if (!provider) {
-        // Auto-create provider from OCR-extracted name
-        provider = await this.prisma.provider.create({
-          data: {
-            name: nameToFind,
-            type: 'hospital',
-            licenseNumber: `AUTO-${Date.now()}`,
-            contactPerson: 'Pending',
-            email: `pending-${Date.now()}@provider.local`,
-            phone: '000',
-            physicalAddress: 'Pending',
-            status: 'pending',
-            approvalStatus: 'pending_approval',
-            isActive: false,
-            canSubmitClaims: false,
-          },
-        });
-      }
-      resolvedProviderId = provider.id;
+      resolvedProviderId = await this.resolveProviderByName(providerName || 'Unknown Provider');
     }
 
     // Build data object
@@ -154,25 +191,54 @@ export class ClaimsService {
 
     // Compute fraud signals at submission time — stored permanently on the claim
     // so reviewers always see what was detected at the moment of processing.
-    const [existingInvoiceClaims, batchSiblings] = await Promise.all([
+    const dosDate = data.dateOfService ? new Date(data.dateOfService) : null;
+    const sevenDaysAgo = new Date(Date.now() - 7 * 86_400_000);
+
+    const [existingInvoiceClaims, batchSiblings, crossProviderRaw, recentMemberClaims] = await Promise.all([
       this.prisma.claim.findMany({
         where: { providerId: resolvedProviderId, invoiceNumber: { not: null } },
         select: { invoiceNumber: true, claimNumber: true, uploadedBy: true, submittedAt: true },
       }),
-      // Load existing claims in this batch to detect within-batch velocity patterns
+      // Within-batch velocity check
       batchNumber
         ? this.prisma.claim.findMany({
             where: { batchNumber },
             select: { memberNumber: true, invoiceAmount: true },
           })
         : Promise.resolve([]),
+      // Cross-provider duplicate: same member, same service date, different provider
+      dosDate && data.memberNumber
+        ? this.prisma.claim.findMany({
+            where: {
+              memberNumber: data.memberNumber,
+              providerId: { not: resolvedProviderId },
+              dateOfService: {
+                gte: new Date(dosDate.getFullYear(), dosDate.getMonth(), dosDate.getDate()),
+                lte: new Date(dosDate.getFullYear(), dosDate.getMonth(), dosDate.getDate(), 23, 59, 59),
+              },
+              status: { not: 'rejected' },
+            },
+            select: { claimNumber: true, provider: { select: { name: true } }, dateOfService: true },
+          })
+        : Promise.resolve([]),
+      // Procedure code overlap: same member, last 7 days, different claim
+      data.memberNumber
+        ? this.prisma.claim.findMany({
+            where: {
+              memberNumber: data.memberNumber,
+              submittedAt: { gte: sevenDaysAgo },
+              procedureCodes: { isEmpty: false },
+            },
+            select: { procedureCodes: true },
+          })
+        : Promise.resolve([]),
     ]);
+
     const invoiceNumSet = new Set(existingInvoiceClaims.map(c => c.invoiceNumber!));
     const batchMemberAmounts = batchSiblings.map(c => ({
       memberNumber: c.memberNumber,
       invoiceAmount: c.invoiceAmount,
     }));
-    // Build duplicate claim refs for enriched fraud signal display
     const duplicateClaimRefs: DuplicateClaimRef[] = data.invoiceNumber
       ? existingInvoiceClaims
           .filter(c => c.invoiceNumber?.trim() === data.invoiceNumber?.trim())
@@ -182,6 +248,15 @@ export class ClaimsService {
             submittedAt: c.submittedAt?.toISOString() ?? null,
           }))
       : [];
+    const crossProviderMatches: CrossProviderMatch[] = (crossProviderRaw as any[]).map(c => ({
+      claimNumber: c.claimNumber,
+      providerName: c.provider?.name ?? 'Unknown Provider',
+      dateOfService: c.dateOfService?.toISOString().slice(0, 10) ?? '',
+    }));
+    const recentMemberProcedureCodes: string[] = (recentMemberClaims as any[])
+      .flatMap(c => (c.procedureCodes as string[]) ?? [])
+      .filter(Boolean);
+
     const fraudSignals = computeFraudSignals(
       {
         invoiceAmount: data.invoiceAmount,
@@ -192,10 +267,13 @@ export class ClaimsService {
         dateOfService: data.dateOfService,
         ocrConfidence: data.ocrConfidence,
         aiExtracted: data.aiExtracted,
+        procedureCodes: data.procedureCodes ?? [],
       },
       invoiceNumSet,
       batchMemberAmounts,
       duplicateClaimRefs,
+      crossProviderMatches,
+      recentMemberProcedureCodes,
     );
 
     // Provider mismatch: provider-role users may only submit claims for their own provider.
@@ -265,7 +343,14 @@ export class ClaimsService {
         // Auto-route to the least-loaded claims officer so uploads land in the
         // Maker Queue immediately. Best-effort — if no officer is available
         // the claim stays at initial_review for manual triage.
-        const routed = await this.autoAssignToMaker(claim.id, actor);
+        // Auto-assignment is best-effort: a DB hiccup here must not fail the
+        // response after the claim row is already committed.
+        let routed = null;
+        try {
+          routed = await this.autoAssignToMaker(claim.id, actor);
+        } catch (assignErr: any) {
+          console.warn(`[claims] auto-assign failed for ${claim.id}: ${assignErr?.message}`);
+        }
         // Queue is best-effort — Redis being down must not fail the claim save
         this.claimsQueue.add('process-claim', { claimId: claim.id }, {
           attempts: 3,
@@ -275,6 +360,16 @@ export class ClaimsService {
         this.eligibilityService.checkEligibility(claim.id, restDto.memberNumber || '', invoiceDate ? new Date(invoiceDate) : null).catch(() => {});
         // Fire-and-forget anomaly scoring — statistical deviation analysis (G17)
         this.anomalyScoringService.scoreClaim(claim.id).catch(() => {});
+        // Fire-and-forget ML sidecar scoring — gradient boosting fraud probability
+        this.mlScoringService.score(claim.id, {
+          invoiceAmount: claim.invoiceAmount ?? 0,
+          ocrConfidence: claim.ocrConfidence ?? 1,
+          anomalyScore: 0, // populated after anomaly scoring completes
+          fraudSignalCount: Array.isArray(claim.fraudSignals) ? (claim.fraudSignals as any[]).length : 0,
+          fraudSignalCritical: Array.isArray(claim.fraudSignals) ? (claim.fraudSignals as any[]).filter((s: any) => s?.level === 'critical').length : 0,
+          resubmissionCount: claim.resubmissionCount ?? 0,
+          memberNumberPresent: claim.memberNumber ? 1 : 0,
+        }).catch(() => {});
         return routed ?? claim;
       } catch (err: any) {
         const isUniqueViolation = err?.code === 'P2002';
@@ -969,6 +1064,10 @@ export class ClaimsService {
       metadata: { source: 'claims.service.clearFraud' },
     });
 
+    // Feed human verdict back into training dataset: fraud officer said this claim is legitimate.
+    this.claimLabelsService.upsertLabel(id, 'legitimate', 'fraud_confirmed', actor?.userId, notes || undefined)
+      .catch(() => {});
+
     // Dump any held documents now that the fraud hold is lifted.
     this.documentsService
       .dumpHeldClaimDocuments(id)
@@ -1024,6 +1123,10 @@ export class ClaimsService {
       newValue: { status: 'fraud_confirmed', workflowStage: 'claims_officer_review', fraudVerdict: 'confirmed' },
       metadata: { source: 'claims.service.confirmFraud' },
     });
+
+    // Feed human verdict back into training dataset: fraud officer confirmed this is fraud.
+    this.claimLabelsService.upsertLabel(id, 'fraud', 'fraud_confirmed', actor?.userId, notes || undefined)
+      .catch(() => {});
 
     return updated;
   }
