@@ -46,3 +46,7 @@ Thumbs.db
 
 # Tesseract OCR language data (install via system package manager or download separately)
 *.traineddata
+
+# NestJS pkg bundler output (standalone binary and nest launcher)
+/cic-backend@*
+/nest
