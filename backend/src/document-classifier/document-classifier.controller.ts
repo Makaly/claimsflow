@@ -231,6 +231,11 @@ export class DocumentClassifierController {
     return this.service.getZoneAnalytics(templateId || undefined);
   }
 
+  @Get('zone-hits/best-values')
+  getBestKnownValues(@Query('templateId') templateId: string) {
+    return this.service.getBestKnownValues(templateId);
+  }
+
   @Patch('zone-hits/:hitId/correct')
   recordCorrection(
     @Param('hitId') hitId: string,

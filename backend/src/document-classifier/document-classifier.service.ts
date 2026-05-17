@@ -1042,4 +1042,46 @@ Return an empty array if everything looks correct. Only flag genuine issues, not
       })),
     };
   }
+
+  /**
+   * For a given template, return the best-known value per field — built from
+   * confirmed correct zone hits (wasCorrect = true) or, failing that, the
+   * most-recent high-confidence extraction. Used to pre-populate fields on
+   * re-uploads of the same document type.
+   */
+  async getBestKnownValues(templateId: string): Promise<Record<string, { value: string; confidence: number; source: 'confirmed' | 'high_confidence' }>> {
+    const result: Record<string, { value: string; confidence: number; source: 'confirmed' | 'high_confidence' }> = {};
+
+    // Confirmed correct values — highest quality signal
+    const confirmed = await this.prisma.ocrZoneHit.findMany({
+      where: { templateId, wasCorrect: true, extractedValue: { not: null } },
+      orderBy: { correctedAt: 'desc' },
+      select: { fieldName: true, extractedValue: true, confidence: true },
+    });
+    for (const h of confirmed) {
+      if (!result[h.fieldName] && h.extractedValue) {
+        result[h.fieldName] = { value: h.extractedValue, confidence: h.confidence ?? 1, source: 'confirmed' };
+      }
+    }
+
+    // High-confidence recent extractions for fields not yet covered by confirmed hits
+    const highConf = await this.prisma.ocrZoneHit.findMany({
+      where: {
+        templateId,
+        wasCorrect: { not: false }, // not explicitly wrong
+        confidence: { gte: 0.80 },
+        extractedValue: { not: null },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      select: { fieldName: true, extractedValue: true, confidence: true },
+    });
+    for (const h of highConf) {
+      if (!result[h.fieldName] && h.extractedValue) {
+        result[h.fieldName] = { value: h.extractedValue, confidence: h.confidence ?? 0.8, source: 'high_confidence' };
+      }
+    }
+
+    return result;
+  }
 }

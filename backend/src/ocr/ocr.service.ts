@@ -233,18 +233,23 @@ export class OcrService {
         const cmap = classified.claimFieldMap as Record<string, string>;
         result.invoices = result.invoices.map(inv => ({
           ...inv,
-          patientId:      cmap['patientId']      || inv.patientId,
-          patientName:    cmap['patientName']     || inv.patientName,
-          membershipNumber: cmap['memberNumber']  || inv.membershipNumber,
-          invoiceNumber:  cmap['invoiceNumber']   || inv.invoiceNumber,
-          invoiceDate:    cmap['invoiceDate']      || inv.invoiceDate,
-          invoiceAmount:  cmap['invoiceAmount'] ? parseFloat(String(cmap['invoiceAmount']).replace(/[^0-9.]/g, '')) || inv.invoiceAmount : inv.invoiceAmount,
-          providerName:   cmap['providerName']    || inv.providerName,
-          diagnosis:      cmap['diagnosis']       || inv.diagnosis,
-          diagnosisCode:  cmap['diagnosisCode']   || inv.diagnosisCode,
-          treatment:      cmap['treatment']       || inv.treatment,
+          patientId:        cmap['patientId']        || inv.patientId,
+          patientName:      cmap['patientName']       || inv.patientName,
+          membershipNumber: cmap['memberNumber']      || inv.membershipNumber,
+          invoiceNumber:    cmap['invoiceNumber']     || inv.invoiceNumber,
+          invoiceDate:      cmap['invoiceDate']       || inv.invoiceDate,
+          invoiceAmount:    cmap['invoiceAmount'] ? parseFloat(String(cmap['invoiceAmount']).replace(/[^0-9.]/g, '')) || inv.invoiceAmount : inv.invoiceAmount,
+          providerName:     cmap['providerName']      || inv.providerName,
+          diagnosis:        cmap['diagnosis']         || inv.diagnosis,
+          diagnosisCode:    cmap['diagnosisCode']     || inv.diagnosisCode,
+          treatment:        cmap['treatment']         || inv.treatment,
+          serviceDate:      cmap['dateOfService']     || cmap['admissionDate'] || inv.serviceDate,
         }));
         this.logger.log(`Classifier enriched extraction with ${Object.keys(cmap).length} zone-mapped fields`);
+      }
+      // Surface the matched templateId so the frontend can query the knowledge base
+      if (classified?.templateId) {
+        (result as any).templateId = classified.templateId;
       }
     } catch (err: any) {
       this.logger.warn(`Classifier enrichment skipped: ${err?.message}`);
