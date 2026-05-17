@@ -263,7 +263,7 @@ export default function Register() {
         acceptTerms: true,
         policyVersion: POLICY_VERSION,
       })
-      login(result.user); navigate('/')
+      login(result.user, result.access_token); navigate('/')
     } catch (err: any) {
       if (err.code === 'ERR_NETWORK' || err.message?.includes('Network')) {
         login({ id: 'new-' + Math.random().toString(36).slice(2), email: data.email, name: data.name, role: data.role as any, isActive: true, twoFactorEnabled: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() } as any)
@@ -287,7 +287,7 @@ export default function Register() {
         acceptTerms: true,
         policyVersion: POLICY_VERSION,
       })
-      login(data.user); navigate('/')
+      login(data.user, data.access_token); navigate('/')
     } catch (err: any) {
       setError(err.response?.data?.message || 'Provider registration failed. Please try again.')
     } finally { setLoading(false) }

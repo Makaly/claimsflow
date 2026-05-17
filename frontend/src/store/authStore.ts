@@ -8,7 +8,7 @@ import type { User } from '@/types'
 interface AuthState {
   user: User | null
   isAuthenticated: boolean
-  login: (user: User) => void
+  login: (user: User, token?: string) => void
   logout: () => void
   setUser: (user: User) => void
   fetchProfile: () => Promise<void>
@@ -27,14 +27,19 @@ export const useAuthStore = create<AuthState>((set) => ({
   user: readUser(),
   isAuthenticated: !!readUser(),
 
-  login: (user) => {
+  login: (user, token) => {
     // Token is set as HttpOnly cookie by the server on login response.
-    // We only cache the non-sensitive user profile in localStorage.
+    // Also persist in localStorage so non-cookie fetch calls (claimsStore,
+    // document fetches) can attach it as a Bearer header.
+    if (token) localStorage.setItem('token', token)
+    // Wipe the claims cache from any previous session before caching new profile.
+    localStorage.removeItem('cic-claims-storage')
     localStorage.setItem('user', JSON.stringify(user))
     set({ user, isAuthenticated: true })
   },
 
   logout: () => {
+    localStorage.removeItem('token')
     localStorage.removeItem('user')
     localStorage.removeItem('cic-claims-storage')
     set({ user: null, isAuthenticated: false })
