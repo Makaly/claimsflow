@@ -32,31 +32,51 @@ export class ClaimLabelsController {
     });
   }
 
+  // ── Exports ────────────────────────────────────────────────────────────────
+
   @Get('export')
   @UseGuards(RolesGuard)
   @Roles('admin', 'claims_officer')
-  async exportDataset(@Res() res: Response) {
+  async exportJson(@Res() res: Response) {
     const data = await this.labelsService.exportDataset();
+    const date = new Date().toISOString().slice(0, 10);
     res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Content-Disposition', `attachment; filename="claim-labels-${new Date().toISOString().slice(0,10)}.json"`);
+    res.setHeader('Content-Disposition', `attachment; filename="claim-labels-${date}.json"`);
     res.send(JSON.stringify(data, null, 2));
   }
 
-  @Get(':claimId')
-  get(@Param('claimId') claimId: string) {
-    return this.labelsService.getLabel(claimId);
-  }
-
-  @Post(':claimId')
+  @Get('export/csv')
   @UseGuards(RolesGuard)
   @Roles('admin', 'claims_officer', 'fraud_officer')
-  upsert(
-    @Param('claimId') claimId: string,
-    @Body() body: { label: 'legitimate' | 'suspicious' | 'fraud'; notes?: string },
-    @Request() req,
-  ) {
-    return this.labelsService.upsertLabel(claimId, body.label, 'manual_review', req.user.userId, body.notes);
+  async exportCsv(@Res() res: Response) {
+    const csv = await this.labelsService.exportCsv();
+    const date = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="claim-labels-${date}.csv"`);
+    res.send('﻿' + csv); // BOM for Excel UTF-8 compatibility
   }
+
+  @Get('export/excel')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'claims_officer', 'fraud_officer')
+  async exportExcel(@Res() res: Response) {
+    const buf = await this.labelsService.exportExcel();
+    const date = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="claim-labels-${date}.xlsx"`);
+    res.send(buf);
+  }
+
+  // ── Analysis ───────────────────────────────────────────────────────────────
+
+  @Get('analysis/deep')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'claims_officer', 'fraud_officer')
+  deepAnalysis() {
+    return this.labelsService.getDeepAnalysis();
+  }
+
+  // ── ML admin ───────────────────────────────────────────────────────────────
 
   @Get('ml/factor-effectiveness')
   @UseGuards(RolesGuard)
@@ -99,5 +119,23 @@ export class ClaimLabelsController {
   @Roles('admin', 'fraud_officer')
   sidecarWeights() {
     return this.mlService.getWeights();
+  }
+
+  // ── Per-claim ──────────────────────────────────────────────────────────────
+
+  @Get(':claimId')
+  get(@Param('claimId') claimId: string) {
+    return this.labelsService.getLabel(claimId);
+  }
+
+  @Post(':claimId')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'claims_officer', 'fraud_officer')
+  upsert(
+    @Param('claimId') claimId: string,
+    @Body() body: { label: 'legitimate' | 'suspicious' | 'fraud'; notes?: string },
+    @Request() req,
+  ) {
+    return this.labelsService.upsertLabel(claimId, body.label, 'manual_review', req.user.userId, body.notes);
   }
 }
