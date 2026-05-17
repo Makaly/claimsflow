@@ -1678,6 +1678,256 @@ function mergeInvoice(ocr: ExtractedInvoiceData, ai: ExtractedInvoiceData): Extr
   return merged
 }
 
+// ── AI / OCR Processing insight panel ────────────────────────────────────────
+
+const PROCESSING_INSIGHTS = [
+  { icon: '🔍', title: 'Smart Field Detection', body: 'The engine reads invoice headers, line-item tables, and footers simultaneously — extracting member number, provider, amounts, and dates in a single pass.' },
+  { icon: '🛡️', title: 'Fraud Pattern Matching', body: 'Round-amount billing (e.g. KES 50,000 exactly) is automatically flagged. Genuine itemised medical bills produce irregular totals from individual line items.' },
+  { icon: '📋', title: 'Duplicate Detection', body: 'Every invoice number is cross-checked against the provider\'s full claim history. Double-billing is caught before it reaches a reviewer.' },
+  { icon: '⚡', title: 'Confidence Scoring', body: 'Each extracted field receives a 0–100% confidence score. Fields below 70% are highlighted for manual verification — protecting your data accuracy.' },
+  { icon: '🏥', title: 'Provider Normalisation', body: "Names like 'AKU Nairobi' and 'The Aga Khan University Hospital' resolve to the same provider record — eliminating false mismatch alerts." },
+  { icon: '📅', title: 'Date Sequence Checks', body: 'Service date cannot legally be after the invoice date. Future-dated invoices and claims older than 90 days are flagged automatically.' },
+  { icon: '💡', title: 'OCR Quality Tip', body: 'High-resolution, well-lit scans consistently produce 95%+ confidence. Blurry documents score lower and require additional manual review.' },
+  { icon: '🔗', title: 'Cross-Provider Analysis', body: 'Members billed at two different hospitals on the same service date trigger a critical fraud signal — a pattern indicative of identity misuse.' },
+  { icon: '📊', title: 'Anomaly Scoring', body: 'Each claim receives a statistical anomaly score based on seven factors: amount deviation, member velocity, submission timing, and more.' },
+  { icon: '🤖', title: 'Gradient Boosting Model', body: 'A trained machine learning model computes a fraud probability score alongside the rule-based checks — two independent fraud signals per claim.' },
+]
+
+function ProcessingInsightCard({
+  isAi, claims, uploadedFiles, currentExtractIndex, aiExtractPct, ocrProgress,
+}: {
+  isAi: boolean
+  claims: any[]
+  uploadedFiles: File[]
+  currentExtractIndex: number
+  aiExtractPct: number
+  ocrProgress: string
+}) {
+  const [insightIdx, setInsightIdx] = useState(0)
+  const [insightVisible, setInsightVisible] = useState(true)
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setInsightVisible(false)
+      setTimeout(() => {
+        setInsightIdx(i => (i + 1) % PROCESSING_INSIGHTS.length)
+        setInsightVisible(true)
+      }, 400)
+    }, 5000)
+    return () => clearInterval(id)
+  }, [])
+
+  const insight = PROCESSING_INSIGHTS[insightIdx]
+  const doneCount = claims.filter(c => c.status !== 'extracting').length
+  const totalCount = uploadedFiles.length
+  const avgConf = claims.filter(c => c.aiConfidence > 0).length > 0
+    ? claims.filter(c => c.aiConfidence > 0).reduce((s, c) => s + c.aiConfidence, 0)
+      / claims.filter(c => c.aiConfidence > 0).length
+    : null
+
+  const v = isAi
+    ? { pill: 'bg-violet-100 text-violet-700', ring: 'ring-violet-300', scanLine: '#8b5cf6', shimA: '#8b5cf6', shimB: '#c4b5fd', icon: 'text-violet-600', cardBorder: 'border-violet-200', activeBg: 'bg-violet-50 border-violet-300', insightBg: 'bg-violet-50 border-violet-200', insightText: 'text-violet-800', insightSub: 'text-violet-600', badge: 'bg-violet-100 text-violet-700', shimmer: 'linear-gradient(90deg,#8b5cf6 0%,#a78bfa 40%,#c4b5fd 50%,#a78bfa 60%,#8b5cf6 100%)' }
+    : { pill: 'bg-blue-100 text-blue-700', ring: 'ring-blue-300', scanLine: '#3b82f6', shimA: '#3b82f6', shimB: '#93c5fd', icon: 'text-blue-600', cardBorder: 'border-blue-200', activeBg: 'bg-blue-50 border-blue-300', insightBg: 'bg-blue-50 border-blue-200', insightText: 'text-blue-800', insightSub: 'text-blue-600', badge: 'bg-blue-100 text-blue-700', shimmer: 'linear-gradient(90deg,#3b82f6 0%,#60a5fa 40%,#93c5fd 50%,#60a5fa 60%,#3b82f6 100%)' }
+
+  return (
+    <div className="space-y-4">
+      <style>{`
+        @keyframes _cf_shimmer { 0%{background-position:-200% center} 100%{background-position:200% center} }
+        @keyframes _cf_scan    { 0%{top:0%;opacity:0} 8%{opacity:1} 92%{opacity:1} 100%{top:100%;opacity:0} }
+        @keyframes _cf_ripple  { 0%{transform:scale(1);opacity:.5} 100%{transform:scale(2.8);opacity:0} }
+        @keyframes _cf_fadein  { 0%{opacity:0;transform:translateY(6px)} 100%{opacity:1;transform:translateY(0)} }
+        @keyframes _cf_glow    { 0%,100%{opacity:.6} 50%{opacity:1} }
+        ._cf_shimmer_bar { background:${v.shimmer}; background-size:200% auto; animation:_cf_shimmer 1.6s linear infinite; border-radius:9999px; }
+        ._cf_scan_line   { position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,${v.scanLine},transparent);animation:_cf_scan 2.2s ease-in-out infinite;pointer-events:none; }
+        ._cf_ripple      { position:absolute;inset:0;border-radius:9999px;border:2px solid ${v.scanLine};animation:_cf_ripple 2s ease-out infinite; }
+        ._cf_ripple2     { position:absolute;inset:0;border-radius:9999px;border:2px solid ${v.scanLine};animation:_cf_ripple 2s ease-out .7s infinite; }
+        ._cf_fadein      { animation:_cf_fadein .45s ease both; }
+        ._cf_glow        { animation:_cf_glow 2s ease-in-out infinite; }
+      `}</style>
+
+      {/* ── Main card ──────────────────────────────────────────────────── */}
+      <Card className={`border-2 ${v.cardBorder} overflow-hidden`}>
+        {/* Gradient header strip */}
+        <div className={`h-1.5 w-full _cf_shimmer_bar`} />
+
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {/* Pulsing icon */}
+              <div className="relative w-10 h-10 flex items-center justify-center">
+                <div className="_cf_ripple" />
+                <div className="_cf_ripple2" />
+                <div className={`relative z-10 w-10 h-10 rounded-full flex items-center justify-center ${isAi ? 'bg-violet-100' : 'bg-blue-100'}`}>
+                  {isAi
+                    ? <Brain className={`h-5 w-5 ${v.icon} _cf_glow`} />
+                    : <Scan className={`h-5 w-5 ${v.icon} _cf_glow`} />
+                  }
+                </div>
+              </div>
+              <div>
+                <CardTitle className="text-base">
+                  {isAi ? 'AI Extracting Data' : 'Pre-filling from Documents'}
+                </CardTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Processing file {currentExtractIndex + 1} of {totalCount}
+                  {ocrProgress && <span className={`ml-1 font-medium ${v.insightSub}`}>· {ocrProgress}</span>}
+                </p>
+              </div>
+            </div>
+            {/* Live stats pills */}
+            <div className="flex items-center gap-2 text-xs">
+              <span className={`px-2 py-1 rounded-full font-medium ${v.pill}`}>
+                {doneCount}/{totalCount} done
+              </span>
+              {avgConf !== null && (
+                <span className={`px-2 py-1 rounded-full font-medium ${avgConf >= 0.85 ? 'bg-emerald-100 text-emerald-700' : avgConf >= 0.70 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                  {Math.round(avgConf * 100)}% avg conf
+                </span>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-5 pb-5">
+          {/* Progress bar */}
+          <div className="space-y-1.5">
+            <div className="h-3 w-full rounded-full bg-gray-100 overflow-hidden">
+              <div
+                className="_cf_shimmer_bar transition-all duration-700"
+                style={{ width: `${Math.max(2, aiExtractPct)}%`, height: '100%' }}
+              />
+            </div>
+            <div className="flex justify-between items-center text-xs text-muted-foreground">
+              <span>
+                {aiExtractPct < 30 ? 'Reading document structure…'
+                  : aiExtractPct < 60 ? 'Extracting fields and amounts…'
+                  : aiExtractPct < 85 ? 'Running fraud signal checks…'
+                  : aiExtractPct < 95 ? 'Verifying extracted data…'
+                  : 'Finalising…'}
+              </span>
+              <span className="font-mono font-medium">{aiExtractPct.toFixed(0)}%</span>
+            </div>
+          </div>
+
+          {/* Stage pipeline */}
+          <div className="flex items-center gap-1 text-xs">
+            {(['Reading', 'Extracting', 'Fraud Checks', 'Verifying'] as const).map((stage, i) => {
+              const threshold = [0, 30, 60, 85][i]
+              const active = aiExtractPct >= threshold && aiExtractPct < [30, 60, 85, 101][i]
+              const done   = aiExtractPct >= [30, 60, 85, 101][i]
+              return (
+                <Fragment key={stage}>
+                  <div className={`flex items-center gap-1 px-2 py-1 rounded-full transition-all ${
+                    active ? `${v.pill} font-semibold ring-2 ${v.ring}` :
+                    done   ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'
+                  }`}>
+                    {done && <CheckCircle className="h-3 w-3" />}
+                    {active && <Loader2 className="h-3 w-3 animate-spin" />}
+                    {stage}
+                  </div>
+                  {i < 3 && <div className="h-px flex-1 bg-gray-200" />}
+                </Fragment>
+              )
+            })}
+          </div>
+
+          {/* File cards */}
+          <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
+            {claims.map((claim) => {
+              const isActive = claim.status === 'extracting'
+              const isDone   = claim.status === 'extracted' || claim.status === 'verified'
+              return (
+                <div
+                  key={claim.id}
+                  className={`relative flex items-center gap-3 rounded-xl border p-3 overflow-hidden transition-all duration-300 ${
+                    isActive ? `${v.activeBg} shadow-sm` :
+                    isDone   ? 'border-emerald-200 bg-emerald-50/40' :
+                    'border-gray-100 bg-gray-50/50 opacity-60'
+                  }`}
+                >
+                  {/* Scan line animation — only on active card */}
+                  {isActive && <div className="_cf_scan_line" />}
+
+                  <div className="shrink-0 relative z-10">
+                    {isActive && <Loader2 className={`h-5 w-5 animate-spin ${v.icon}`} />}
+                    {claim.status === 'extracted' && <Sparkles className="h-5 w-5 text-violet-500" />}
+                    {claim.status === 'verified'  && <ShieldCheck className="h-5 w-5 text-emerald-600" />}
+                    {!isActive && !isDone && <div className="h-5 w-5 rounded-full border-2 border-gray-300" />}
+                  </div>
+
+                  <div className="flex-1 min-w-0 relative z-10">
+                    <p className="text-sm font-medium truncate">{claim.fileName}</p>
+                    {isActive ? (
+                      <p className={`text-xs ${v.insightSub} animate-pulse`}>
+                        {isAi ? 'Scanning document with AI…' : 'Reading fields for pre-fill…'}
+                      </p>
+                    ) : isDone ? (
+                      <p className="text-xs text-muted-foreground">
+                        {[claim.patientName, claim.invoiceAmount > 0 && formatCurrency(claim.invoiceAmount), claim.diagnosis]
+                          .filter(Boolean).join(' · ') || 'Fields extracted'}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground/60">Queued…</p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 relative z-10">
+                    {claim.aiConfidence > 0 && (
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        claim.aiConfidence >= 0.85 ? 'bg-emerald-100 text-emerald-700' :
+                        claim.aiConfidence >= 0.70 ? 'bg-amber-100 text-amber-700' :
+                        'bg-red-100 text-red-700'
+                      }`}>
+                        {Math.round(claim.aiConfidence * 100)}%
+                      </span>
+                    )}
+                    {isDone && <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {!isAi && (
+            <p className="text-xs text-muted-foreground text-center">
+              OCR extracts what it can — you verify and complete any gaps in the next step
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Rotating insight card ──────────────────────────────────────── */}
+      <div
+        key={insightIdx}
+        className={`_cf_fadein rounded-xl border p-4 ${v.insightBg} transition-all`}
+        style={{ opacity: insightVisible ? 1 : 0, transition: 'opacity 0.3s ease' }}
+      >
+        <div className="flex items-start gap-3">
+          <span className="text-2xl leading-none mt-0.5" role="img">{insight.icon}</span>
+          <div>
+            <p className={`text-sm font-semibold ${v.insightText}`}>
+              {insight.title}
+            </p>
+            <p className={`text-xs mt-1 leading-relaxed ${v.insightSub}`}>
+              {insight.body}
+            </p>
+          </div>
+          <div className="ml-auto shrink-0 flex gap-1">
+            {PROCESSING_INSIGHTS.map((_, i) => (
+              <div
+                key={i}
+                className={`h-1.5 rounded-full transition-all duration-300 ${
+                  i === insightIdx ? `w-4 ${isAi ? 'bg-violet-500' : 'bg-blue-500'}` : 'w-1.5 bg-gray-300'
+                }`}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function BatchUpload() {
   const { addClaims } = useClaimsStore()
   const { user } = useAuthStore()
@@ -3059,100 +3309,16 @@ export default function BatchUpload() {
             </Card>
           )}
 
-          {/* STEP 2: AI EXTRACTING */}
-          {step === 'ai_extracting' && (
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <Brain className="h-5 w-5 text-violet-600" />
-                  <CardTitle>AI Extracting Data</CardTitle>
-                </div>
-                <CardDescription>
-                  Processing file {currentExtractIndex + 1} of {uploadedFiles.length}... {ocrProgress && <span className="text-violet-600">({ocrProgress})</span>}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Progress value={aiExtractPct} className="h-3" />
-                <p className="text-xs text-muted-foreground text-right">{aiExtractPct.toFixed(0)}%</p>
-
-                <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                  {claims.map((claim, i) => (
-                    <div key={claim.id} className={`flex items-center gap-3 rounded-lg border p-3 transition-colors ${
-                      claim.status === 'extracting' ? 'border-violet-300 dark:border-violet-700 bg-violet-50/50 dark:bg-violet-950/20' :
-                      claim.status === 'verified' ? 'border-emerald-200 dark:border-emerald-800' : ''
-                    }`}>
-                      <div className="shrink-0">
-                        {claim.status === 'extracting' && <Loader2 className="h-5 w-5 animate-spin text-violet-600" />}
-                        {claim.status === 'extracted' && <Sparkles className="h-5 w-5 text-violet-600" />}
-                        {claim.status === 'verified' && <ShieldCheck className="h-5 w-5 text-emerald-600" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{claim.fileName}</p>
-                        {claim.status === 'extracting' ? (
-                          <p className="text-xs text-violet-600">Scanning document with OCR...</p>
-                        ) : (
-                          <p className="text-xs text-muted-foreground">
-                            {claim.patientName} &middot; {formatCurrency(claim.invoiceAmount)} &middot; {claim.diagnosis}
-                          </p>
-                        )}
-                      </div>
-                      {claim.aiConfidence > 0 && (
-                        <Badge variant="outline" className="shrink-0 text-xs">
-                          {(claim.aiConfidence * 100).toFixed(0)}%
-                        </Badge>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* STEP 2b: MANUAL PROCESSING (OCR pre-fill + barcode stamping) */}
-          {step === 'manual_processing' && (
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <ClipboardList className="h-5 w-5 text-blue-600" />
-                  <CardTitle>Pre-filling from Documents</CardTitle>
-                </div>
-                <CardDescription>
-                  Reading file {currentExtractIndex + 1} of {uploadedFiles.length}…{ocrProgress && <span className="text-blue-500"> ({ocrProgress})</span>}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Progress value={aiExtractPct} className="h-3" />
-                <p className="text-xs text-muted-foreground text-right">{aiExtractPct.toFixed(0)}%</p>
-                <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                  {claims.map((claim) => (
-                    <div key={claim.id} className={`flex items-center gap-3 rounded-lg border p-3 transition-colors ${
-                      claim.status === 'extracting' ? 'border-blue-300 dark:border-blue-700 bg-blue-50/50 dark:bg-blue-950/20' : ''
-                    }`}>
-                      <div className="shrink-0">
-                        {claim.status === 'extracting' && <Loader2 className="h-5 w-5 animate-spin text-blue-600" />}
-                        {claim.status === 'extracted'  && <ClipboardList className="h-5 w-5 text-blue-500" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{claim.fileName}</p>
-                        {claim.status === 'extracting'
-                          ? <p className="text-xs text-blue-600">Scanning for pre-fill data…</p>
-                          : <p className="text-xs text-muted-foreground">
-                              {claim.patientName || <span className="italic text-muted-foreground/60">Patient name needed</span>}
-                              {claim.invoiceAmount > 0 && <> &middot; {formatCurrency(claim.invoiceAmount)}</>}
-                            </p>
-                        }
-                      </div>
-                      {claim.status === 'extracted' && (
-                        <Badge variant="outline" className="shrink-0 text-xs text-blue-500 border-blue-500/30">
-                          Ready
-                        </Badge>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <p className="text-xs text-muted-foreground text-center">OCR extracts what it can — you verify and fill any gaps in the next step</p>
-              </CardContent>
-            </Card>
+          {/* STEP 2: AI EXTRACTING + MANUAL PROCESSING — animated insight panel */}
+          {(step === 'ai_extracting' || step === 'manual_processing') && (
+            <ProcessingInsightCard
+              isAi={step === 'ai_extracting'}
+              claims={claims}
+              uploadedFiles={uploadedFiles}
+              currentExtractIndex={currentExtractIndex}
+              aiExtractPct={aiExtractPct}
+              ocrProgress={ocrProgress}
+            />
           )}
 
           {/* STEP 3: REVIEW */}
