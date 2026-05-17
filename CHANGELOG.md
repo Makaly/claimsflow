@@ -73,6 +73,24 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   | `POST` | `/api/claim-labels/ml/train-sidecar`        | Push labelled dataset to sidecar for GBM training |
   | `GET`  | `/api/claim-labels/ml/sidecar-weights`      | Feature importances from the fitted model |
 
+### Fixed
+
+- **Auto-assignment no longer fails claim saves** — `autoAssignToMaker` is
+  now wrapped in a try/catch inside `ClaimsService.create`. A transient
+  database error during post-commit assignment (common under batch-upload
+  concurrency on Render free-tier) previously returned a 500 to the frontend
+  even though the claim row was already committed, causing the frontend to
+  treat a successful save as a failure. Auto-assignment is now best-effort;
+  unassigned claims remain visible for manual triage at `initial_review`.
+
+- **`DATA_ENCRYPTION_KEY` format validated at startup** — `PrismaService`
+  now logs a clear error at module initialisation if the key is absent or
+  not a valid 64-character hex string. Previously, misconfigured deployments
+  only surfaced this as a 500 on the first claim containing a non-null
+  `diagnosis` or `treatment` field. Note: Render's `generateValue: true`
+  does not guarantee the required 64-hex-char format — set this key manually
+  in the Render dashboard using `openssl rand -hex 32`.
+
 ### Changed
 
 - **`resolveProviderByName`** replaces the inline provider lookup in
