@@ -34,7 +34,7 @@ ClaimsFlow digitises the full medical claims lifecycle — from provider intake 
 - **Real-time notifications** via WebSockets
 - **Two-factor authentication**, password reset, role-based access
 - **Reporting** — operational, financial, fraud, provider scorecards
-- **ML feedback loop** — claim labelling, factor-effectiveness analysis, and anomaly weight tuning
+- **ML fraud scoring** — gradient-boosting classifier (scikit-learn) trained on labelled claims, with heuristic fallback, self-calibrating factor weights, and a closed human-in-the-loop feedback pipeline
 - **Hardened security** — HttpOnly JWT cookies, Helmet CSP, HSTS, global rate limiting, magic-byte file verification
 - **GDPR / KDPA compliance** — data-subject rights (access, portability, erasure, objection), consent ledger, AES-256-GCM field encryption for special-category data, structured request-ID tracing
 
@@ -48,10 +48,12 @@ ClaimsFlow digitises the full medical claims lifecycle — from provider intake 
 │   (Vite + TS)    │ HTTP │   (REST + WS)    │      │   (via Prisma)   │
 └──────────────────┘      └────────┬─────────┘      └──────────────────┘
                                    │
-                          ┌────────┴─────────┐
-                          │  Redis + BullMQ  │
-                          │  (queues/cache)  │
-                          └──────────────────┘
+                     ┌─────────────┴─────────────┐
+                     │                           │
+            ┌────────┴─────────┐      ┌──────────┴───────┐
+            │  Redis + BullMQ  │      │   ML Sidecar     │
+            │  (queues/cache)  │      │  FastAPI + GBM   │
+            └──────────────────┘      └──────────────────┘
 ```
 
 ### Tech stack
@@ -62,10 +64,11 @@ ClaimsFlow digitises the full medical claims lifecycle — from provider intake 
 | Backend       | NestJS 11, TypeScript, Passport JWT, Socket.IO, BullMQ, Helmet          |
 | Database      | PostgreSQL 15 + Prisma ORM                                              |
 | Cache / Queue | Redis 7                                                                 |
-| OCR / AI      | Gemini Vision, AI Vision API, Ollama (local), Tesseract                 |
+| OCR / AI      | Gemini Vision, Ollama (local), Tesseract                                |
+| ML / Fraud    | Python 3.12, FastAPI, scikit-learn (GradientBoostingClassifier), NumPy  |
 | Notifications | Nodemailer (SMTP), Twilio, Africa's Talking, Socket.IO                  |
 | Reports       | ExcelJS, PDFKit, pdf-lib                                                |
-| Deployment    | Docker, Render, Alpine + OpenSSL                                        |
+| Deployment    | Docker Compose, Render, Alpine + OpenSSL                                |
 
 ---
 
@@ -76,7 +79,11 @@ claims/
 ├── backend/                  NestJS API server
 │   ├── src/
 │   │   ├── auth/             Authentication, 2FA, JWT, roles
-│   │   ├── claims/           Core claims domain, eligibility, ML labels
+│   │   ├── claims/           Core claims domain, fraud signals, ML scoring
+│   │   │   ├── fraud-signals.ts          12 heuristic fraud detectors
+│   │   │   ├── anomaly-scoring.service.ts  Statistical scorer (DB-backed weights)
+│   │   │   ├── ml-scoring.service.ts     HTTP client for the ML sidecar
+│   │   │   └── claim-labels.*            Labelling API + ML admin endpoints
 │   │   ├── workflow/         Maker/checker queues + SLA tracking
 │   │   ├── appeals/          Appeals adjudication
 │   │   ├── payment/          Payment advice generation
@@ -94,6 +101,10 @@ claims/
 │   │   ├── mock-integrations/ EDMS + eOxegen stubs for local dev
 │   │   └── ...
 │   └── prisma/               Schema and migrations
+├── ml-sidecar/               Python FastAPI fraud-scoring microservice
+│   ├── main.py               FastAPI app — /train, /score, /weights, /health
+│   ├── requirements.txt      scikit-learn, FastAPI, uvicorn, numpy
+│   └── Dockerfile            Python 3.12 slim image
 ├── frontend/                 React SPA
 │   └── src/
 │       ├── pages/            Route-level views
@@ -107,7 +118,7 @@ claims/
 ├── scripts/                  Repo-level shell helpers (e.g. build-redoc.sh)
 ├── perf/                     k6 performance suite (smoke + auth load)
 ├── k8s/                      Kubernetes manifests (namespace, backend, frontend)
-└── docker-compose.yml        Local dev orchestration
+└── docker-compose.yml        Local dev orchestration (includes ml-sidecar service)
 ```
 
 ---
@@ -120,6 +131,7 @@ claims/
 - PostgreSQL **15+**
 - Redis **7+**
 - npm **9+**
+- Python **3.12+** (ML sidecar only)
 
 ### Local development
 
@@ -142,13 +154,29 @@ npm install
 npm run dev                # http://localhost:5173
 ```
 
-### Docker
+### Docker (recommended)
 
 ```bash
 docker compose up --build
+# Starts: postgres, redis, backend (port 4000), frontend (port 3000), ml-sidecar (port 8000)
 ```
 
 See [docker-compose.yml](docker-compose.yml) for service definitions.
+
+### ML sidecar (standalone)
+
+```bash
+cd ml-sidecar
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+```
+
+Once running, train the model by posting labelled data:
+
+```bash
+curl -X POST http://localhost:4000/api/claim-labels/ml/train-sidecar \
+  -H "Authorization: Bearer <admin-token>"
+```
 
 ---
 
@@ -168,6 +196,7 @@ The backend reads configuration from `.env`. See [backend/.env.example](backend/
 | `GEMINI_API_KEY`      | Google Gemini Vision (OCR)                                          |
 | `OLLAMA_URL`          | Local Ollama server (optional)                                      |
 | `DATA_ENCRYPTION_KEY` | 32-byte hex key for AES-256-GCM field encryption (GDPR Art. 9). Generate with `openssl rand -hex 32` and store in the deployment secret store — **never commit this value**. |
+| `ML_SIDECAR_URL`      | Base URL of the Python ML scoring sidecar (e.g. `http://localhost:8000`). If unset, the backend falls back to a built-in heuristic scorer. |
 
 > **Never commit `.env`.** Rotate API keys immediately if exposed. See [SECURITY.md](SECURITY.md).
 

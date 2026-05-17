@@ -7,6 +7,95 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-05-17
+
+### Added
+
+- **Python ML scoring sidecar** (`ml-sidecar/`) — standalone FastAPI
+  microservice that trains a `GradientBoostingClassifier` (scikit-learn) on
+  the labelled claims dataset and exposes real-time fraud probability scores.
+  Endpoints: `POST /train`, `POST /score`, `GET /weights`, `GET /health`.
+  The NestJS backend calls the sidecar fire-and-forget at claim creation;
+  if the sidecar is unreachable a built-in heuristic fallback activates
+  automatically. Controlled by the `ML_SIDECAR_URL` environment variable.
+
+- **`MlScoringService`** (`backend/src/claims/ml-scoring.service.ts`) —
+  typed NestJS HTTP client wrapping the sidecar with a 5-second timeout and
+  automatic heuristic fallback. Injected into `ClaimsService` so every new
+  claim receives a gradient-boosting fraud probability score alongside the
+  statistical anomaly score.
+
+- **Cross-provider duplicate detection** (fraud signal #11, `critical`) —
+  at claim creation, the backend queries for any existing approved/submitted
+  claim for the same member number at a *different* provider on the same
+  service date. A confirmed match is stored as a critical fraud signal and the
+  claim is auto-routed to fraud review.
+
+- **Procedure code unbundling detection** (fraud signal #12, `warning`) —
+  detects overlapping procedure codes on claims for the same member within a
+  rolling 7-day window, flagging the known unbundling pattern of splitting a
+  single episode of care across multiple invoices to exceed benefit limits.
+
+- **`ProviderAlias` model** — normalisation table mapping OCR-extracted
+  provider name variants (lowercase, stripped punctuation) to their canonical
+  `Provider` record. Eliminates false-positive provider-mismatch fraud signals
+  caused by letterhead abbreviations and spelling differences. Aliases are
+  registered automatically on first resolution and retrieved in O(1) via a
+  unique index.
+
+- **`FraudModelWeights` model** — audit-friendly persistence of calibrated
+  per-factor anomaly weights. Each calibration run deactivates the previous
+  active row and inserts a new one; older rows are retained for rollback and
+  audit trail.
+
+- **Anomaly factor #8 — Provider behavioral drift** — compares the
+  provider's 30-day rolling average invoice amount against the prior 30-day
+  window. A shift greater than 20% contributes to the anomaly score using the
+  same parallel query batch as existing factors.
+
+- **DB-backed weight calibration** (`AnomalyScoringService.calibrateWeights`) —
+  reads all `ClaimLabel` rows with feature snapshots, computes a separation
+  score per feature, normalises weights to a 0.05–0.45 range, and persists
+  the result as an active `FraudModelWeights` row. The in-memory cache is
+  invalidated immediately; weights reload from the database every hour.
+
+- **Fraud verdict → label feedback loop** — `confirmFraud()` now writes a
+  `fraud` label and `clearFraud()` writes a `legitimate` label to `ClaimLabel`
+  with source `fraud_confirmed`. Every fraud-officer decision feeds the
+  training dataset used by both the statistical scorer and the ML sidecar.
+
+- **New ML admin API endpoints** (roles: `admin`, `fraud_officer`):
+
+  | Method | Path | Description |
+  |--------|------|-------------|
+  | `GET`  | `/api/claim-labels/ml/factor-effectiveness` | Per-feature separation stats from labelled data |
+  | `POST` | `/api/claim-labels/ml/calibrate-weights`    | Re-calibrate statistical scorer weights |
+  | `POST` | `/api/claim-labels/ml/train-sidecar`        | Push labelled dataset to sidecar for GBM training |
+  | `GET`  | `/api/claim-labels/ml/sidecar-weights`      | Feature importances from the fitted model |
+
+### Changed
+
+- **`resolveProviderByName`** replaces the inline provider lookup in
+  `ClaimsService.create`. The three-step alias → fuzzy-match → auto-create
+  chain is idempotent and race-safe via `upsert`.
+
+- **`AnomalyScoringService` factor weights are data-driven** — all eight factor
+  contribution caps are read from the active `FraudModelWeights` row at runtime
+  (1-hour TTL cache) instead of hardcoded constants. `DEFAULT_WEIGHTS` serves
+  as the fallback when no calibrated model exists.
+
+- **`docker-compose.yml`** — `ml-sidecar` service added with a persistent
+  `/data` volume for the trained model file. `ML_SIDECAR_URL` is pre-wired to
+  the backend service environment.
+
+### Database
+
+- New table: `provider_aliases` — `alias UNIQUE`, `provider_id FK → providers`.
+- New table: `fraud_model_weights` — `weights JSONB`, `is_active BOOL`,
+  `fraud_count INT`, `legitimate_count INT`, `trained_at TIMESTAMPTZ`.
+
+---
+
 ## [1.8.0] - 2026-05-16
 
 ### Added
