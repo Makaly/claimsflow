@@ -80,8 +80,12 @@ export class OcrProcessor extends WorkerHost {
       const rawServiceDate  = cmap.dateOfService || cmap.admissionDate || cf.service_date || cf.admission_date || primary?.serviceDate;
       const safeInvoiceDate = rawInvoiceDate && !isNaN(new Date(rawInvoiceDate).getTime())
         ? new Date(rawInvoiceDate) : null;
+      // When OCR finds no service date on the document, fall back to today
+      // (the invoice upload date). The fraud-signal checker already guards
+      // against treating a same-day service date as evidence of backdating.
       const safeServiceDate = rawServiceDate && !isNaN(new Date(rawServiceDate).getTime())
-        ? new Date(rawServiceDate) : null;
+        ? new Date(rawServiceDate)
+        : new Date();
 
       // Confidence: average of classifier per-field scores (or Tesseract score as fallback)
       const classifierScores = Object.values(cc).filter((v): v is number => typeof v === 'number' && v > 0);
@@ -177,7 +181,7 @@ export class OcrProcessor extends WorkerHost {
             invoiceNumber:        mergedInvoiceNumber || undefined,
             invoiceDate:          safeInvoiceDate     || undefined,
             invoiceAmount:        mergedInvoiceAmount || undefined,
-            dateOfService:        safeServiceDate     || undefined,
+            dateOfService:        safeServiceDate,
             diagnosis:            mergedDiagnosis     || undefined,
             ocrStatus:            finalStatus,
             ocrConfidence:        mergedConfidence    || undefined,
