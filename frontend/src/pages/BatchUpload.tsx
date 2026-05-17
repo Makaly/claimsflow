@@ -2142,7 +2142,17 @@ export default function BatchUpload() {
         await api.patch(`/claims/${savedClaim.id}/annotations`, { annotations: c.annotations }).catch(() => {})
       }
 
+      // Flash "Published" briefly so the user sees confirmation, then remove
+      // the card from the review list — the claim is now in the main Claims page.
       setClaims(prev => prev.map(x => x.id === claimId ? { ...x, status: 'published', dbId: savedClaim?.id } : x))
+      setTimeout(() => {
+        setClaims(prev => {
+          const remaining = prev.filter(x => x.id !== claimId)
+          // When the last claim is individually published, advance to complete
+          if (remaining.length === 0) setStep('complete')
+          return remaining
+        })
+      }, 900)
     } catch (err: any) {
       console.error('Single publish failed:', err?.response?.data || err.message)
     } finally {
