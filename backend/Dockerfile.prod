@@ -2,7 +2,7 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-RUN apk add --no-cache python3 make g++ tesseract-ocr openssl
+RUN apk add --no-cache python3 make g++ tesseract-ocr openssl sane
 
 COPY package*.json ./
 RUN npm ci --legacy-peer-deps
@@ -19,7 +19,7 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-RUN apk add --no-cache tesseract-ocr openssl
+RUN apk add --no-cache tesseract-ocr openssl sane
 
 COPY package*.json ./
 RUN npm install --omit=dev --legacy-peer-deps
