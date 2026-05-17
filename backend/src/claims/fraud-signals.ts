@@ -27,6 +27,13 @@ interface ClaimInput {
   dateOfService?: Date | string | null
   ocrConfidence?: number | null
   aiExtracted?: boolean
+  procedureCodes?: string[]
+}
+
+export interface CrossProviderMatch {
+  claimNumber: string
+  providerName: string
+  dateOfService: string
 }
 
 interface BatchSibling {
@@ -44,12 +51,16 @@ export interface DuplicateClaimRef {
  * Compute fraud signals for a single claim.
  * `allInvoiceNumbers` is a Set of invoice numbers from other claims for this provider.
  * `batchSiblings` is the list of other claims already saved under the same batch number.
+ * `crossProviderMatches` is a list of claims for the same member at different providers on the same service date.
+ * `recentMemberProcedureCodes` is the list of procedure codes on recent claims for the same member (last 7 days).
  */
 export function computeFraudSignals(
   claim: ClaimInput,
   allInvoiceNumbers: Set<string> = new Set(),
   batchSiblings: BatchSibling[] = [],
   duplicateClaimRefs: DuplicateClaimRef[] = [],
+  crossProviderMatches: CrossProviderMatch[] = [],
+  recentMemberProcedureCodes: string[] = [],
 ): FraudSignal[] {
   const signals: FraudSignal[] = []
   const now = new Date().toISOString()
@@ -205,6 +216,33 @@ export function computeFraudSignals(
         level: 'critical',
         title: 'Duplicate Member + Amount in Same Batch',
         detail: `Member "${claim.memberNumber}" has another claim for the exact same amount (KES ${amt.toLocaleString()}) in this batch. Identical member and amount combinations are a strong indicator of duplicate invoice submission.`,
+        detectedAt: now,
+      })
+    }
+  }
+
+  // 11. Cross-provider duplicate — same member billed at multiple providers on same service date
+  if (claim.memberNumber && claim.dateOfService && crossProviderMatches.length > 0) {
+    const names = crossProviderMatches.map(m => `${m.providerName} (${m.claimNumber})`).join(', ')
+    signals.push({
+      level: 'critical',
+      title: 'Cross-Provider Duplicate — Same Member, Same Date',
+      detail: `Member "${claim.memberNumber}" already has claim(s) at a different provider on the same service date: ${names}. A member cannot simultaneously receive services at multiple hospitals. This is a strong indicator of duplicate claim submission or identity fraud.`,
+      detectedAt: now,
+      meta: { duplicateClaimNumbers: crossProviderMatches.map(m => m.claimNumber) },
+    })
+  }
+
+  // 12. Procedure code overlap — possible unbundling within 7 days for same member
+  if (claim.procedureCodes?.length && recentMemberProcedureCodes.length > 0) {
+    const overlap = claim.procedureCodes.filter(
+      code => code && recentMemberProcedureCodes.includes(code)
+    )
+    if (overlap.length > 0) {
+      signals.push({
+        level: 'warning',
+        title: 'Procedure Code Overlap — Possible Unbundling',
+        detail: `Procedure code(s) ${overlap.join(', ')} appear on another claim for member "${claim.memberNumber}" within the last 7 days. Billing the same procedure separately across multiple claims is a known unbundling fraud pattern used to exceed benefit limits.`,
         detectedAt: now,
       })
     }
