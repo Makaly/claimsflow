@@ -772,7 +772,12 @@ export class ClaimsService {
       // admin/supervisor/claims_officer see all
     }
 
-    const [total, submitted, underReview, approved, rejected, paid, incomplete] = await Promise.all([
+    const [
+      total, submitted, underReview, approved, rejected, paid, incomplete,
+      fraudHold, fraudConfirmed, aiExtracted,
+      totalAmountAgg, approvedAmountAgg,
+      providerCount, batchCount,
+    ] = await Promise.all([
       this.prisma.claim.count({ where: baseWhere }),
       this.prisma.claim.count({ where: { ...baseWhere, status: 'submitted' } }),
       this.prisma.claim.count({ where: { ...baseWhere, status: 'under_review' } }),
@@ -780,30 +785,39 @@ export class ClaimsService {
       this.prisma.claim.count({ where: { ...baseWhere, status: 'rejected' } }),
       this.prisma.claim.count({ where: { ...baseWhere, status: 'paid' } }),
       this.prisma.claim.count({ where: { ...baseWhere, status: 'incomplete' } }),
+      this.prisma.claim.count({ where: { ...baseWhere, status: 'fraud_hold' } }),
+      this.prisma.claim.count({ where: { ...baseWhere, status: 'fraud_confirmed' } }),
+      this.prisma.claim.count({ where: { ...baseWhere, ocrStatus: 'completed' } }),
+      this.prisma.claim.aggregate({ where: baseWhere, _sum: { invoiceAmount: true } }),
+      this.prisma.claim.aggregate({ where: { ...baseWhere, status: 'approved' }, _sum: { invoiceAmount: true } }),
+      this.prisma.claim.findMany({ where: baseWhere, select: { providerId: true }, distinct: ['providerId'] })
+        .then(rows => rows.length),
+      this.prisma.claim.findMany({ where: { ...baseWhere, batchId: { not: null } }, select: { batchId: true }, distinct: ['batchId'] })
+        .then(rows => rows.length),
     ]);
 
-    const totalAmount = await this.prisma.claim.aggregate({
-      where: baseWhere,
-      _sum: { invoiceAmount: true },
-    });
-
-    const approvedAmount = await this.prisma.claim.aggregate({
-      where: { ...baseWhere, status: 'approved' },
-      _sum: { invoiceAmount: true },
-    });
+    const totalAmount   = totalAmountAgg._sum.invoiceAmount   || 0;
+    const approvedAmount = approvedAmountAgg._sum.invoiceAmount || 0;
+    const avgAmount     = total > 0 ? Math.round(totalAmount / total) : 0;
 
     return {
       total,
       submitted,
       underReview,
       processing: underReview,
-      pending: submitted,
+      pending: submitted + underReview + incomplete,
       approved,
       rejected,
       paid,
       incomplete,
-      totalAmount: totalAmount._sum.invoiceAmount || 0,
-      approvedAmount: approvedAmount._sum.invoiceAmount || 0,
+      fraudHold,
+      fraudConfirmed,
+      aiExtracted,
+      providerCount,
+      batchCount,
+      totalAmount,
+      approvedAmount,
+      avgAmount,
     };
   }
 

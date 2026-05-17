@@ -49,6 +49,13 @@ interface ServerStats {
   pending: number
   rejected: number
   totalAmount: number
+  approvedAmount?: number
+  avgAmount?: number
+  providerCount?: number
+  batchCount?: number
+  aiExtracted?: number
+  fraudHold?: number
+  fraudConfirmed?: number
   // workflow
   initial_review?: number
   maker_checker_review?: number
@@ -88,11 +95,18 @@ function CICDashboard() {
       const s: ServerStats = { total: 0, approved: 0, pending: 0, rejected: 0, totalAmount: 0 }
       if (cRes.ok) {
         const d = await cRes.json()
-        s.total = d.total ?? 0
-        s.approved = (d.approved ?? 0) + (d.processing ?? 0)
-        s.pending = d.pending ?? 0
-        s.rejected = d.rejected ?? 0
-        s.totalAmount = d.totalAmount ?? 0
+        s.total          = d.total          ?? 0
+        s.approved       = (d.approved ?? 0) + (d.paid ?? 0)
+        s.pending        = d.pending        ?? 0
+        s.rejected       = d.rejected       ?? 0
+        s.totalAmount    = d.totalAmount    ?? 0
+        s.approvedAmount = d.approvedAmount ?? 0
+        s.avgAmount      = d.avgAmount      ?? 0
+        s.providerCount  = d.providerCount  ?? 0
+        s.batchCount     = d.batchCount     ?? 0
+        s.aiExtracted    = d.aiExtracted    ?? 0
+        s.fraudHold      = d.fraudHold      ?? 0
+        s.fraudConfirmed = d.fraudConfirmed ?? 0
       }
       if (wRes.ok) {
         const w = await wRes.json()
@@ -238,9 +252,14 @@ function CICDashboard() {
     .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())
     .slice(0, 8)
 
-  const uniqueProviders = new Set(claims.map(c => c.provider?.name)).size
-  const approvalRate = totalClaims > 0 ? ((approvedClaims / totalClaims) * 100).toFixed(1) : '0.0'
-  const avgAmount = totalClaims > 0 ? totalAmount / totalClaims : 0
+  // Prefer server-computed values — the Zustand store may be empty on first load
+  const uniqueProviders = serverStats?.providerCount ?? new Set(claims.map(c => c.provider?.name)).size
+  const serverTotal     = serverStats?.total ?? totalClaims
+  const serverApproved  = serverStats?.approved ?? approvedClaims
+  const approvalRate    = serverTotal > 0 ? ((serverApproved / serverTotal) * 100).toFixed(1) : '0.0'
+  const avgAmount       = serverStats?.avgAmount ?? (totalClaims > 0 ? totalAmount / totalClaims : 0)
+  const serverBatches   = serverStats?.batchCount ?? totalBatches
+  const serverAiExtracted = serverStats?.aiExtracted ?? aiExtractedCount
 
   // ── Daily submissions — last 14 days ─────────────────────────────────────
   const dailyData = useMemo(() => {
@@ -277,11 +296,11 @@ function CICDashboard() {
     { title: 'Pending',        value: (sc?.pending ?? pendingClaims).toLocaleString(),   icon: Clock,       color: 'text-amber-600',    bg: 'bg-amber-50 dark:bg-amber-950/30'    },
     { title: 'Rejected',       value: (sc?.rejected ?? rejectedClaims).toLocaleString(), icon: XCircle,     color: 'text-red-600',      bg: 'bg-red-50 dark:bg-red-950/30'        },
     { title: 'Total Amount',   value: formatCurrency(sc?.totalAmount ?? totalAmount),    icon: DollarSign,  color: 'text-primary',      bg: 'bg-primary/5'                        },
-    { title: 'Approval Rate',  value: `${approvalRate}%`,                                icon: Percent,     color: 'text-teal-600',     bg: 'bg-teal-50 dark:bg-teal-950/30'      },
-    { title: 'Avg Claim',      value: formatCurrency(avgAmount),                         icon: Activity,    color: 'text-indigo-600',   bg: 'bg-indigo-50 dark:bg-indigo-950/30'  },
-    { title: 'Providers',      value: String(uniqueProviders),                           icon: Building2,   color: 'text-violet-600',   bg: 'bg-violet-50 dark:bg-violet-950/30'  },
-    { title: 'Total Batches',  value: String(totalBatches),                              icon: Package,     color: 'text-sky-600',      bg: 'bg-sky-50 dark:bg-sky-950/30'        },
-    { title: 'AI Extracted',   value: aiExtractedCount.toLocaleString(),                 icon: Sparkles,    color: 'text-fuchsia-600',  bg: 'bg-fuchsia-50 dark:bg-fuchsia-950/30'},
+    { title: 'Approval Rate',  value: `${approvalRate}%`,                                    icon: Percent,     color: 'text-teal-600',     bg: 'bg-teal-50 dark:bg-teal-950/30'      },
+    { title: 'Avg Claim',      value: formatCurrency(avgAmount),                             icon: Activity,    color: 'text-indigo-600',   bg: 'bg-indigo-50 dark:bg-indigo-950/30'  },
+    { title: 'Providers',      value: String(uniqueProviders),                               icon: Building2,   color: 'text-violet-600',   bg: 'bg-violet-50 dark:bg-violet-950/30'  },
+    { title: 'Total Batches',  value: String(serverBatches),                                 icon: Package,     color: 'text-sky-600',      bg: 'bg-sky-50 dark:bg-sky-950/30'        },
+    { title: 'AI Extracted',   value: serverAiExtracted.toLocaleString(),                    icon: Sparkles,    color: 'text-fuchsia-600',  bg: 'bg-fuchsia-50 dark:bg-fuchsia-950/30'},
   ]
 
   // ── Custom tooltip for provider bar chart ─────────────────────────────────
