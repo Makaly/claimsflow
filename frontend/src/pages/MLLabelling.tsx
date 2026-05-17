@@ -55,16 +55,21 @@ export default function MLLabelling() {
       const params = new URLSearchParams()
       if (labelFilter !== 'all') params.set('label', labelFilter)
       if (sourceFilter !== 'all') params.set('source', sourceFilter)
-      const [labelsRes, factorRes, analysisRes] = await Promise.all([
+
+      // Use allSettled so a 403 on one endpoint never blanks the whole page.
+      const [labelsRes, factorRes, analysisRes] = await Promise.allSettled([
         api.get(`/claim-labels?${params}`),
         api.get('/claim-labels/ml/factor-effectiveness'),
         api.get('/claim-labels/analysis/deep'),
       ])
-      setLabels(labelsRes.data.items || [])
-      setDistribution(labelsRes.data.distribution || {})
-      setTotal(labelsRes.data.total || 0)
-      setFactorStats(factorRes.data)
-      setAnalysis(analysisRes.data)
+
+      if (labelsRes.status === 'fulfilled') {
+        setLabels(labelsRes.value.data.items || [])
+        setDistribution(labelsRes.value.data.distribution || {})
+        setTotal(labelsRes.value.data.total || 0)
+      }
+      if (factorRes.status === 'fulfilled') setFactorStats(factorRes.value.data)
+      if (analysisRes.status === 'fulfilled') setAnalysis(analysisRes.value.data)
     } finally {
       setLoading(false)
     }

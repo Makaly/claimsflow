@@ -80,7 +80,7 @@ export class ClaimLabelsController {
 
   @Get('ml/factor-effectiveness')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'fraud_officer')
+  @Roles('admin', 'claims_officer', 'maker_checker', 'fraud_officer')
   factorEffectiveness() {
     return this.anomalyService.getFactorEffectiveness();
   }
@@ -116,7 +116,7 @@ export class ClaimLabelsController {
 
   @Get('ml/sidecar-weights')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'fraud_officer')
+  @Roles('admin', 'claims_officer', 'fraud_officer')
   sidecarWeights() {
     return this.mlService.getWeights();
   }
