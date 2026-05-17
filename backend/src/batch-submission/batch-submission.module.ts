@@ -5,12 +5,14 @@ import { BatchSubmissionController } from './batch-submission.controller';
 import { BatchSubmissionProcessor } from './batch-submission.processor';
 import { BarcodeService } from '../common/services/barcode.service';
 import { PdfWatermarkService } from '../common/services/pdf-watermark.service';
+import { OcrModule } from '../ocr/ocr.module';
 
 @Module({
   imports: [
     BullModule.registerQueue({
       name: 'batch-processing',
     }),
+    OcrModule,
   ],
   controllers: [BatchSubmissionController],
   providers: [

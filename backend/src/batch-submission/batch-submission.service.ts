@@ -4,6 +4,7 @@ import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { BarcodeService } from '../common/services/barcode.service';
 import { PdfWatermarkService } from '../common/services/pdf-watermark.service';
+import { OcrService } from '../ocr/ocr.service';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -13,6 +14,7 @@ export class BatchSubmissionService {
     private prisma: PrismaService,
     private barcodeService: BarcodeService,
     private pdfWatermarkService: PdfWatermarkService,
+    private ocrService: OcrService,
     @InjectQueue('batch-processing') private batchQueue: Queue,
   ) {}
 
@@ -179,7 +181,7 @@ export class BatchSubmissionService {
       });
 
       // Create document record
-      await this.prisma.document.create({
+      const doc = await this.prisma.document.create({
         data: {
           filename: path.basename(processedPath),
           originalName: file.originalName,
@@ -200,6 +202,9 @@ export class BatchSubmissionService {
       if (fs.existsSync(file.path)) {
         fs.unlinkSync(file.path);
       }
+
+      // Enqueue OCR — this populates claim fields and triggers fraud detection
+      await this.ocrService.processDocument(doc.id, processedPath, file.mimetype);
 
       return claim;
     } catch (error) {
