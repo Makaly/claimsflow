@@ -7,6 +7,67 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-05-17
+
+### Added
+
+- **Hardware scanner support** — claims officers can now scan physical
+  documents directly into the batch workflow via an attached TWAIN/SANE
+  scanner without leaving the BatchUpload page.
+
+  *Backend* — `ScannerModule` (`backend/src/scanner/`) exposes two
+  authenticated endpoints:
+  - `GET /api/scanner/devices` — enumerates connected devices via
+    `scanimage -L`; returns vendor, model, SANE device ID, and a
+    `saneAvailable` flag for actionable install guidance when the
+    driver is absent.
+  - `POST /api/scanner/scan` — drives `scanimage` at the requested
+    resolution (75 / 150 / 300 / 600 DPI) and colour mode (Color /
+    Gray / Lineart); wraps the raw PNG output in a single-page A4 PDF
+    via pdfkit and streams it back as `application/pdf`. Both
+    `resolution` and `mode` are validated against allowlists before
+    reaching the shell; `deviceId` is re-validated against live device
+    enumeration on every call to prevent injection.
+
+  *Frontend* — `BatchUpload` gains a two-tab input source selector:
+  **Upload Files** (existing dropzone, unchanged) and **Scan Document**
+  (new scanner panel). The scanner panel detects devices on tab
+  activation, shows a SANE install hint when the driver is missing, and
+  surfaces inline errors (paper jam, scanner busy, etc.). A successful
+  scan appends the PDF to the upload queue, switches back to the Upload
+  tab, and feeds into the same AI OCR pipeline as any uploaded file.
+
+- **Real-time Claims Aging dashboard** — `/workflow/aging` is now fully
+  live:
+  - WebSocket subscription to `sla:breach` and `claim:status` events
+    triggers an immediate silent refresh when the backend marks a claim.
+  - Per-row SLA progress bar (green → amber at 75 % → red at 100 %)
+    and elapsed-time display tick forward every 60 s via a client-side
+    delta accumulator, with no extra server round-trips.
+  - Rows that transition from OK → Breached between fetches flash with
+    a red ring for 2.5 s.
+  - Pulsing green "Live" connection badge in the header; falls back to
+    "Offline" when the WebSocket is disconnected.
+  - Auto-poll every 60 s as a background fallback.
+  - "Updated Xs ago" subtitle ticker.
+  - Breaches-by-Stage chart now computed client-side (backend omits
+    `stageBreakdown`); stage filter applied instantly without a
+    round-trip.
+
+### Fixed
+
+- **Auto-assignment no longer fails claim saves on DB hiccup** —
+  `autoAssignToMaker` is now wrapped in try/catch; failure is logged and
+  the claim remains at `initial_review` for manual triage rather than
+  returning a 500 to the frontend after the row is already committed.
+
+- **`DATA_ENCRYPTION_KEY` validated at startup** — `PrismaService` logs
+  a clear error at module init when the key is absent or not a valid
+  64-character hex string. Run `openssl rand -hex 32` and set the value
+  manually in the Render dashboard.
+
+---
+
 ## [1.9.0] - 2026-05-17
 
 ### Added
