@@ -60,7 +60,12 @@ function ProtectedRoute({
   allowedRoles?: string[]
 }) {
   const { isAuthenticated, user } = useAuthStore()
-  if (!isAuthenticated) return <Navigate to="/login" replace />
+  // tab_auth is set in sessionStorage only when this tab went through an explicit
+  // login. sessionStorage is not shared across tabs, so a URL copied into a new
+  // tab will be missing this flag and gets redirected to /login even though the
+  // HttpOnly cookie is still valid in the browser.
+  const tabActive = sessionStorage.getItem('tab_auth') === '1'
+  if (!isAuthenticated || !tabActive) return <Navigate to="/login" replace />
   if (allowedRoles && allowedRoles.length > 0) {
     const role = user?.role
     if (!role || !allowedRoles.includes(role)) {
@@ -76,13 +81,16 @@ const ADMIN_ONLY = ['admin']
 function AppRoutes() {
   const { isAuthenticated, user, fetchProfile } = useAuthStore()
   const { fetchFromServer, serverLoaded } = useClaimsStore()
+  const tabActive = sessionStorage.getItem('tab_auth') === '1'
+  // A session is considered live in this tab only when both the persisted user
+  // exists AND this tab explicitly authenticated (tab_auth in sessionStorage).
+  const sessionLive = isAuthenticated && tabActive
 
   // Validate the session against the live HttpOnly cookie on every app boot.
-  // This catches stale localStorage user objects whose cookie has since expired,
-  // and keeps the cached profile in sync with the DB.
-  // The api interceptor handles any 401 by calling logout() + redirecting.
+  // Only runs when this tab went through login — new tabs (no tab_auth) are
+  // redirected to /login by ProtectedRoute before any API call happens.
   useEffect(() => {
-    if (isAuthenticated) {
+    if (sessionLive) {
       fetchProfile()
     }
     // Run once on mount — deliberately omitting deps.
@@ -91,24 +99,25 @@ function AppRoutes() {
 
   // Load claims from server once after login
   useEffect(() => {
-    if (isAuthenticated && !serverLoaded) {
+    if (sessionLive && !serverLoaded) {
       fetchFromServer()
     }
-  }, [isAuthenticated])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionLive])
 
   return (
     <Routes>
       <Route
         path="/login"
-        element={isAuthenticated ? <Navigate to="/" replace /> : <Login />}
+        element={sessionLive ? <Navigate to="/" replace /> : <Login />}
       />
       <Route
         path="/register"
-        element={isAuthenticated ? <Navigate to="/" replace /> : <Register />}
+        element={sessionLive ? <Navigate to="/" replace /> : <Register />}
       />
       <Route
         path="/forgot-password"
-        element={isAuthenticated ? <Navigate to="/" replace /> : <ForgotPassword />}
+        element={sessionLive ? <Navigate to="/" replace /> : <ForgotPassword />}
       />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/terms" element={<TermsOfService />} />

@@ -44,6 +44,10 @@ export const useAuthStore = create<AuthState>((set) => ({
     if (token) localStorage.setItem('token', token)
     localStorage.removeItem('cic-claims-storage')
     localStorage.setItem('user', JSON.stringify(user))
+    // Mark this tab as having gone through an explicit login flow.
+    // sessionStorage is tab-specific — new tabs start without this flag,
+    // forcing re-authentication even when the HttpOnly cookie is still valid.
+    sessionStorage.setItem('tab_auth', '1')
     set({ user, isAuthenticated: true })
   },
 
@@ -53,6 +57,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     // its own; we still clear local state so the UI reflects logged-out.
     try { await api.post('/auth/logout') } catch { /* best-effort */ }
     clearLocalAuth()
+    sessionStorage.removeItem('tab_auth')
     set({ user: null, isAuthenticated: false })
   },
 

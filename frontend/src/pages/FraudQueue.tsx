@@ -20,6 +20,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Pagination } from '@/components/Pagination'
 import InlineDocumentPreview from '@/components/InlineDocumentPreview'
+import LineItemsTable from '@/components/LineItemsTable'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import api from '@/services/api'
 import { toast } from 'sonner'
@@ -1580,6 +1581,17 @@ export default function FraudQueue() {
                     </div>
                   )}
                 </div>
+
+                  {/* ── Line-item Analysis ── */}
+                  {selected && (
+                    <div className="mt-1">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+                        <ClipboardList className="h-3 w-3" />
+                        Invoice Line Item Analysis
+                      </p>
+                      <LineItemsTable claimId={selected.id} invoiceTotal={selected.invoiceAmount} />
+                    </div>
+                  )}
 
                 {/* ── Investigation & Decision panel ── always at bottom */}
                 <div className="mt-auto shrink-0 border-t">
