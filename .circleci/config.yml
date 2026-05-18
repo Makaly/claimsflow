@@ -140,6 +140,103 @@ jobs:
           command: npm audit --omit=dev --audit-level=critical || true
           working_directory: frontend
 
+  # ── Windows scan agent installer (cross-compiled on Linux) ──────────────────
+  build-scan-agent-installer:
+    docker:
+      - image: cimg/node:20.19
+    resource_class: medium
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: npm ci
+          working_directory: scan-agent
+      - run:
+          name: Install NSIS (Linux cross-compile to Windows .exe)
+          command: |
+            sudo apt-get update -qq
+            sudo apt-get install -y nsis
+            makensis -VERSION
+      - run:
+          name: Bundle Node.js + agent.js into Windows .exe (pkg)
+          command: |
+            mkdir -p dist
+            npx @yao-pkg/pkg agent.js \
+              --target node20-win-x64 \
+              --output dist/claimsflow-scan-agent.exe \
+              --compress GZip
+            test -f dist/claimsflow-scan-agent.exe || (echo "pkg failed" && exit 1)
+            ls -lh dist/claimsflow-scan-agent.exe
+          working_directory: scan-agent
+      - run:
+          name: Download WinSW (Windows service wrapper)
+          command: |
+            curl -fsSL -o winsw.exe \
+              https://github.com/winsw/winsw/releases/download/v3.0.0-alpha.11/WinSW-x64.exe
+            ls -lh winsw.exe
+          working_directory: scan-agent
+      - run:
+          name: Compile NSIS installer
+          command: |
+            makensis -V2 installer.nsi
+            test -f ClaimsFlow-Scan-Agent-Setup.exe || (echo "makensis failed" && exit 1)
+            ls -lh ClaimsFlow-Scan-Agent-Setup.exe
+          working_directory: scan-agent
+      - store_artifacts:
+          path: scan-agent/ClaimsFlow-Scan-Agent-Setup.exe
+          destination: ClaimsFlow-Scan-Agent-Setup.exe
+      - persist_to_workspace:
+          root: .
+          paths:
+            - scan-agent/ClaimsFlow-Scan-Agent-Setup.exe
+
+  # ── Publish installer to GitHub Releases ────────────────────────────────────
+  publish-scan-agent-release:
+    docker:
+      - image: cimg/base:stable
+    resource_class: small
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - run:
+          name: Install GitHub CLI
+          command: |
+            type -p curl >/dev/null || sudo apt-get install -y curl
+            curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+              | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+            sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+              | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+            sudo apt-get update -qq
+            sudo apt-get install -y gh
+      - run:
+          name: Publish to GitHub Release (scan-agent-latest)
+          command: |
+            if [ -z "$GITHUB_TOKEN" ]; then
+              echo "GITHUB_TOKEN not set — skipping release publish."
+              echo "Add a Personal Access Token (repo scope) at:"
+              echo "  CircleCI → Project Settings → Environment Variables → GITHUB_TOKEN"
+              exit 0
+            fi
+            export GH_TOKEN="$GITHUB_TOKEN"
+            REPO="Makaly/claimsflow"
+            TAG="scan-agent-latest"
+            FILE="scan-agent/ClaimsFlow-Scan-Agent-Setup.exe"
+
+            # Delete existing release + tag (upsert pattern)
+            gh release delete "$TAG" --repo "$REPO" --yes 2>/dev/null || true
+            git push https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git ":refs/tags/${TAG}" 2>/dev/null || true
+            sleep 3
+
+            gh release create "$TAG" "$FILE" \
+              --repo "$REPO" \
+              --title "ClaimsFlow Scan Agent — Latest" \
+              --notes "Download **ClaimsFlow-Scan-Agent-Setup.exe** and run it to install the local scan agent as a Windows service on port 7420. Bridges TWAIN / WIA / ISIS / SANE scanners to the ClaimsFlow web UI.
+
+            Built from \`${CIRCLE_SHA1:0:7}\` by CircleCI." \
+              --latest
+
   # ── Secret scan ──────────────────────────────────────────────────────────────
   scan-secrets:
     docker:
@@ -162,3 +259,10 @@ workflows:
       - lint-docker
       - audit-deps
       - scan-secrets
+      - build-scan-agent-installer
+      - publish-scan-agent-release:
+          requires:
+            - build-scan-agent-installer
+          filters:
+            branches:
+              only: master

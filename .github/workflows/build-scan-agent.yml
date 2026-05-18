@@ -1,11 +1,10 @@
 name: Build Scan Agent Installer (Windows)
 
 on:
-  push:
-    branches: [master]
-    paths:
-      - 'scan-agent/**'
-      - '.github/workflows/build-scan-agent.yml'
+  # Build moved to CircleCI (.circleci/config.yml → build-scan-agent-installer).
+  # GitHub Actions Windows runners require paid billing; CircleCI cross-compiles
+  # the Windows .exe on a free Linux runner using NSIS + pkg.
+  # Kept here as a manual fallback.
   workflow_dispatch:
 
 permissions:

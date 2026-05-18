@@ -30,11 +30,8 @@ InstallDirRegKey HKLM "${REG_KEY}" "InstallDir"
 RequestExecutionLevel admin
 Unicode True
 
-; ── Icon (use assets\icon.ico if present) ────────────────────────────────────
-!if /FileExists "assets\icon.ico"
-  !define MUI_ICON   "assets\icon.ico"
-  !define MUI_UNICON "assets\icon.ico"
-!endif
+; ── Icon ────────────────────────────────────────────────────────────────────
+; Use NSIS default installer icon — no custom asset bundled.
 
 ; ── MUI Pages ─────────────────────────────────────────────────────────────────
 !define MUI_ABORTWARNING
