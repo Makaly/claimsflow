@@ -19,7 +19,7 @@ jobs:
     steps:
       # ── Source ──────────────────────────────────────────────────────────────
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # ── Node.js ─────────────────────────────────────────────────────────────
       - name: Set up Node.js 20
