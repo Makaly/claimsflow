@@ -8,6 +8,7 @@ import {
   FileSpreadsheet, Download, Eye, EyeOff, FileText,
   Link2, ArrowRight, ShieldCheck, ClipboardList, Scan,
   User, Receipt, Stethoscope, ScanBarcode, TrendingUp,
+  ListOrdered, CheckCircle2, XCircle,
   CreditCard, Calendar, Building2, Hash, RotateCcw, History,
   ChevronLeft, ChevronRight, ZoomIn, ZoomOut,
   MousePointer, Highlighter, MessageSquare,
@@ -77,6 +78,18 @@ interface ExtractedClaim {
     confidence: number
     summary: string
   }>
+  lineItems?: Array<{
+    description: string
+    quantity?: number
+    unitPrice?: number
+    totalPrice?: number
+    taxAmount?: number
+    discount?: number
+    serviceDate?: string
+    procedureCode?: string
+    ocrConfidence?: number
+    lineNumber?: number
+  }>
   dbId?: string            // backend claim UUID (set after publish)
   annotations?: Annotation[] // persisted PDF annotations
 }
@@ -114,6 +127,11 @@ interface ExtractionResult {
     serviceDate: string; diagnosis: string; diagnosisCode: string
     procedureCode: string; treatment: string; aiConfidence: number
     pageRange: string; documentPages?: Array<{ pageNumber: number; category: string; categoryLabel: string; confidence: number; summary: string }>
+    lineItems?: Array<{
+      description: string; quantity?: number; unitPrice?: number; totalPrice?: number
+      taxAmount?: number; discount?: number; serviceDate?: string; procedureCode?: string
+      ocrConfidence?: number; lineNumber?: number
+    }>
   }>
 }
 
@@ -546,7 +564,7 @@ function DocPreviewModal({ doc, onClose, onSave }: {
         // Update confidence on parent doc
         onSave({
           ...doc,
-          aiConfidence: inv.confidence || 0.8,
+          aiConfidence:  inv.confidence || 0.8,
           patientName:   !isPlaceholder(inv.patientName) ? inv.patientName : doc.patientName,
           memberNumber:  inv.membershipNumber || doc.memberNumber,
           providerName:  !isPlaceholder(inv.providerName) ? inv.providerName : doc.providerName,
@@ -557,6 +575,7 @@ function DocPreviewModal({ doc, onClose, onSave }: {
           diagnosisCode: inv.diagnosisCode || doc.diagnosisCode,
           procedureCode: inv.procedureCode || doc.procedureCode,
           treatment:     inv.treatment || doc.treatment,
+          lineItems:     inv.lineItems?.length ? inv.lineItems : doc.lineItems,
         })
       }
     } catch (err) {
@@ -1517,6 +1536,77 @@ function DocPreviewModal({ doc, onClose, onSave }: {
               <DateEF label="Service Date" value={edit.serviceDate} onChange={setField('serviceDate')} />
             </DPSection>
 
+            {/* Billing — line items extracted by AI */}
+            {doc.lineItems && doc.lineItems.length > 0 && (() => {
+              const items = doc.lineItems!
+              const calcTotal = items.reduce((s, i) => s + (i.totalPrice ?? 0), 0)
+              const invoiceAmt = parseFloat(edit.invoiceAmount) || 0
+              const discrepancy = invoiceAmt > 0 ? Math.abs(invoiceAmt - calcTotal) > 0.5 : false
+              return (
+                <DPSection icon={<ListOrdered className="h-3.5 w-3.5 text-sky-400" />} label={`Billing · ${items.length} item${items.length !== 1 ? 's' : ''}`}>
+                  {/* Total reconciliation */}
+                  <div className={`mx-3 mb-2 rounded-lg px-3 py-2 flex items-center justify-between text-xs ${discrepancy ? 'bg-red-950/40 border border-red-500/25' : 'bg-emerald-950/30 border border-emerald-500/20'}`}>
+                    <span className="text-gray-400">Σ items</span>
+                    <span className={`font-mono font-semibold ${discrepancy ? 'text-red-400' : 'text-emerald-400'}`}>
+                      {formatCurrency(calcTotal)}
+                    </span>
+                    {discrepancy
+                      ? <XCircle className="h-3.5 w-3.5 text-red-400 shrink-0" />
+                      : <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />}
+                  </div>
+                  {/* Line item rows */}
+                  <div className="mx-3 space-y-1 max-h-64 overflow-y-auto pr-0.5">
+                    {items.map((item, i) => {
+                      const hasArithErr = item.quantity != null && item.unitPrice != null && item.totalPrice != null
+                        && Math.abs(item.quantity * item.unitPrice - item.totalPrice) > 0.5
+                      const conf = item.ocrConfidence ?? 0.85
+                      const confColor = conf >= 0.8 ? 'text-emerald-400' : conf >= 0.55 ? 'text-amber-400' : 'text-red-400'
+                      return (
+                        <div key={i} className={`rounded-lg border px-2.5 py-2 text-xs ${hasArithErr ? 'border-red-500/30 bg-red-950/20' : 'border-gray-700/50 bg-gray-800/30'}`}>
+                          {/* Description + confidence */}
+                          <div className="flex items-start justify-between gap-1 mb-1">
+                            <span className="font-medium text-gray-200 leading-tight flex-1">{item.description}</span>
+                            <span className={`font-mono text-[10px] shrink-0 ${confColor}`}>{Math.round(conf * 100)}%</span>
+                          </div>
+                          {/* Qty × Rate = Total */}
+                          <div className="flex items-center gap-1.5 text-[11px] text-gray-400 flex-wrap">
+                            {item.quantity != null && item.unitPrice != null ? (
+                              <>
+                                <span className="font-mono">{item.quantity}</span>
+                                <span>×</span>
+                                <span className="font-mono">{formatCurrency(item.unitPrice)}</span>
+                                <span>=</span>
+                              </>
+                            ) : null}
+                            <span className={`font-mono font-bold ${hasArithErr ? 'text-red-400' : 'text-sky-300'}`}>
+                              {item.totalPrice != null ? formatCurrency(item.totalPrice) : '—'}
+                            </span>
+                            {hasArithErr && (
+                              <span title="Arithmetic mismatch">
+                                <AlertTriangle className="h-3 w-3 text-red-400" />
+                              </span>
+                            )}
+                          </div>
+                          {/* Optional metadata */}
+                          {(item.serviceDate || item.procedureCode) && (
+                            <div className="mt-1 flex gap-2 text-[10px] text-gray-500">
+                              {item.serviceDate && <span>{item.serviceDate}</span>}
+                              {item.procedureCode && <span className="font-mono">{item.procedureCode}</span>}
+                            </div>
+                          )}
+                          {item.taxAmount != null && item.taxAmount > 0 && (
+                            <div className="mt-0.5 text-[10px] text-gray-500">
+                              VAT: <span className="font-mono">{formatCurrency(item.taxAmount)}</span>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </DPSection>
+              )
+            })()}
+
             {/* Medical — editable */}
             <DPSection icon={<Stethoscope className="h-3.5 w-3.5 text-amber-400" />} label="Medical">
               <EF label="Diagnosis"     value={edit.diagnosis}     onChange={ef('diagnosis')} />
@@ -1662,6 +1752,7 @@ function mergeInvoice(ocr: ExtractedInvoiceData, ai: ExtractedInvoiceData): Extr
     ocrMethod:        'backend-ocr' as const,
     pageRange:        ai.pageRange                 || ocr.pageRange,
     documentPages:    ai.documentPages             || ocr.documentPages,
+    lineItems:        ai.lineItems?.length ? ai.lineItems : ocr.lineItems,
     confidence:       0,
   }
 
@@ -2429,7 +2520,8 @@ export default function BatchUpload() {
       const isImage = file.type.startsWith('image/')
 
       // REAL extraction from PDF text
-      let result: { invoices: Array<{ patientName: string; patientId: string; memberNumber: string; providerName: string; invoiceNumber: string; invoiceDate: string; invoiceAmount: number; serviceDate: string; diagnosis: string; diagnosisCode: string; procedureCode: string; treatment: string; aiConfidence: number; pageRange: string; documentPages?: Array<{ pageNumber: number; category: string; categoryLabel: string; confidence: number; summary: string }> }> }
+      type InvoiceRow = { patientName: string; patientId: string; memberNumber: string; providerName: string; invoiceNumber: string; invoiceDate: string; invoiceAmount: number; serviceDate: string; diagnosis: string; diagnosisCode: string; procedureCode: string; treatment: string; aiConfidence: number; pageRange: string; documentPages?: Array<{ pageNumber: number; category: string; categoryLabel: string; confidence: number; summary: string }>; lineItems?: Array<{ description: string; quantity?: number; unitPrice?: number; totalPrice?: number; taxAmount?: number; discount?: number; serviceDate?: string; procedureCode?: string; ocrConfidence?: number; lineNumber?: number }> }
+      let result: { invoices: Array<InvoiceRow> }
 
       if (isPdf) {
         try {
@@ -2481,6 +2573,7 @@ export default function BatchUpload() {
                 aiConfidence: inv.confidence ?? 0.8,
                 pageRange: inv.pageRange || (startPage === endPage ? `${startPage}` : `${startPage}-${endPage}`),
                 documentPages: inv.documentPages,
+                lineItems: inv.lineItems,
               }
             })
           }
@@ -2567,6 +2660,7 @@ export default function BatchUpload() {
           totalInvoicesInPdf: isMulti ? result.invoices.length : undefined,
           pageRange: inv.pageRange,
           documentPages: inv.documentPages,
+          lineItems: inv.lineItems,
         })
       }
 

@@ -32,6 +32,18 @@ export interface ExtractedInvoiceData {
     confidence: number
     summary: string
   }>
+  lineItems?: Array<{
+    description: string
+    quantity?: number
+    unitPrice?: number
+    totalPrice?: number
+    taxAmount?: number
+    discount?: number
+    serviceDate?: string
+    procedureCode?: string
+    ocrConfidence?: number
+    lineNumber?: number
+  }>
 }
 
 /**
@@ -116,6 +128,7 @@ export async function extractInvoicesFromPdf(
           ocrMethod: 'backend-ocr' as const,
           pageRange: inv.pageRange || '1',
           documentPages: inv.documentPages || [],
+          lineItems: Array.isArray(inv.lineItems) ? inv.lineItems : undefined,
         }
       })
 
