@@ -487,10 +487,13 @@ function DocPreviewModal({ doc, onClose, onSave }: {
       // Try multiple sources to get the file bytes
       let blob: Blob | null = null
 
-      // 1. Try fetching from the file URL (works for API URLs with auth)
+      // 1. Try fetching from the file URL (works for API URLs with auth).
+      // Strip any /api prefix before passing to the Axios instance — the
+      // instance already has baseURL='/api', so passing '/api/...' doubles it.
       if (doc.fileUrl && !doc.fileUrl.startsWith('blob:')) {
         try {
-          const { data } = await api.get(doc.fileUrl, { responseType: 'blob' })
+          const relUrl = doc.fileUrl.replace(/^\/api\//, '/')
+          const { data } = await api.get(relUrl, { responseType: 'blob' })
           blob = data
         } catch { /* try next */ }
       }
