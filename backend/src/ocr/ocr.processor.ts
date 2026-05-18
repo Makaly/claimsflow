@@ -44,10 +44,22 @@ export class OcrProcessor extends WorkerHost {
         data: { ocrStatus: 'processing' },
       });
 
+      // Resolve claimId upfront so it can be forwarded to the classifier for
+      // zone-hit attribution. The document may not yet have a claimId if it was
+      // uploaded before claim creation, in which case we fall back gracefully.
+      const earlyDoc = await this.prisma.document.findUnique({
+        where: { id: documentId },
+        select: { claimId: true, originalName: true },
+      }).catch(() => null);
+
       // ── Step 1: AI document classifier (zone-guided — highest accuracy) ────
       let classifierResult: Awaited<ReturnType<typeof this.classifierService.classifyAndExtract>> | null = null;
       try {
-        classifierResult = await this.classifierService.classifyAndExtract(filePath, mimetype);
+        classifierResult = await this.classifierService.classifyAndExtract(filePath, mimetype, {
+          documentId,
+          claimId:  earlyDoc?.claimId  ?? undefined,
+          fileName: earlyDoc?.originalName ?? undefined,
+        });
         if (classifierResult?.templateName) {
           this.logger.log(`Classifier matched "${classifierResult.templateName}" for document ${documentId}`);
         } else {

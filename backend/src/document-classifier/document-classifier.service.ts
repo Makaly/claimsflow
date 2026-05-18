@@ -448,11 +448,36 @@ Focus on: invoice/claim numbers, dates, amounts, patient demographics, provider 
           } catch {}
           return empty;
         }
-        await this.prisma.ocrTemplate.update({
-          where: { id: result.templateId }, data: { usageCount: { increment: 1 } },
-        }).catch(() => {});
-        // Build claimFieldMap for Gemini path using zone.claimField or implicit default
         const geminiTemplate = templates.find((t) => t.id === result.templateId);
+        const geminiConf = result.confidence ?? {};
+        const isSuccessfulGemini = Object.values(geminiConf).length > 0
+          && Object.values(geminiConf).reduce((s, v) => s + v, 0) / Object.values(geminiConf).length >= 0.7;
+        await this.prisma.ocrTemplate.update({
+          where: { id: result.templateId },
+          data: {
+            usageCount:   { increment: 1 },
+            ...(isSuccessfulGemini ? { successCount: { increment: 1 } } : {}),
+          },
+        }).catch(() => {});
+
+        // Write per-zone hits for the analytics dashboard — same logic as
+        // Anthropic path; previously missing from the Gemini branch.
+        if (geminiTemplate?.zones.length) {
+          const zoneHitData = geminiTemplate.zones.map(zone => ({
+            zoneId:         zone.id,
+            templateId:     result.templateId,
+            claimId:        context?.claimId    ?? null,
+            documentId:     context?.documentId ?? null,
+            fieldName:      zone.fieldName,
+            fieldLabel:     zone.fieldLabel,
+            extractedValue: result.fields?.[zone.fieldName] || null,
+            confidence:     geminiConf[zone.fieldName]      ?? null,
+            engine:         'gemini',
+          }));
+          await this.prisma.ocrZoneHit.createMany({ data: zoneHitData }).catch(() => {});
+        }
+
+        // Build claimFieldMap for Gemini path using zone.claimField or implicit default
         const geminiClaimFieldMap: Record<string, string> = {};
         for (const zone of geminiTemplate?.zones ?? []) {
           const target = (zone as any).claimField || IMPLICIT_CLAIM_FIELD[zone.fieldName];
