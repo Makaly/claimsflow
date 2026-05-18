@@ -27,6 +27,21 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- **Cross-platform hardware scanner support** — `ScannerService` now detects the
+  server OS at startup and branches to the appropriate scanning back-end:
+  - **Linux**: unchanged `scanimage` / SANE path; requires `sane-utils` package.
+  - **Windows**: new Windows Image Acquisition (WIA) path — scanner enumeration
+    and document capture are performed via the built-in `WIA.DeviceManager` COM
+    object invoked through PowerShell scripts written to temp files (never
+    interpolated into `-Command` to prevent injection). Supports all WIA 1.0
+    compatible devices (Epson, HP, Canon, Fujitsu, Kodak Alaris, etc.).
+  - `GET /scanner/devices` response shape updated: `saneAvailable: boolean` →
+    `driverAvailable: boolean` + `platform: "linux" | "windows" | "other"`.
+    The frontend reads `driverAvailable` with a fallback to `saneAvailable` for
+    backward compatibility with cached responses.
+  - Batch Upload UI driver-error message is now OS-aware: Windows shows WIA /
+    Device Manager guidance; Linux shows the `apt install sane-utils` command.
+
 - **`POST /auth/logout` no longer requires authentication** — the `JwtAuthGuard`
   was removed from the logout endpoint. Attempting to clear an already-expired
   cookie with a guarded route returned a 401 and left the cookie in place;

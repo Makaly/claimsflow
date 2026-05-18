@@ -2055,7 +2055,8 @@ export default function BatchUpload() {
   const [inputTab, setInputTab] = useState<'upload' | 'scanner'>('upload')
   const [scanners, setScanners] = useState<ScannerDevice[]>([])
   const [scannersLoading, setScannersLoading] = useState(false)
-  const [saneAvailable, setSaneAvailable] = useState(true)
+  const [driverAvailable, setDriverAvailable] = useState(true)
+  const [serverPlatform, setServerPlatform] = useState<'linux' | 'windows' | 'other'>('linux')
   const [selectedScanner, setSelectedScanner] = useState('')
   const [scanDpi, setScanDpi] = useState('300')
   const [scanMode, setScanMode] = useState('Color')
@@ -2437,7 +2438,8 @@ export default function BatchUpload() {
       const { data } = await api.get('/scanner/devices')
       const devs: ScannerDevice[] = data.devices ?? []
       setScanners(devs)
-      setSaneAvailable(data.saneAvailable ?? true)
+      setDriverAvailable(data.driverAvailable ?? data.saneAvailable ?? true)
+      setServerPlatform(data.platform ?? 'linux')
       if (devs.length > 0 && !selectedScanner) setSelectedScanner(devs[0].id)
     } catch {
       setScanners([])
@@ -3313,14 +3315,18 @@ export default function BatchUpload() {
                         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                         <span className="ml-2 text-sm text-muted-foreground">Detecting scanners…</span>
                       </div>
-                    ) : !saneAvailable ? (
+                    ) : !driverAvailable ? (
                       <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-4">
                         <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-medium text-sm">
                           <AlertTriangle className="h-4 w-4 shrink-0" />
-                          SANE scanner driver not installed
+                          {serverPlatform === 'windows' ? 'Windows Image Acquisition (WIA) unavailable' : 'SANE scanner driver not installed'}
                         </div>
                         <p className="text-amber-600 dark:text-amber-500 text-xs mt-1.5">
-                          Run <code className="bg-amber-100 dark:bg-amber-900/40 px-1 rounded font-mono">sudo apt install sane-utils</code> on the server to enable hardware scanner support.
+                          {serverPlatform === 'windows' ? (
+                            <>WIA is built into Windows Vista and later. Ensure the scanner's WIA driver is installed via <strong>Device Manager</strong> or the manufacturer's setup tool, then click Refresh.</>
+                          ) : (
+                            <>Run <code className="bg-amber-100 dark:bg-amber-900/40 px-1 rounded font-mono">sudo apt install sane-utils</code> on the server, then click Refresh.</>
+                          )}
                         </p>
                       </div>
                     ) : scanners.length === 0 ? (
