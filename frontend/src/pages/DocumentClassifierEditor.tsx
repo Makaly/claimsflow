@@ -585,7 +585,7 @@ export default function DocumentClassifierEditor() {
         `/document-classifiers/${id}/sample`,
         { responseType: 'arraybuffer' },
       )
-      const contentType = resHeaders['content-type'] || ''
+      const contentType = String(resHeaders['content-type'] || '')
       const isImage = template.sampleFileName
         ? /\.(jpe?g|png)$/i.test(template.sampleFileName)
         : contentType.startsWith('image/')
