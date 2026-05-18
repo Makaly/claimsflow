@@ -11,11 +11,14 @@
     "build:mac": "npx @yao-pkg/pkg agent.js --target node20-macos-x64 --output dist/claimsflow-scan-agent-mac --no-bytecode --public"
   },
   "pkg": {
+    "scripts": [
+      "node_modules/**/*.js"
+    ],
     "assets": [
       "node_modules/pdfkit/js/data/**",
-      "node_modules/pdfkit/js/**/*.js"
-    ],
-    "scripts": []
+      "node_modules/**/*.json",
+      "node_modules/**/*.afm"
+    ]
   },
   "dependencies": {
     "cors": "^2.8.5",
