@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write   # needed to create/update releases
+  contents: write
 
 jobs:
   build:
@@ -17,8 +17,8 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      # ── Checkout ────────────────────────────────────────────────────────────
-      - name: Checkout repository
+      # ── Source ──────────────────────────────────────────────────────────────
+      - name: Checkout
         uses: actions/checkout@v4
 
       # ── Node.js ─────────────────────────────────────────────────────────────
@@ -29,101 +29,104 @@ jobs:
           cache: 'npm'
           cache-dependency-path: scan-agent/package-lock.json
 
-      # ── Install dependencies (includes @yao-pkg/pkg dev dep) ────────────────
-      - name: Install scan-agent dependencies
+      - name: Install dependencies
         working-directory: scan-agent
         run: npm ci
 
-      # ── Bundle agent + Node.js runtime into a single .exe ───────────────────
-      - name: Build standalone Windows executable (pkg)
+      # ── Bundle agent + Node 20 runtime into a single .exe ───────────────────
+      - name: Build Windows executable (pkg)
         working-directory: scan-agent
+        shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           npx @yao-pkg/pkg agent.js `
             --target node20-win-x64 `
             --output dist/claimsflow-scan-agent.exe `
             --compress GZip
-        shell: pwsh
-
-      - name: Verify executable was created
-        working-directory: scan-agent
-        run: |
           if (-not (Test-Path "dist\claimsflow-scan-agent.exe")) {
-            Write-Error "dist\claimsflow-scan-agent.exe not found — pkg build failed"
+            Write-Error "pkg build failed — exe not produced"
             exit 1
           }
-          $size = (Get-Item "dist\claimsflow-scan-agent.exe").length / 1MB
-          Write-Host "Executable size: $([math]::Round($size,1)) MB"
-        shell: pwsh
+          $mb = [math]::Round((Get-Item "dist\claimsflow-scan-agent.exe").Length / 1MB, 1)
+          Write-Host "Executable: $mb MB"
 
-      # ── Download WinSW (Windows Service Wrapper) ─────────────────────────────
+      # ── WinSW service wrapper ────────────────────────────────────────────────
       - name: Download WinSW v3
         working-directory: scan-agent
+        shell: pwsh
         run: |
-          $winsw = "https://github.com/winsw/winsw/releases/download/v3.0.0-alpha.11/WinSW-x64.exe"
-          Invoke-WebRequest -Uri $winsw -OutFile winsw.exe -UseBasicParsing
-          Write-Host "WinSW downloaded: $((Get-Item winsw.exe).length / 1KB) KB"
-        shell: pwsh
+          Invoke-WebRequest `
+            -Uri "https://github.com/winsw/winsw/releases/download/v3.0.0-alpha.11/WinSW-x64.exe" `
+            -OutFile winsw.exe -UseBasicParsing
+          $kb = [math]::Round((Get-Item winsw.exe).Length / 1KB, 0)
+          Write-Host "WinSW: $kb KB"
 
-      # ── NSIS ────────────────────────────────────────────────────────────────
+      # ── NSIS installer ───────────────────────────────────────────────────────
       - name: Install NSIS
-        run: choco install nsis --yes --no-progress
         shell: pwsh
+        run: choco install nsis --yes --no-progress
 
       - name: Compile NSIS installer
         working-directory: scan-agent
+        shell: pwsh
         run: |
           $nsis = "C:\Program Files (x86)\NSIS\makensis.exe"
           & $nsis /V2 installer.nsi
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "makensis failed with exit code $LASTEXITCODE"
-            exit 1
-          }
-          $size = (Get-Item "ClaimsFlow-Scan-Agent-Setup.exe").length / 1MB
-          Write-Host "Installer size: $([math]::Round($size,1)) MB"
-        shell: pwsh
+          if ($LASTEXITCODE -ne 0) { Write-Error "makensis failed ($LASTEXITCODE)"; exit 1 }
+          $mb = [math]::Round((Get-Item "ClaimsFlow-Scan-Agent-Setup.exe").Length / 1MB, 1)
+          Write-Host "Installer: $mb MB"
 
-      # ── Upload as workflow artifact ───────────────────────────────────────────
+      # ── Upload artifact (always) ─────────────────────────────────────────────
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ClaimsFlow-Scan-Agent-Setup-${{ github.sha }}
+          name: ClaimsFlow-Scan-Agent-Setup
           path: scan-agent/ClaimsFlow-Scan-Agent-Setup.exe
           retention-days: 30
 
-      # ── Create / update GitHub Release on master push ────────────────────────
-      - name: Create or update GitHub Release
+      # ── Publish to GitHub Releases (master pushes only) ──────────────────────
+      - name: Publish GitHub Release
         if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: scan-agent-latest
-          name: "ClaimsFlow Scan Agent — Latest"
-          body: |
-            ## ClaimsFlow Scan Agent for Windows
-
-            Download and run **ClaimsFlow-Scan-Agent-Setup.exe** to install the local scan agent.
-
-            ### What it does
-            Installs a lightweight Windows service on port 7420 that bridges your physical scanner
-            (TWAIN, WIA, ISIS, SANE) to the ClaimsFlow web UI — including the cloud-hosted deployment
-            on Render.
-
-            ### Requirements
-            - Windows 10 / Windows 11 (64-bit)
-            - Your scanner's WIA driver (installed via Windows Update or manufacturer disc)
-
-            ### After installation
-            Open ClaimsFlow → Batch Upload → **Scan Document**.
-            Your scanner will appear in the device list automatically.
-
-            ### Uninstall
-            Control Panel → Programs → **ClaimsFlow Scan Agent** → Uninstall
-
-            ---
-            Built from commit `${{ github.sha }}` · ${{ github.event.head_commit.message }}
-          files: scan-agent/ClaimsFlow-Scan-Agent-Setup.exe
-          draft: false
-          prerelease: false
-          make_latest: true
+        shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag  = "scan-agent-latest"
+          $file = "scan-agent\ClaimsFlow-Scan-Agent-Setup.exe"
+          $sha  = "${{ github.sha }}".Substring(0, 7)
+          $msg  = @"
+          ## ClaimsFlow Scan Agent for Windows
+
+          Download and run **ClaimsFlow-Scan-Agent-Setup.exe** to install the local scan agent.
+
+          ### What it does
+          Installs as a Windows service on port 7420.
+          Bridges your physical scanner (TWAIN, WIA, ISIS, SANE) to the ClaimsFlow web UI — including the cloud-hosted deployment on Render.
+
+          ### Requirements
+          - Windows 10 / Windows 11 (64-bit)
+          - Your scanner's WIA driver (installed via Windows Update or manufacturer disc)
+
+          ### After installation
+          Open ClaimsFlow → Batch Upload → **Scan Document** — your scanner appears automatically.
+
+          ### Uninstall
+          Control Panel → Programs → ClaimsFlow Scan Agent → Uninstall
+
+          ---
+          Built from ``$sha``
+          "@
+
+          # Delete the existing release + tag so we can recreate (upsert pattern)
+          gh release delete $tag --yes --repo ${{ github.repository }} 2>$null
+          git push origin ":refs/tags/$tag" 2>$null
+
+          # Small delay to let GitHub process the deletion
+          Start-Sleep -Seconds 3
+
+          # Create fresh release with the installer attached
+          gh release create $tag $file `
+            --repo ${{ github.repository }} `
+            --title "ClaimsFlow Scan Agent — Latest" `
+            --notes $msg `
+            --latest
