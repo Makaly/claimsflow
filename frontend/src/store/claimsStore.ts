@@ -110,7 +110,7 @@ function mapBackendClaim(c: any): ClaimRecord {
       name: d.originalName || d.name || '',
       size: d.fileSize || d.size || 0,
       type: d.mimeType || d.mimetype || d.type || 'application/pdf',
-      url: d.id ? `/api/documents/${d.id}/preview` : (d.url || ''),
+      url: d.id ? `/documents/${d.id}/preview` : (d.url || ''),
       documentType: d.documentType ?? undefined,
       ocrStatus: d.ocrStatus ?? undefined,
     })),
