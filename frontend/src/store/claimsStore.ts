@@ -140,26 +140,20 @@ interface ClaimsState {
 
 // Best-effort server delete: swallows errors so local state still updates
 // when backend is unavailable (demo mode) but reports any failures in console.
-// Deletes are processed in batches of 5 to avoid triggering the rate limiter
-// when a user bulk-selects a large number of claims.
+// Deletes are processed one at a time — the DELETE endpoint skips the global
+// throttler, but sequential execution keeps the request rate proportional to
+// server latency and avoids accidental burst pressure on the DB.
 async function deleteOnServer(ids: string[]): Promise<Set<string>> {
   const deleted = new Set<string>()
-  const serverIds: string[] = []
   for (const id of ids) {
-    if (/^[0-9a-f-]{10,}$/i.test(id)) serverIds.push(id)
-    else deleted.add(id) // ephemeral/demo — treat as local-only
-  }
-  const BATCH = 5
-  for (let i = 0; i < serverIds.length; i += BATCH) {
-    await Promise.all(serverIds.slice(i, i + BATCH).map(async (id) => {
-      try {
-        await api.delete(`/claims/${id}`)
-        deleted.add(id)
-      } catch (err: any) {
-        if (err?.response?.status === 404) deleted.add(id)
-        else console.warn(`Failed to delete claim ${id}:`, err?.response?.status ?? err)
-      }
-    }))
+    if (!/^[0-9a-f-]{10,}$/i.test(id)) { deleted.add(id); continue }
+    try {
+      await api.delete(`/claims/${id}`)
+      deleted.add(id)
+    } catch (err: any) {
+      if (err?.response?.status === 404) deleted.add(id)
+      else console.warn(`Failed to delete claim ${id}:`, err?.response?.status ?? err)
+    }
   }
   return deleted
 }

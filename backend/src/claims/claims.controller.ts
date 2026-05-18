@@ -19,8 +19,10 @@ import { extname } from 'path';
 import * as fs from 'fs';
 import { ClaimsService } from './claims.service';
 import { AnomalyScoringService } from './anomaly-scoring.service';
+import { LineItemFraudService } from './line-item-fraud.service';
 import { CreateClaimDto } from './dto/create-claim.dto';
 import { UpdateClaimDto } from './dto/update-claim.dto';
+import { SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -52,6 +54,7 @@ export class ClaimsController {
     private readonly claimsService: ClaimsService,
     private readonly emailService: EmailService,
     private readonly anomalyScoringService: AnomalyScoringService,
+    private readonly lineItemFraudService: LineItemFraudService,
   ) {}
 
   @Post()
@@ -283,6 +286,28 @@ export class ClaimsController {
     return this.anomalyScoringService.getAnomalyDetail(id);
   }
 
+  /** Return structured line items with per-item fraud scores. */
+  @Get(':id/line-items')
+  async getLineItems(@Param('id') id: string) {
+    const items = await this.claimsService['prisma'].invoiceLineItem.findMany({
+      where: { claimId: id },
+      orderBy: { lineNumber: 'asc' },
+    });
+    const claim = await this.claimsService['prisma'].claim.findUnique({
+      where: { id },
+      select: { invoiceAmount: true, provider: { select: { name: true } } },
+    });
+    const calculatedTotal = items.reduce((s: number, i: any) => s + (i.totalPrice ?? 0), 0);
+    return {
+      invoice_id:        id,
+      vendor:            claim?.provider?.name ?? '',
+      line_items:        items,
+      invoice_total:     claim?.invoiceAmount ?? 0,
+      calculated_total:  parseFloat(calculatedTotal.toFixed(2)),
+      discrepancy_flag:  Math.abs((claim?.invoiceAmount ?? 0) - calculatedTotal) > 0.5,
+    };
+  }
+
   @Get(':id/audit-trail')
   getAuditTrail(@Param('id') id: string, @Request() req: any) {
     return this.claimsService.getAuditTrail(id, this.actorFrom(req));
@@ -316,6 +341,7 @@ export class ClaimsController {
     );
   }
 
+  @SkipThrottle()
   @Delete(':id')
   remove(@Param('id') id: string, @Request() req: any) {
     return this.claimsService.remove(id, this.actorFrom(req));
