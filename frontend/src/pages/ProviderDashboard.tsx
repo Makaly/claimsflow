@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { formatCurrency, formatDate, getStatusColor } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
 import { useNavigate } from 'react-router-dom'
+import api from '@/services/api'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -115,8 +116,6 @@ export default function ProviderDashboard() {
   const [uploadingDoc, setUploadingDoc] = useState(false)
   const [uploadDocError, setUploadDocError] = useState<string | null>(null)
 
-  const token = () => localStorage.getItem('token')
-
   const isApproved = providerInfo?.approvalStatus === 'approved' && providerInfo?.canSubmitClaims
   const isRejected = providerInfo?.approvalStatus === 'rejected'
   const isPendingApproval = providerInfo && !isApproved && !isRejected
@@ -128,53 +127,36 @@ export default function ProviderDashboard() {
     try {
       const fd = new FormData()
       fd.append('proofDocument', uploadDocFile)
-      const res = await fetch('/api/providers/self-service/proof-document', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token()}` },
-        body: fd,
-      })
-      if (res.ok) {
-        const updated = await res.json()
-        setProviderInfo((prev) => prev ? { ...prev, ...updated } : prev)
-        setUploadDocDialog(false)
-        setUploadDocFile(null)
-      } else {
-        const err = await res.json().catch(() => ({}))
-        setUploadDocError(err?.message ?? 'Upload failed')
-      }
+      const { data: updated } = await api.post('/providers/self-service/proof-document', fd)
+      setProviderInfo((prev) => prev ? { ...prev, ...updated } : prev)
+      setUploadDocDialog(false)
+      setUploadDocFile(null)
     } catch (e: any) {
-      setUploadDocError(e?.message ?? 'Upload failed')
+      setUploadDocError(e?.response?.data?.message ?? e?.message ?? 'Upload failed')
     } finally {
       setUploadingDoc(false)
     }
   }
 
   const fetchData = useCallback(async () => {
-    const h = { Authorization: `Bearer ${token()}` }
     setRefreshing(true)
     try {
       // Fetch provider info if linked
       if (user?.providerId) {
-        const pRes = await fetch(`/api/providers/${user.providerId}`, { headers: h })
-        if (pRes.ok) setProviderInfo(await pRes.json())
+        const { data: pData } = await api.get(`/providers/${user.providerId}`)
+        setProviderInfo(pData)
       }
 
       // Fetch claims (filtered server-side for this provider/user)
-      const cRes = await fetch('/api/claims?limit=50', { headers: h })
-      if (cRes.ok) {
-        const data = await cRes.json()
-        const list = Array.isArray(data) ? data : Array.isArray(data?.claims) ? data.claims : null
-        if (list) setClaims(list)
-      }
+      const { data: cData } = await api.get('/claims?limit=50')
+      const list = Array.isArray(cData) ? cData : Array.isArray(cData?.claims) ? cData.claims : null
+      if (list) setClaims(list)
 
       // Provider admin also fetches branches
       if (isProviderAdmin && user?.providerId) {
-        const bRes = await fetch(`/api/branches?providerId=${user.providerId}`, { headers: h })
-        if (bRes.ok) {
-          const data = await bRes.json()
-          const list = Array.isArray(data) ? data : Array.isArray(data?.branches) ? data.branches : null
-          if (list) setBranches(list)
-        }
+        const { data: bData } = await api.get(`/branches?providerId=${user.providerId}`)
+        const bList = Array.isArray(bData) ? bData : Array.isArray(bData?.branches) ? bData.branches : null
+        if (bList) setBranches(bList)
       }
     } catch { /* keep demo */ }
     setRefreshing(false)
@@ -211,26 +193,14 @@ export default function ProviderDashboard() {
       for (const file of resubmitFiles) {
         const fd = new FormData()
         fd.append('file', file)
-        const upRes = await fetch(`/api/documents/upload?claimId=${resubmitClaim.id}`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token()}` },
-          body: fd,
-        })
-        if (!upRes.ok) {
-          const err = await upRes.json().catch(() => ({}))
-          throw new Error(err?.message || `Failed to upload ${file.name}`)
+        try {
+          await api.post(`/documents/upload?claimId=${resubmitClaim.id}`, fd)
+        } catch (e: any) {
+          throw new Error(e?.response?.data?.message || `Failed to upload ${file.name}`)
         }
       }
       // 2. Flip the claim back to resubmitted so it re-enters the maker queue.
-      const res = await fetch('/api/workflow/provider/resubmit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
-        body: JSON.stringify({ claimId: resubmitClaim.id, notes: resubmitNotes.trim() }),
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err?.message || `Resubmit failed (${res.status})`)
-      }
+      await api.post('/workflow/provider/resubmit', { claimId: resubmitClaim.id, notes: resubmitNotes.trim() })
       closeResubmit()
       fetchData()
     } catch (e: any) {

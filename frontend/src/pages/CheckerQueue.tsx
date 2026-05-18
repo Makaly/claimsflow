@@ -36,6 +36,7 @@ import { Pagination } from '@/components/Pagination'
 import InlineDocumentPreview from '@/components/InlineDocumentPreview'
 import BulkActionsBar from '@/components/BulkActionsBar'
 import { Checkbox } from '@/components/ui/checkbox'
+import api from '@/services/api'
 
 type ActionType = 'approve' | 'reject' | 'return_maker' | 'return_provider' | 'view' | 'escalate_fraud' | null
 
@@ -117,11 +118,7 @@ export default function CheckerQueue() {
   useEffect(() => {
     const load = async () => {
       try {
-        const token = localStorage.getItem('token')
-        const headers = { Authorization: `Bearer ${token}` }
-        const res = await fetch('/api/workflow/claims/maker_checker_review', { headers })
-        if (!res.ok) { setClaims([]); return }
-        const data = await res.json()
+        const { data } = await api.get('/workflow/claims/maker_checker_review')
         const list: any[] = Array.isArray(data) ? data : Array.isArray(data?.claims) ? data.claims : []
 
         // For each claim, load its approval history and pull the most recent maker decision
@@ -131,15 +128,13 @@ export default function CheckerQueue() {
           let makerApprovedAt: string | undefined
           let makerComments: string | undefined
           try {
-            const hRes = await fetch(`/api/workflow/approval-history/${c.id}`, { headers })
-            if (hRes.ok) {
-              const approvals: any[] = await hRes.json()
-              const lastMaker = [...approvals].reverse().find(a => a.level === 'maker' && a.decision === 'approved')
-              if (lastMaker) {
-                makerApprovedBy = lastMaker.approver?.name || lastMaker.approver?.email
-                makerApprovedAt = lastMaker.createdAt
-                makerComments = lastMaker.comments || undefined
-              }
+            const { data: approvals } = await api.get(`/workflow/approval-history/${c.id}`)
+            const approvalsArr: any[] = Array.isArray(approvals) ? approvals : []
+            const lastMaker = [...approvalsArr].reverse().find(a => a.level === 'maker' && a.decision === 'approved')
+            if (lastMaker) {
+              makerApprovedBy = lastMaker.approver?.name || lastMaker.approver?.email
+              makerApprovedAt = lastMaker.createdAt
+              makerComments = lastMaker.comments || undefined
             }
           } catch { /* tolerate missing history */ }
 
@@ -216,13 +211,12 @@ export default function CheckerQueue() {
     setSubmitting(true)
     setActionError(null)
     try {
-      const token = localStorage.getItem('token')
       const endpoints: Record<string, string> = {
-        approve: '/api/workflow/checker/approve',
-        reject: '/api/workflow/checker/reject',
-        return_maker: '/api/workflow/checker/return',
-        return_provider: '/api/workflow/checker/return-to-provider',
-        escalate_fraud: `/api/claims/${selectedClaim.id}/fraud/escalate`,
+        approve: '/workflow/checker/approve',
+        reject: '/workflow/checker/reject',
+        return_maker: '/workflow/checker/return',
+        return_provider: '/workflow/checker/return-to-provider',
+        escalate_fraud: `/claims/${selectedClaim.id}/fraud/escalate`,
       }
       const bodies: Record<string, object> = {
         approve: { claimId: selectedClaim.id, comments },
@@ -231,30 +225,18 @@ export default function CheckerQueue() {
         return_provider: { claimId: selectedClaim.id, reason: comments, missingDocuments: missingDocs },
         escalate_fraud: { reason: comments },
       }
-      const res = await fetch(endpoints[actionType], {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(bodies[actionType]),
-      })
-      if (!res.ok) {
-        let msg = `Request failed (${res.status})`
-        try {
-          const body = await res.json()
-          msg = body?.message || body?.error || msg
-        } catch { /* non-JSON body */ }
-        setActionError(
-          res.status === 403
-            ? `You are not authorised to action this claim. ${msg}`
-            : msg,
-        )
-        setSubmitting(false)
-        return
-      }
+      await api.post(endpoints[actionType], bodies[actionType])
       setClaims(prev => prev.filter(c => c.id !== selectedClaim.id))
       setSubmitting(false)
       closeAction()
     } catch (err: any) {
-      setActionError(err?.message || 'Network error — please try again')
+      const errData = err?.response?.data
+      const msg = errData?.message || errData?.error || err?.message || 'Network error — please try again'
+      setActionError(
+        err?.response?.status === 403
+          ? `You are not authorised to action this claim. ${msg}`
+          : msg,
+      )
       setSubmitting(false)
     }
   }

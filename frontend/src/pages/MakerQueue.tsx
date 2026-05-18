@@ -41,6 +41,7 @@ import InlineDocumentPreview from '@/components/InlineDocumentPreview'
 import { toast } from 'sonner'
 import BulkActionsBar from '@/components/BulkActionsBar'
 import { Checkbox } from '@/components/ui/checkbox'
+import api from '@/services/api'
 
 type ActionType = 'approve' | 'reject' | 'view' | 'escalate_fraud' | null
 
@@ -183,14 +184,8 @@ export default function MakerQueue() {
     setFraudAuditLoading(true)
     setFraudAuditTrail([])
     try {
-      const token = localStorage.getItem('token')
-      const res = await fetch(`/api/claims/${c.id}/audit-trail`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setFraudAuditTrail(Array.isArray(data) ? data : data.events || [])
-      }
+      const { data } = await api.get(`/claims/${c.id}/audit-trail`)
+      setFraudAuditTrail(Array.isArray(data) ? data : data.events || [])
     } catch { /* best effort */ } finally { setFraudAuditLoading(false) }
   }
 
@@ -202,50 +197,42 @@ export default function MakerQueue() {
   useEffect(() => {
     const load = async () => {
       try {
-        const token = localStorage.getItem('token')
-        const res = await fetch('/api/workflow/claims/maker_checker_review', {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        if (res.ok) {
-          const data = await res.json()
-          // Backend returns { claims, total } — frontend was ignoring this shape and always
-          // rendering empty. Normalise here.
-          const list: any[] = Array.isArray(data) ? data : Array.isArray(data?.claims) ? data.claims : []
-          setClaims(list.map((c: any) => ({
-            id: c.id,
-            claimNumber: c.claimNumber,
-            memberName: c.memberName || c.patientName || '—',
-            memberNumber: c.memberNumber,
-            patientId: c.patientId,
-            provider: c.provider ? { name: c.provider.name } : undefined,
-            branch: c.branch ? { name: c.branch.name, email: c.branch.email } : undefined,
-            invoiceAmount: c.invoiceAmount || 0,
-            invoiceNumber: c.invoiceNumber,
-            invoiceDate: c.invoiceDate,
-            serviceDate: c.serviceDate || c.dateOfService,
-            priority: c.priority || 'normal',
-            status: c.status,
-            assignedAt: c.assignedAt || c.submittedAt,
-            slaDeadline: c.slaDeadline,
-            batchNumber: c.batchSubmission?.batchNumber || c.batchNumber,
-            documents: (c.documents || []).map((d: any) => ({
-              id: d.id,
-              name: d.originalName || d.filename || '',
-              size: Number(d.size) || 0,
-              documentType: d.documentType,
-              mimetype: d.mimetype,
-            })),
-            aiExtracted: c.ocrStatus === 'completed',
-            aiConfidence: c.ocrConfidence,
-            diagnosis: c.diagnosis,
-            diagnosisCode: (c.procedureCodes && c.procedureCodes[0]) || undefined,
-            treatment: c.treatment,
-            fraudSignals: c.fraudSignals || [],
-            submittedAt: c.submittedAt,
-          })))
-        } else {
-          setClaims([])
-        }
+        const { data: resData } = await api.get('/workflow/claims/maker_checker_review')
+        // Backend returns { claims, total } — frontend was ignoring this shape and always
+        // rendering empty. Normalise here.
+        const list: any[] = Array.isArray(resData) ? resData : Array.isArray(resData?.claims) ? resData.claims : []
+        setClaims(list.map((c: any) => ({
+          id: c.id,
+          claimNumber: c.claimNumber,
+          memberName: c.memberName || c.patientName || '—',
+          memberNumber: c.memberNumber,
+          patientId: c.patientId,
+          provider: c.provider ? { name: c.provider.name } : undefined,
+          branch: c.branch ? { name: c.branch.name, email: c.branch.email } : undefined,
+          invoiceAmount: c.invoiceAmount || 0,
+          invoiceNumber: c.invoiceNumber,
+          invoiceDate: c.invoiceDate,
+          serviceDate: c.serviceDate || c.dateOfService,
+          priority: c.priority || 'normal',
+          status: c.status,
+          assignedAt: c.assignedAt || c.submittedAt,
+          slaDeadline: c.slaDeadline,
+          batchNumber: c.batchSubmission?.batchNumber || c.batchNumber,
+          documents: (c.documents || []).map((d: any) => ({
+            id: d.id,
+            name: d.originalName || d.filename || '',
+            size: Number(d.size) || 0,
+            documentType: d.documentType,
+            mimetype: d.mimetype,
+          })),
+          aiExtracted: c.ocrStatus === 'completed',
+          aiConfidence: c.ocrConfidence,
+          diagnosis: c.diagnosis,
+          diagnosisCode: (c.procedureCodes && c.procedureCodes[0]) || undefined,
+          treatment: c.treatment,
+          fraudSignals: c.fraudSignals || [],
+          submittedAt: c.submittedAt,
+        })))
       } catch {
         setClaims([])
       } finally {
@@ -259,16 +246,9 @@ export default function MakerQueue() {
     const load = async () => {
       setFraudLoading(true)
       try {
-        const token = localStorage.getItem('token')
-        const res = await fetch(
-          `/api/claims/fraud-confirmed?limit=${fraudPageSize}&offset=${(fraudPage - 1) * fraudPageSize}`,
-          { headers: { Authorization: `Bearer ${token}` } },
-        )
-        if (res.ok) {
-          const data = await res.json()
-          setFraudClaims(data.claims || [])
-          setFraudTotal(data.total ?? 0)
-        }
+        const { data } = await api.get(`/claims/fraud-confirmed?limit=${fraudPageSize}&offset=${(fraudPage - 1) * fraudPageSize}`)
+        setFraudClaims(data.claims || [])
+        setFraudTotal(data.total ?? 0)
       } catch { /* best effort */ } finally { setFraudLoading(false) }
     }
     load()
@@ -278,15 +258,10 @@ export default function MakerQueue() {
     if (!denialClaim) return
     setSendingDenial(true)
     try {
-      const token = localStorage.getItem('token')
-      await fetch(`/api/claims/${denialClaim.id}/notify-denial`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          message: denialNote,
-          cc: denialCcChips.join(', '),
-          attachments: denialAttachments,
-        }),
+      await api.post(`/claims/${denialClaim.id}/notify-denial`, {
+        message: denialNote,
+        cc: denialCcChips.join(', '),
+        attachments: denialAttachments,
       })
       toast.success('Denial notification sent to provider')
       setDenialClaim(null); setDenialCcChips([]); setDenialCcInput(''); setDenialAttachments([])
@@ -310,13 +285,7 @@ export default function MakerQueue() {
     if (!reprocessTarget) return
     setReprocessing(true)
     try {
-      const token = localStorage.getItem('token')
-      const res = await fetch(`/api/claims/${reprocessTarget.id}/reprocess`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ reason: reprocessReason }),
-      })
-      if (!res.ok) throw new Error((await res.json())?.message || 'Failed')
+      await api.post(`/claims/${reprocessTarget.id}/reprocess`, { reason: reprocessReason })
       toast.success('Claim reprocessed — returned to maker-checker queue')
       setFraudClaims(prev => prev.filter(c => c.id !== reprocessTarget.id))
       setFraudTotal(prev => Math.max(0, prev - 1))
@@ -331,14 +300,8 @@ export default function MakerQueue() {
     setEmailHistoryLoading(true)
     setEmailHistory([])
     try {
-      const token = localStorage.getItem('token')
-      const res = await fetch(`/api/claims/${c.id}/emails`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setEmailHistory(data.emails || [])
-      }
+      const { data } = await api.get(`/claims/${c.id}/emails`)
+      setEmailHistory(data.emails || [])
     } catch { /* best effort */ } finally { setEmailHistoryLoading(false) }
   }
 
@@ -378,45 +341,31 @@ export default function MakerQueue() {
     setSubmitting(true)
     setActionError(null)
     try {
-      const token = localStorage.getItem('token')
       const endpoint =
         actionType === 'approve'
-          ? '/api/workflow/maker/approve'
+          ? '/workflow/maker/approve'
           : actionType === 'reject'
-            ? '/api/workflow/maker/reject'
-            : `/api/claims/${selectedClaim.id}/fraud/escalate`
+            ? '/workflow/maker/reject'
+            : `/claims/${selectedClaim.id}/fraud/escalate`
       const body =
         actionType === 'approve'
           ? { claimId: selectedClaim.id, comments }
           : actionType === 'reject'
             ? { claimId: selectedClaim.id, reason: comments }
             : { reason: comments }
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) {
-        // Surface the real backend error instead of silently pretending success.
-        let msg = `Request failed (${res.status})`
-        try {
-          const body = await res.json()
-          msg = body?.message || body?.error || msg
-        } catch { /* non-JSON body */ }
-        setActionError(
-          res.status === 403
-            ? `You are not the assigned maker for this claim. ${msg}`
-            : msg,
-        )
-        setSubmitting(false)
-        return
-      }
+      await api.post(endpoint, body)
       // Success — drop it from the list and close the dialog.
       setClaims(prev => prev.filter(c => c.id !== selectedClaim.id))
       setSubmitting(false)
       closeAction()
     } catch (err: any) {
-      setActionError(err?.message || 'Network error — please try again')
+      const errData = err?.response?.data
+      const msg = errData?.message || errData?.error || err?.message || 'Network error — please try again'
+      setActionError(
+        err?.response?.status === 403
+          ? `You are not the assigned maker for this claim. ${msg}`
+          : msg,
+      )
       setSubmitting(false)
     }
   }

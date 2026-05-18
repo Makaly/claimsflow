@@ -849,13 +849,8 @@ export default function Claims() {
     // API / HTTP URL — fetch with auth headers to get bytes, then pass to pdfjs as Uint8Array
     // (pdfjs would fetch the URL itself without our JWT → 401)
     if (!url.startsWith('blob:')) {
-      const token = localStorage.getItem('token')
-      fetch(url, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined)
-        .then(r => {
-          if (!r.ok) throw new Error(`${r.status}`)
-          return r.arrayBuffer()
-        })
-        .then(buf => {
+      api.get(url, { responseType: 'arraybuffer' })
+        .then(({ data: buf }) => {
           setViewerBytes(new Uint8Array(buf))
           setViewerReady(true)
         })
@@ -905,13 +900,7 @@ export default function Claims() {
     if (!selectedClaim) return
     setSavingField(key)
     try {
-      const token = localStorage.getItem('token')
-      const res = await fetch(`/api/claims/${selectedClaim.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ [key]: editValue }),
-      })
-      if (!res.ok) throw new Error('Save failed')
+      await api.patch(`/claims/${selectedClaim.id}`, { [key]: editValue })
       fetchFromServer?.()
       setEditingField(null)
       toast.success('Field updated')
@@ -926,12 +915,7 @@ export default function Claims() {
     if (fieldHistoryKey === key) { setFieldHistoryKey(null); return }
     if (!selectedClaim) return
     try {
-      const token = localStorage.getItem('token')
-      const res = await fetch(`/api/claims/${selectedClaim.id}/audit-trail`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (!res.ok) return
-      const data = await res.json()
+      const { data } = await api.get(`/claims/${selectedClaim.id}/audit-trail`)
       const changes = (data.events ?? [])
         .filter((e: any) => e.kind === 'activity' && e.data?.oldValue && key in e.data.oldValue)
         .map((e: any) => ({
@@ -963,12 +947,8 @@ export default function Claims() {
 
   useEffect(() => {
     if (!selectedClaim?.id) { setOcrData(null); return }
-    const token = localStorage.getItem('token')
-    fetch(`/api/claims/${selectedClaim.id}/ocr-fields`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => setOcrData(data ?? null))
+    api.get(`/claims/${selectedClaim.id}/ocr-fields`)
+      .then(({ data }) => setOcrData(data ?? null))
       .catch(() => setOcrData(null))
   }, [selectedClaim?.id])
 
@@ -980,12 +960,7 @@ export default function Claims() {
     if (!selectedClaim) return
     setResubmitting(true)
     try {
-      const token = localStorage.getItem('token')
-      await fetch('/api/workflow/provider/resubmit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ claimId: selectedClaim.id, notes: resubmitNotes }),
-      })
+      await api.post('/workflow/provider/resubmit', { claimId: selectedClaim.id, notes: resubmitNotes })
     } catch { /* best effort */ }
     setResubmitting(false)
     setResubmitNotes('')
@@ -3134,12 +3109,7 @@ export default function Claims() {
                 if (!denialClaim) return
                 setSendingDenial(true)
                 try {
-                  const token = localStorage.getItem('token')
-                  await fetch(`/api/claims/${denialClaim.id}/notify-denial`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                    body: JSON.stringify({ message: denialNote }),
-                  })
+                  await api.post(`/claims/${denialClaim.id}/notify-denial`, { message: denialNote })
                   toast.success('Denial notification sent to provider')
                 } catch {
                   toast.error('Failed to send notification')

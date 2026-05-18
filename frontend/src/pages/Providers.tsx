@@ -34,6 +34,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { Pagination } from '@/components/Pagination'
 import { formatDate, getStatusColor } from '@/lib/utils'
+import api from '@/services/api'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -235,13 +236,12 @@ export default function Providers() {
 
   const navigate = useNavigate()
   const { logout, user } = useAuthStore()
-  const token = () => localStorage.getItem('token')
 
   // Only admin and claims_officer can approve / reject / suspend / reactivate providers
   const canManageProviders = user?.role === 'admin' || user?.role === 'claims_officer'
 
-  const handle401 = useCallback(() => {
-    logout()
+  const handle401 = useCallback(async () => {
+    await logout()
     navigate('/login')
   }, [logout, navigate])
 
@@ -254,28 +254,20 @@ export default function Providers() {
     }
     setDocBlobLoading(true)
     try {
-      const res = await fetch(`/api/providers/${providerId}/proof-document`, {
-        headers: { Authorization: `Bearer ${token()}` },
-      })
-      if (res.status === 401) { handle401(); return }
-      if (res.ok) {
-        const rawBlob = await res.blob()
-        // Sniff MIME from magic bytes so Firefox opens instead of downloads
-        const header = await rawBlob.slice(0, 4).arrayBuffer()
-        const bytes = new Uint8Array(header)
-        let mime = rawBlob.type && rawBlob.type !== 'application/octet-stream' ? rawBlob.type
-          : bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46 ? 'application/pdf'
-          : bytes[0] === 0x89 && bytes[1] === 0x50 ? 'image/png'
-          : bytes[0] === 0xff && bytes[1] === 0xd8 ? 'image/jpeg'
-          : rawBlob.type || 'application/octet-stream'
-        const blob = new Blob([rawBlob], { type: mime })
-        const url = URL.createObjectURL(blob)
-        docBlobUrlRef.current = url
-        setDocBlobUrl(url)
-        window.open(url, '_blank')
-      } else {
-        toast.error('Failed to load document')
-      }
+      const { data: rawBlob } = await api.get(`/providers/${providerId}/proof-document`, { responseType: 'blob' })
+      // Sniff MIME from magic bytes so Firefox opens instead of downloads
+      const header = await rawBlob.slice(0, 4).arrayBuffer()
+      const bytes = new Uint8Array(header)
+      let mime = rawBlob.type && rawBlob.type !== 'application/octet-stream' ? rawBlob.type
+        : bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46 ? 'application/pdf'
+        : bytes[0] === 0x89 && bytes[1] === 0x50 ? 'image/png'
+        : bytes[0] === 0xff && bytes[1] === 0xd8 ? 'image/jpeg'
+        : rawBlob.type || 'application/octet-stream'
+      const blob = new Blob([rawBlob], { type: mime })
+      const url = URL.createObjectURL(blob)
+      docBlobUrlRef.current = url
+      setDocBlobUrl(url)
+      window.open(url, '_blank')
     } catch { toast.error('Failed to load document') }
     setDocBlobLoading(false)
   }, [handle401])
@@ -285,15 +277,9 @@ export default function Providers() {
     if (typeFilter !== 'all') params.set('type', typeFilter)
     if (statusFilter !== 'all') params.set('status', statusFilter)
     try {
-      const res = await fetch(`/api/providers?${params}`, {
-        headers: { Authorization: `Bearer ${token()}` },
-      })
-      if (res.status === 401) { handle401(); return }
-      if (res.ok) {
-        const data = await res.json()
-        const list = Array.isArray(data) ? data : Array.isArray(data.providers) ? data.providers : null
-        if (list) setProviders(list)
-      }
+      const { data } = await api.get(`/providers?${params}`)
+      const list = Array.isArray(data) ? data : Array.isArray(data.providers) ? data.providers : null
+      if (list) setProviders(list)
     } catch { /* keep demo */ }
   }, [typeFilter, statusFilter, handle401])
 
@@ -304,11 +290,8 @@ export default function Providers() {
   const loadExtraDocs = useCallback(async (providerId: string) => {
     setExtraDocsLoading(true)
     try {
-      const res = await fetch(`/api/providers/${providerId}/documents`, {
-        headers: { Authorization: `Bearer ${token()}` },
-      })
-      if (res.status === 401) { handle401(); return }
-      if (res.ok) setExtraDocs(await res.json())
+      const { data } = await api.get(`/providers/${providerId}/documents`)
+      setExtraDocs(data)
     } catch { /* ignore */ }
     setExtraDocsLoading(false)
   }, [handle401])
@@ -347,17 +330,10 @@ export default function Providers() {
       Object.entries(form).forEach(([k, v]) => { if (v) fd.append(k, String(v)) })
       if (proofFile) fd.append('proofDocument', proofFile)
 
-      const res = await fetch('/api/providers', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token()}` },
-        body: fd,
-      })
-      if (res.ok) {
-        const created = await res.json()
-        setProviders(prev => [created, ...prev])
-        closeAdd()
-        return
-      }
+      const { data: created } = await api.post('/providers', fd)
+      setProviders(prev => [created, ...prev])
+      closeAdd()
+      return
     } catch { /* ignore network errors */ }
 
     // optimistic fallback for demo/offline
@@ -382,29 +358,22 @@ export default function Providers() {
     const { provider, type } = actionProvider
     const endpoint = type === 'approve' ? 'approve' : type === 'decline' ? 'reject' : type === 'suspend' ? 'suspend' : 'reactivate'
     try {
-      const res = await fetch(`/api/providers/${provider.id}/${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
-        body: JSON.stringify({ reason: actionNote, notes: actionNote }),
-      })
-      if (res.ok) {
-        const updated = await res.json().catch(() => null)
-        const newStatus = type === 'approve' ? 'approved' : type === 'decline' ? 'rejected' : type === 'suspend' ? 'suspended' : 'approved'
-        setProviders(prev => prev.map(p => p.id === provider.id
-          ? { ...p, ...(updated ?? {}), status: newStatus, isActive: newStatus === 'approved' } : p))
+      const { data: updated } = await api.post(`/providers/${provider.id}/${endpoint}`, { reason: actionNote, notes: actionNote })
+      const newStatus = type === 'approve' ? 'approved' : type === 'decline' ? 'rejected' : type === 'suspend' ? 'suspended' : 'approved'
+      setProviders(prev => prev.map(p => p.id === provider.id
+        ? { ...p, ...(updated ?? {}), status: newStatus, isActive: newStatus === 'approved' } : p))
+    } catch (err: any) {
+      const errData = err?.response?.data
+      const msg = typeof errData?.message === 'string' ? errData.message : (errData?.message?.message ?? `Failed to ${type} provider`)
+      const missing: string[] = Array.isArray(errData?.message?.missing) ? errData.message.missing : []
+      if (missing.length > 0) {
+        toast.error(`${msg}. Missing: ${missing.map((m: string) => m.replace(/^[a-f]_/, '')).join(', ')}`, { duration: 7000 })
       } else {
-        const err = await res.json().catch(() => ({}))
-        const msg = typeof err?.message === 'string' ? err.message : (err?.message?.message ?? `Failed to ${type} provider`)
-        const missing: string[] = Array.isArray(err?.message?.missing) ? err.message.missing : []
-        if (missing.length > 0) {
-          toast.error(`${msg}. Missing: ${missing.map(m => m.replace(/^[a-f]_/, '')).join(', ')}`, { duration: 7000 })
-        } else {
-          toast.error(msg)
-        }
-        setActionSaving(false)
-        return  // keep the dialog open so the admin can see the packet
+        toast.error(msg)
       }
-    } catch { toast.error(`Failed to ${type} provider`) }
+      setActionSaving(false)
+      return  // keep the dialog open so the admin can see the packet
+    }
     setActionSaving(false); setActionProvider(null); setActionNote('')
   }
 
@@ -446,12 +415,8 @@ export default function Providers() {
     const fd = new FormData()
     fd.append('file', uploadFile)
     try {
-      const res = await fetch(`/api/providers/${selectedProvider.id}/documents`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token()}` },
-        body: fd,
-      })
-      if (res.ok) await loadExtraDocs(selectedProvider.id)
+      await api.post(`/providers/${selectedProvider.id}/documents`, fd)
+      await loadExtraDocs(selectedProvider.id)
     } catch { /* ignore */ }
     setExtraDocUploading(false)
     setShowAddDocForm(false)
@@ -462,10 +427,7 @@ export default function Providers() {
   const handleExtraDocDelete = async (docId: string) => {
     if (!selectedProvider) return
     try {
-      await fetch(`/api/providers/${selectedProvider.id}/documents/${docId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token()}` },
-      })
+      await api.delete(`/providers/${selectedProvider.id}/documents/${docId}`)
       setExtraDocs(d => d.filter(x => x.id !== docId))
       if (viewingExtraDoc?.id === docId) {
         if (viewingExtraDocRef.current) { URL.revokeObjectURL(viewingExtraDocRef.current); viewingExtraDocRef.current = null }
@@ -479,19 +441,11 @@ export default function Providers() {
     setViewingExtraDoc(null)
     if (!selectedProvider) return
     try {
-      const res = await fetch(`/api/providers/${selectedProvider.id}/documents/${doc.id}/file`, {
-        headers: { Authorization: `Bearer ${token()}` },
-      })
-      if (res.status === 401) { handle401(); return }
-      if (res.ok) {
-        const blob = await res.blob()
-        const url = URL.createObjectURL(blob)
-        viewingExtraDocRef.current = url
-        setViewingExtraDoc({ id: doc.id, name: doc.originalName, blobUrl: url })
-        window.open(url, '_blank')
-      } else {
-        toast.error('Failed to load document')
-      }
+      const { data: blob } = await api.get(`/providers/${selectedProvider.id}/documents/${doc.id}/file`, { responseType: 'blob' })
+      const url = URL.createObjectURL(blob)
+      viewingExtraDocRef.current = url
+      setViewingExtraDoc({ id: doc.id, name: doc.originalName, blobUrl: url })
+      window.open(url, '_blank')
     } catch { toast.error('Failed to load document') }
   }
 
@@ -531,15 +485,8 @@ export default function Providers() {
     try {
       const fd = new FormData()
       Object.entries(editForm).forEach(([k, v]) => { if (v) fd.append(k, String(v)) })
-      const res = await fetch(`/api/providers/${selectedProvider.id}`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${token()}` },
-        body: fd,
-      })
-      if (res.ok) {
-        const updated = await res.json()
-        Object.assign(patched, updated)
-      }
+      const { data: updated } = await api.patch(`/providers/${selectedProvider.id}`, fd)
+      Object.assign(patched, updated)
     } catch { /* optimistic */ }
     setProviders(prev => prev.map(p => p.id === patched.id ? patched : p))
     setSelectedProvider(patched)
@@ -558,21 +505,14 @@ export default function Providers() {
     try {
       const fd = new FormData()
       fd.append('proofDocument', uploadFile)
-      const res = await fetch(`/api/providers/${selectedProvider.id}`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${token()}` },
-        body: fd,
-      })
-      if (res.ok) {
-        const updated = await res.json()
-        const next = { ...selectedProvider, proofDocumentName: updated.proofDocumentName || uploadFile.name }
-        setProviders(prev => prev.map(p => p.id === next.id ? next : p))
-        setSelectedProvider(next)
-        setDocUploading(false)
-        setOcrText(null)
-        await loadDocBlob(next.id)
-        return
-      }
+      const { data: updated } = await api.patch(`/providers/${selectedProvider.id}`, fd)
+      const next = { ...selectedProvider, proofDocumentName: updated.proofDocumentName || uploadFile.name }
+      setProviders(prev => prev.map(p => p.id === next.id ? next : p))
+      setSelectedProvider(next)
+      setDocUploading(false)
+      setOcrText(null)
+      await loadDocBlob(next.id)
+      return
     } catch { /* fall through to optimistic */ }
     setProviders(prev => prev.map(p => p.id === optimistic.id ? optimistic : p))
     setSelectedProvider(optimistic)
@@ -584,18 +524,13 @@ export default function Providers() {
   const handleDeleteProofDoc = async () => {
     if (!selectedProvider) return
     try {
-      const res = await fetch(`/api/providers/${selectedProvider.id}/proof-document`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token()}` },
-      })
-      if (res.ok) {
-        if (docBlobUrlRef.current) { URL.revokeObjectURL(docBlobUrlRef.current); docBlobUrlRef.current = null }
-        setDocBlobUrl(null)
-        setOcrText(null)
-        const updated = { ...selectedProvider, proofDocumentName: null as any }
-        setProviders(prev => prev.map(p => p.id === updated.id ? updated : p))
-        setSelectedProvider(updated)
-      }
+      await api.delete(`/providers/${selectedProvider.id}/proof-document`)
+      if (docBlobUrlRef.current) { URL.revokeObjectURL(docBlobUrlRef.current); docBlobUrlRef.current = null }
+      setDocBlobUrl(null)
+      setOcrText(null)
+      const updated = { ...selectedProvider, proofDocumentName: null as any }
+      setProviders(prev => prev.map(p => p.id === updated.id ? updated : p))
+      setSelectedProvider(updated)
     } catch { /* ignore */ }
   }
 
@@ -610,11 +545,10 @@ export default function Providers() {
         const res = await fetch(docBlobUrl)
         blob = await res.blob()
       } else {
-        const res = await fetch(`/api/providers/${selectedProvider.id}/proof-document`, {
-          headers: { Authorization: `Bearer ${token()}` },
-        })
-        if (!res.ok) { setOcrText('Could not load document for OCR.'); setOcrLoading(false); return }
-        blob = await res.blob()
+        try {
+          const { data } = await api.get(`/providers/${selectedProvider.id}/proof-document`, { responseType: 'blob' })
+          blob = data
+        } catch { setOcrText('Could not load document for OCR.'); setOcrLoading(false); return }
       }
       const isPdf = selectedProvider.proofDocumentName.toLowerCase().endsWith('.pdf')
       if (isPdf) {
@@ -669,21 +603,12 @@ export default function Providers() {
     const ids = Array.from(selectedIds)
 
     if (bulkConfirm === 'delete') {
-      await Promise.allSettled(ids.map(id =>
-        fetch(`/api/providers/${id}`, {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${token()}` },
-        })
-      ))
+      await Promise.allSettled(ids.map(id => api.delete(`/providers/${id}`)))
       setProviders(prev => prev.filter(p => !selectedIds.has(p.id)))
     } else {
       const endpoint = bulkConfirm === 'approve' ? 'approve' : bulkConfirm === 'suspend' ? 'suspend' : 'reactivate'
       await Promise.allSettled(ids.map(id =>
-        fetch(`/api/providers/${id}/${endpoint}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
-          body: JSON.stringify({ reason: `Bulk ${bulkConfirm}` }),
-        })
+        api.post(`/providers/${id}/${endpoint}`, { reason: `Bulk ${bulkConfirm}` })
       ))
       const newStatus = bulkConfirm === 'approve' ? 'approved' : bulkConfirm === 'suspend' ? 'suspended' : 'approved'
       setProviders(prev => prev.map(p =>
@@ -1149,21 +1074,13 @@ export default function Providers() {
                                 onClick={async () => {
                                   setDocBlobLoading(true)
                                   try {
-                                    const res = await fetch(`/api/providers/${selectedProvider.id}/proof-document`, {
-                                      headers: { Authorization: `Bearer ${token()}` },
-                                    })
-                                    if (res.status === 401) { handle401(); return }
-                                    if (res.ok) {
-                                      const blob = await res.blob()
-                                      const url = URL.createObjectURL(blob)
-                                      const a = document.createElement('a')
-                                      a.href = url
-                                      a.download = selectedProvider.proofDocumentName!
-                                      a.click()
-                                      setTimeout(() => URL.revokeObjectURL(url), 5000)
-                                    } else {
-                                      toast.error('Failed to download document')
-                                    }
+                                    const { data: blob } = await api.get(`/providers/${selectedProvider.id}/proof-document`, { responseType: 'blob' })
+                                    const url = URL.createObjectURL(blob)
+                                    const a = document.createElement('a')
+                                    a.href = url
+                                    a.download = selectedProvider.proofDocumentName!
+                                    a.click()
+                                    setTimeout(() => URL.revokeObjectURL(url), 5000)
                                   } catch { toast.error('Failed to download document') }
                                   setDocBlobLoading(false)
                                 }}

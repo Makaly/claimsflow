@@ -14,6 +14,7 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import { formatCurrency } from '@/lib/utils'
+import api from '@/services/api'
 
 interface WorkflowStats {
   initial_review: number
@@ -85,16 +86,14 @@ export default function WorkflowDashboard() {
   const [refreshing, setRefreshing] = useState(false)
 
   const fetchData = async () => {
-    const token = localStorage.getItem('token')
-    const headers = { Authorization: `Bearer ${token}` }
     try {
-      const [statsRes, workloadRes, activityRes] = await Promise.all([
-        fetch('/api/workflow/statistics', { headers }),
-        fetch('/api/workflow/reviewer-workload', { headers }),
-        fetch('/api/activity-logs?limit=10', { headers }),
+      const [statsRes, workloadRes, activityRes] = await Promise.allSettled([
+        api.get('/workflow/statistics'),
+        api.get('/workflow/reviewer-workload'),
+        api.get('/activity-logs?limit=10'),
       ])
-      if (statsRes.ok) {
-        const raw = await statsRes.json()
+      if (statsRes.status === 'fulfilled') {
+        const raw = statsRes.value.data
         // Backend returns camelCase; normalise to the shape the component expects
         setStats({
           initial_review:  raw.initialReview  ?? raw.initial_review  ?? 0,
@@ -107,8 +106,8 @@ export default function WorkflowDashboard() {
           flagged:         raw.flagged,
         })
       }
-      if (workloadRes.ok) {
-        const w = await workloadRes.json()
+      if (workloadRes.status === 'fulfilled') {
+        const w = workloadRes.value.data
         const list: ReviewerWorkload[] = (Array.isArray(w) ? w : []).map((r: any) => ({
           name:      r.name || r.userName || r.assignedTo || 'Unknown',
           assigned:  r.assigned ?? r._count?.id ?? r.assignedCount ?? 0,
@@ -116,8 +115,8 @@ export default function WorkflowDashboard() {
         }))
         setWorkload(list)
       }
-      if (activityRes.ok) {
-        const data = await activityRes.json()
+      if (activityRes.status === 'fulfilled') {
+        const data = activityRes.value.data
         const raw: any[] = Array.isArray(data) ? data : Array.isArray(data?.logs) ? data.logs : []
         const deriveType = (action: string = ''): string => {
           const a = action.toLowerCase()

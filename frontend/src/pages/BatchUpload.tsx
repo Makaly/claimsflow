@@ -490,9 +490,8 @@ function DocPreviewModal({ doc, onClose, onSave }: {
       // 1. Try fetching from the file URL (works for API URLs with auth)
       if (doc.fileUrl && !doc.fileUrl.startsWith('blob:')) {
         try {
-          const token = localStorage.getItem('token')
-          const res = await fetch(doc.fileUrl, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined)
-          if (res.ok) blob = await res.blob()
+          const { data } = await api.get(doc.fileUrl, { responseType: 'blob' })
+          blob = data
         } catch { /* try next */ }
       }
 
@@ -2185,8 +2184,6 @@ export default function BatchUpload() {
 
   // ── Provider / branch population based on logged-in user ─────────────────
   useEffect(() => {
-    const token = localStorage.getItem('token')
-    const h = { Authorization: `Bearer ${token}` }
     const role = user?.role
 
     const isProvider = role === 'provider_admin' || role === 'provider_user'
@@ -2194,15 +2191,13 @@ export default function BatchUpload() {
 
     if (isProvider && user?.providerId) {
       // Auto-populate provider name from the user's linked provider
-      fetch(`/api/providers/${user.providerId}`, { headers: h })
-        .then(r => r.ok ? r.json() : null)
-        .then(p => {
+      api.get(`/providers/${user.providerId}`)
+        .then(({ data: p }) => {
           if (p?.name) setProvider(p.name)
           // Also load branches for this provider
-          return fetch(`/api/branches?providerId=${user.providerId}`, { headers: h })
+          return api.get(`/branches?providerId=${user.providerId}`)
         })
-        .then(r => r && r.ok ? r.json() : null)
-        .then(data => {
+        .then(({ data }) => {
           const list = Array.isArray(data) ? data : Array.isArray(data?.branches) ? data.branches : []
           const activeBranches = list.filter((b: any) => b.isActive && b.isApproved)
           setProviderBranches(activeBranches.map((b: any) => ({ id: b.id, name: b.name, code: b.code })))
@@ -2216,9 +2211,8 @@ export default function BatchUpload() {
         .catch(() => {})
     } else {
       // CIC staff – fetch all approved providers for free selection
-      fetch('/api/providers', { headers: h })
-        .then(r => r.ok ? r.json() : null)
-        .then(data => {
+      api.get('/providers')
+        .then(({ data }) => {
           const list = Array.isArray(data) ? data : Array.isArray(data?.providers) ? data.providers : null
           if (list) {
             setApprovedProviders(
@@ -3118,12 +3112,8 @@ export default function BatchUpload() {
                           if (name) {
                             const prov = approvedProviders.find(p => p.name === name)
                             if (prov) {
-                              const token = localStorage.getItem('token')
-                              fetch(`/api/branches?providerId=${prov.id}`, {
-                                headers: { Authorization: `Bearer ${token}` },
-                              })
-                                .then(r => r.ok ? r.json() : null)
-                                .then(data => {
+                              api.get(`/branches?providerId=${prov.id}`)
+                                .then(({ data }) => {
                                   const list = Array.isArray(data) ? data : Array.isArray(data?.branches) ? data.branches : []
                                   setProviderBranches(list.filter((b: any) => b.isActive).map((b: any) => ({ id: b.id, name: b.name, code: b.code })))
                                 })

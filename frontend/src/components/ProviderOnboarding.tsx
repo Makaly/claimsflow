@@ -14,6 +14,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { useAuthStore } from '@/store/authStore'
+import api from '@/services/api'
 
 type DocCategory =
   | 'company_profile'
@@ -63,9 +64,6 @@ interface Packet {
   missing: string[]
 }
 
-const token = () => localStorage.getItem('token')
-const auth = () => ({ Authorization: `Bearer ${token()}` })
-
 /**
  * Full onboarding form shown to pending provider_admin users. Replaces the
  * single proof-document uploader. Six sections mirror the procurement spec.
@@ -81,12 +79,9 @@ export function ProviderOnboarding({ onApproved }: { onApproved: () => void }) {
   const fetchPacket = useCallback(async () => {
     setRefreshing(true)
     try {
-      const res = await fetch('/api/providers/self-service/onboarding-packet', { headers: auth() })
-      if (res.ok) {
-        const data: Packet = await res.json()
-        setPacket(data)
-        if (data.approvalStatus === 'approved') onApproved()
-      }
+      const { data } = await api.get('/providers/self-service/onboarding-packet')
+      setPacket(data as Packet)
+      if ((data as Packet).approvalStatus === 'approved') onApproved()
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -96,60 +91,55 @@ export function ProviderOnboarding({ onApproved }: { onApproved: () => void }) {
   useEffect(() => { fetchPacket() }, [fetchPacket])
 
   const patchInfo = async (body: Record<string, any>) => {
-    const res = await fetch('/api/providers/self-service/onboarding-info', {
-      method: 'PATCH',
-      headers: { ...auth(), 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    if (res.ok) fetchPacket()
+    try {
+      await api.patch('/providers/self-service/onboarding-info', body)
+      fetchPacket()
+    } catch { /* ignore */ }
   }
 
   const uploadDoc = async (category: DocCategory, file: File) => {
     const fd = new FormData()
     fd.append('file', file)
     fd.append('category', category)
-    const res = await fetch('/api/providers/self-service/onboarding-document', {
-      method: 'POST', headers: auth(), body: fd,
-    })
-    if (res.ok) fetchPacket()
-    else alert('Upload failed: ' + (await res.text()))
+    try {
+      await api.post('/providers/self-service/onboarding-document', fd)
+      fetchPacket()
+    } catch (e: any) {
+      alert('Upload failed: ' + (e?.response?.data?.message || e?.message || 'Unknown error'))
+    }
   }
 
   const deleteDoc = async (id: string) => {
-    const res = await fetch(`/api/providers/self-service/onboarding-document/${id}`, {
-      method: 'DELETE', headers: auth(),
-    })
-    if (res.ok) fetchPacket()
+    try {
+      await api.delete(`/providers/self-service/onboarding-document/${id}`)
+      fetchPacket()
+    } catch { /* ignore */ }
   }
 
   const addReference = async (ref: Omit<Reference, 'id'>) => {
-    const res = await fetch('/api/providers/self-service/references', {
-      method: 'POST',
-      headers: { ...auth(), 'Content-Type': 'application/json' },
-      body: JSON.stringify(ref),
-    })
-    if (res.ok) fetchPacket()
-    else alert('Failed: ' + (await res.text()))
+    try {
+      await api.post('/providers/self-service/references', ref)
+      fetchPacket()
+    } catch (e: any) {
+      alert('Failed: ' + (e?.response?.data?.message || e?.message || 'Unknown error'))
+    }
   }
 
   const deleteReference = async (id: string) => {
-    const res = await fetch(`/api/providers/self-service/references/${id}`, {
-      method: 'DELETE', headers: auth(),
-    })
-    if (res.ok) fetchPacket()
+    try {
+      await api.delete(`/providers/self-service/references/${id}`)
+      fetchPacket()
+    } catch { /* ignore */ }
   }
 
   const submitPacket = async () => {
     setSubmitting(true); setSubmitError(null)
     try {
-      const res = await fetch('/api/providers/self-service/onboarding-submit', {
-        method: 'POST', headers: auth(),
-      })
-      if (res.ok) { fetchPacket() }
-      else {
-        const err = await res.json().catch(() => ({}))
-        setSubmitError(typeof err.message === 'string' ? err.message : 'Packet is incomplete')
-      }
+      await api.post('/providers/self-service/onboarding-submit')
+      fetchPacket()
+    } catch (e: any) {
+      const err = e?.response?.data
+      setSubmitError(typeof err?.message === 'string' ? err.message : 'Packet is incomplete')
     } finally { setSubmitting(false) }
   }
 

@@ -34,6 +34,7 @@ import { Switch } from '@/components/ui/switch'
 import { formatDate, formatCurrency, getStatusColor } from '@/lib/utils'
 import { useClaimsStore, type ClaimRecord } from '@/store/claimsStore'
 import { useAuthStore } from '@/store/authStore'
+import api from '@/services/api'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -175,29 +176,23 @@ export default function Branches() {
   const [resubmitNotes, setResubmitNotes] = useState('')
   const [resubmitting, setResubmitting] = useState(false)
 
-  const token = () => localStorage.getItem('token')
-  const authHeaders = () => ({
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token()}`,
-  })
-
   const fetchData = useCallback(async () => {
     try {
-      const [bRes, pRes, uRes] = await Promise.all([
-        fetch('/api/branches', { headers: { Authorization: `Bearer ${token()}` } }),
-        fetch('/api/branches/providers', { headers: { Authorization: `Bearer ${token()}` } }),
-        fetch('/api/users', { headers: { Authorization: `Bearer ${token()}` } }),
+      const [bRes, pRes, uRes] = await Promise.allSettled([
+        api.get('/branches'),
+        api.get('/branches/providers'),
+        api.get('/users'),
       ])
-      if (bRes.ok) {
-        const d = await bRes.json()
+      if (bRes.status === 'fulfilled') {
+        const d = bRes.value.data
         setBranches(Array.isArray(d.branches) ? d.branches : Array.isArray(d) ? d : DEMO_BRANCHES)
       }
-      if (pRes.ok) {
-        const p = await pRes.json()
+      if (pRes.status === 'fulfilled') {
+        const p = pRes.value.data
         if (Array.isArray(p) && p.length > 0) setProviders(p)
       }
-      if (uRes.ok) {
-        const u = await uRes.json()
+      if (uRes.status === 'fulfilled') {
+        const u = uRes.value.data
         const list = Array.isArray(u) ? u : Array.isArray(u?.users) ? u.users : []
         setStaffUsers(list.filter((u: StaffUser) =>
           ['provider_user', 'provider_admin', 'claims_officer', 'maker_checker'].includes(u.role)
@@ -291,21 +286,13 @@ export default function Branches() {
     setSaving(true)
     try {
       if (editingBranch) {
-        const res = await fetch(`/api/branches/${editingBranch.id}`, {
-          method: 'PATCH', headers: authHeaders(), body: JSON.stringify(form),
-        })
-        if (res.ok) {
-          const updated = await res.json()
-          setBranches(prev => prev.map(b => b.id === editingBranch.id ? { ...b, ...updated } : b))
-        }
+        const { data: updated } = await api.patch(`/branches/${editingBranch.id}`, form)
+        setBranches(prev => prev.map(b => b.id === editingBranch.id ? { ...b, ...updated } : b))
       } else {
-        const res = await fetch('/api/branches', {
-          method: 'POST', headers: authHeaders(), body: JSON.stringify(form),
-        })
-        if (res.ok) {
-          const created = await res.json()
+        try {
+          const { data: created } = await api.post('/branches', form)
           setBranches(prev => [created, ...prev])
-        } else {
+        } catch {
           const providerName = providers.find(p => p.id === form.providerId)?.name || ''
           setBranches(prev => [{
             id: `b${Date.now()}`, code: form.code, name: form.name,
@@ -326,7 +313,7 @@ export default function Branches() {
 
   const handleDelete = async (branch: Branch) => {
     try {
-      await fetch(`/api/branches/${branch.id}`, { method: 'DELETE', headers: authHeaders() })
+      await api.delete(`/branches/${branch.id}`)
     } catch { /* ignore */ }
     setBranches(prev => prev.filter(b => b.id !== branch.id))
     setDeleteConfirm(null)
@@ -335,11 +322,7 @@ export default function Branches() {
   const handleResubmit = async (claim: ClaimRecord) => {
     setResubmitting(true)
     try {
-      await fetch('/api/workflow/provider/resubmit', {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ claimId: claim.id, notes: resubmitNotes }),
-      })
+      await api.post('/workflow/provider/resubmit', { claimId: claim.id, notes: resubmitNotes })
     } catch { /* best effort */ }
     setResubmitting(false)
     setResubmitNotes('')

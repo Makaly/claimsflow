@@ -29,6 +29,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { getInitials, formatDate } from '@/lib/utils'
 import { rbacService, Role, UserRole } from '@/services/rbacService'
 import { Checkbox } from '@/components/ui/checkbox'
+import api from '@/services/api'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -131,9 +132,6 @@ export default function UserManagement() {
   const [rolesLoading, setRolesLoading] = useState(false)
   const [rolesSaving, setRolesSaving] = useState<string | null>(null)
 
-  const token = () => localStorage.getItem('token')
-  const h = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` })
-
   // ── Data fetching ─────────────────────────────────────────────────────────
 
   const fetchUsers = useCallback(async () => {
@@ -141,34 +139,25 @@ export default function UserManagement() {
       const params = new URLSearchParams({ limit: '200' })
       if (search) params.set('search', search)
       if (roleFilter !== 'all') params.set('role', roleFilter)
-      const res = await fetch(`/api/users?${params}`, { headers: h() })
-      if (res.ok) {
-        const data = await res.json()
-        setUsers(Array.isArray(data.users) ? data.users : DEMO_USERS)
-        setTotal(data.total ?? DEMO_USERS.length)
-      }
+      const { data } = await api.get(`/users?${params}`)
+      setUsers(Array.isArray(data.users) ? data.users : DEMO_USERS)
+      setTotal(data.total ?? DEMO_USERS.length)
     } catch { /* keep demo */ }
   }, [search, roleFilter])
 
   const fetchProviders = useCallback(async () => {
     try {
-      const res = await fetch('/api/providers', { headers: h() })
-      if (res.ok) {
-        const data = await res.json()
-        const list = Array.isArray(data) ? data : Array.isArray(data.providers) ? data.providers : []
-        setProviders(list.filter((p: Provider) => p.status === 'approved'))
-      }
+      const { data } = await api.get('/providers')
+      const list = Array.isArray(data) ? data : Array.isArray(data.providers) ? data.providers : []
+      setProviders(list.filter((p: Provider) => p.status === 'approved'))
     } catch { /* ignore */ }
   }, [])
 
   const fetchBranches = useCallback(async (providerId?: string) => {
     if (!providerId) { setBranches([]); return }
     try {
-      const res = await fetch(`/api/branches?providerId=${providerId}`, { headers: h() })
-      if (res.ok) {
-        const data = await res.json()
-        setBranches(Array.isArray(data) ? data : Array.isArray(data.branches) ? data.branches : [])
-      }
+      const { data } = await api.get(`/branches?providerId=${providerId}`)
+      setBranches(Array.isArray(data) ? data : Array.isArray(data.branches) ? data.branches : [])
     } catch { /* ignore */ }
   }, [])
 
@@ -258,29 +247,19 @@ export default function UserManagement() {
       }
 
       if (editingUser) {
-        const res = await fetch(`/api/users/${editingUser.id}`, {
-          method: 'PATCH', headers: h(), body: JSON.stringify(body),
-        })
-        if (res.ok) {
-          const updated = await res.json()
-          setUsers(prev => prev.map(u => u.id === editingUser.id ? { ...u, ...updated } : u))
-          setShowDialog(false)
-        }
+        const { data: updated } = await api.patch(`/users/${editingUser.id}`, body)
+        setUsers(prev => prev.map(u => u.id === editingUser.id ? { ...u, ...updated } : u))
+        setShowDialog(false)
       } else {
         if (form.password) body.password = form.password
-        const res = await fetch('/api/users', {
-          method: 'POST', headers: h(), body: JSON.stringify(body),
-        })
-        if (res.ok) {
-          const created = await res.json()
-          if (created.tempPassword) {
-            setTempPassword(created.tempPassword)
-          } else {
-            setShowDialog(false)
-          }
-          setUsers(prev => [created, ...prev])
-          setTotal(t => t + 1)
+        const { data: created } = await api.post('/users', body)
+        if (created.tempPassword) {
+          setTempPassword(created.tempPassword)
+        } else {
+          setShowDialog(false)
         }
+        setUsers(prev => [created, ...prev])
+        setTotal(t => t + 1)
       }
     } catch { /* ignore */ }
     setSaving(false)
@@ -289,27 +268,25 @@ export default function UserManagement() {
   const handleToggleActive = async (user: MappedUser) => {
     const endpoint = user.isActive ? 'deactivate' : 'activate'
     try {
-      const res = await fetch(`/api/users/${user.id}/${endpoint}`, { method: 'POST', headers: h() })
-      if (res.ok) setUsers(prev => prev.map(u => u.id === user.id ? { ...u, isActive: !u.isActive } : u))
+      await api.post(`/users/${user.id}/${endpoint}`)
+      setUsers(prev => prev.map(u => u.id === user.id ? { ...u, isActive: !u.isActive } : u))
     } catch { /* ignore */ }
   }
 
   const handleResetPassword = async (user: MappedUser) => {
     try {
-      const res = await fetch(`/api/users/${user.id}/reset-password`, { method: 'POST', headers: h() })
-      if (res.ok) {
-        const data = await res.json()
-        setTempPassword(data.tempPassword)
-        setEditingUser(user)
-        setShowDialog(true)
-      }
+      const { data } = await api.post(`/users/${user.id}/reset-password`)
+      setTempPassword(data.tempPassword)
+      setEditingUser(user)
+      setShowDialog(true)
     } catch { /* ignore */ }
   }
 
   const handleDelete = async (user: MappedUser) => {
     try {
-      const res = await fetch(`/api/users/${user.id}`, { method: 'DELETE', headers: h() })
-      if (res.ok) { setUsers(prev => prev.filter(u => u.id !== user.id)); setTotal(t => t - 1) }
+      await api.delete(`/users/${user.id}`)
+      setUsers(prev => prev.filter(u => u.id !== user.id))
+      setTotal(t => t - 1)
     } catch { /* ignore */ }
     setDeleteConfirm(null)
   }

@@ -8,6 +8,39 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- **Site-wide migration from `fetch` to Axios (`api` instance)** — all manual
+  `fetch` call sites across `BatchUpload`, `Branches`, `CheckerQueue`,
+  `Claims`, `Header`, `MakerQueue`, `Profile`, `ProviderDashboard`,
+  `ProviderOnboarding`, `Providers`, and `UserManagement` have been replaced
+  with the shared `api` Axios instance (`withCredentials: true`). Benefits:
+  - Auth cookie is forwarded automatically on every request; no more
+    `localStorage.getItem('token')` scattered across components.
+  - The existing `401` response interceptor handles session expiry in one
+    place: it calls `authStore.logout()` then redirects to `/login`, preventing
+    the previous pattern of each component doing its own partial cleanup.
+  - Error messages now surface structured `err.response.data.message` from the
+    backend instead of falling back to generic HTTP-status strings.
+
+- **`authStore.logout()` is now async** — the logout action calls
+  `POST /auth/logout` to clear the server-side HttpOnly cookie before wiping
+  local state. If the server is unreachable the cookie expires naturally;
+  local state is cleared regardless.
+
+- **`api` interceptor avoids infinite 401 loops** — the 401 handler now skips
+  `/auth/logout` and `/auth/login` URLs so a failed logout or bad-credentials
+  login no longer triggers a recursive redirect cycle.
+
+- **`App` profile validation on every boot** — `fetchProfile()` is called once
+  on mount unconditionally (not just when `user` is null), so a stale cached
+  profile whose HttpOnly cookie has since expired is caught and cleared on the
+  next page load.
+
+- **`rememberMe` wired end-to-end** — `Login` page passes `rememberMe` to
+  `authService.login()`; the `LoginCredentials` type gains an optional field;
+  the backend sets a 30-day cookie when the flag is true.
+
 ### Planned
 - Unit and integration test suite (Vitest + React Testing Library)
 - End-to-end tests (Playwright)
