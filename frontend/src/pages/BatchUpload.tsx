@@ -15,7 +15,7 @@ import {
   Pen, FileSignature, Eraser, Square, Stamp,
   Underline, Strikethrough, ChevronDown, Save, MapPin,
   Copy, Check, AlertTriangle, Trash2,
-  ScanLine, Printer, RefreshCw, WifiOff,
+  ScanLine, Printer, RefreshCw, WifiOff, Camera, CameraOff,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -2059,6 +2059,14 @@ export default function BatchUpload() {
   const [serverPlatform, setServerPlatform] = useState<'linux' | 'windows' | 'other'>('linux')
   const [cloudHostedScanner, setCloudHostedScanner] = useState(false)
   const [selectedScanner, setSelectedScanner] = useState('')
+
+  // ── Camera capture (cloud deployments) ────────────────────────────────────
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [cameraActive, setCameraActive] = useState(false)
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null)
+  const [capturedDataUrl, setCapturedDataUrl] = useState<string | null>(null)
+  const [cameraError, setCameraError] = useState<string | null>(null)
   const [scanDpi, setScanDpi] = useState('300')
   const [scanMode, setScanMode] = useState('Color')
   const [scanning, setScanning] = useState(false)
@@ -2479,6 +2487,84 @@ export default function BatchUpload() {
       setScanning(false)
     }
   }, [selectedScanner, scanning, scanDpi, scanMode, session, upsertSession])
+
+  // ── Camera helpers ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (cameraStream && videoRef.current) {
+      videoRef.current.srcObject = cameraStream
+      videoRef.current.play().catch(() => {})
+    }
+  }, [cameraStream])
+
+  useEffect(() => {
+    return () => { cameraStream?.getTracks().forEach(t => t.stop()) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (inputTab !== 'scanner') {
+      cameraStream?.getTracks().forEach(t => t.stop())
+      setCameraStream(null)
+      setCameraActive(false)
+      setCapturedDataUrl(null)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inputTab])
+
+  const startCamera = useCallback(async () => {
+    setCameraError(null)
+    setCapturedDataUrl(null)
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      })
+      setCameraStream(stream)
+      setCameraActive(true)
+    } catch (err: any) {
+      setCameraError(
+        err.name === 'NotAllowedError'
+          ? 'Camera access denied. Allow camera permission in your browser and try again.'
+          : 'Could not access camera. Make sure a camera is connected and no other app is using it.',
+      )
+    }
+  }, [])
+
+  const stopCamera = useCallback(() => {
+    cameraStream?.getTracks().forEach(t => t.stop())
+    setCameraStream(null)
+    setCameraActive(false)
+    setCapturedDataUrl(null)
+    setCameraError(null)
+  }, [cameraStream])
+
+  const captureFrame = useCallback(() => {
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    if (!video || !canvas) return
+    canvas.width = video.videoWidth || 1280
+    canvas.height = video.videoHeight || 720
+    canvas.getContext('2d')?.drawImage(video, 0, 0)
+    setCapturedDataUrl(canvas.toDataURL('image/jpeg', 0.92))
+    video.pause()
+  }, [])
+
+  const retakePhoto = useCallback(() => {
+    setCapturedDataUrl(null)
+    videoRef.current?.play().catch(() => {})
+  }, [])
+
+  const useCapture = useCallback(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    canvas.toBlob((blob) => {
+      if (!blob) return
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+      const file = new File([blob], `camera-scan-${ts}.jpg`, { type: 'image/jpeg' })
+      onDrop([file])
+      stopCamera()
+      setInputTab('upload')
+    }, 'image/jpeg', 0.92)
+  }, [onDrop, stopCamera])
 
   // Step 2: AI extracts data from each uploaded PDF (handles multi-invoice splitting)
   const startAiExtraction = async () => {
@@ -3318,22 +3404,92 @@ export default function BatchUpload() {
                         <span className="ml-2 text-sm text-muted-foreground">Detecting scanners…</span>
                       </div>
                     ) : cloudHostedScanner ? (
-                      <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800 p-4">
-                        <div className="flex items-center gap-2 text-blue-700 dark:text-blue-400 font-medium text-sm">
-                          <WifiOff className="h-4 w-4 shrink-0" />
-                          Direct scanner access is not available on cloud-hosted deployments
-                        </div>
-                        <p className="text-blue-600 dark:text-blue-400 text-xs mt-1.5">
-                          Scan your document using any scanner app on your computer (e.g. Windows Fax &amp; Scan,
-                          Apple Image Capture, or your scanner's own software), save it as a PDF, then use{' '}
-                          <button
-                            className="underline font-medium"
-                            onClick={() => setInputTab('upload')}
-                          >
-                            Upload Files
-                          </button>{' '}
-                          to submit it here.
-                        </p>
+                      <div className="space-y-4">
+                        {/* hidden canvas used for frame capture */}
+                        <canvas ref={canvasRef} className="hidden" />
+
+                        {!cameraActive && !capturedDataUrl && (
+                          <div className="rounded-xl border-2 border-dashed border-violet-200 dark:border-violet-800 p-6 text-center space-y-3">
+                            <Camera className="h-10 w-10 text-violet-400 mx-auto" />
+                            <div>
+                              <p className="text-sm font-semibold">Scan with your camera</p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Point your device camera at the document — the photo is converted to an image file and processed identically to an uploaded PDF.
+                              </p>
+                            </div>
+                            <Button
+                              onClick={startCamera}
+                              className="bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white gap-2"
+                            >
+                              <Camera className="h-4 w-4" />
+                              Open Camera
+                            </Button>
+                            {cameraError && (
+                              <p className="text-xs text-red-500 dark:text-red-400 flex items-center gap-1 justify-center">
+                                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />{cameraError}
+                              </p>
+                            )}
+                            <p className="text-xs text-muted-foreground">
+                              Or{' '}
+                              <button className="underline font-medium" onClick={() => setInputTab('upload')}>
+                                upload a scanned PDF
+                              </button>{' '}
+                              saved from Windows Fax &amp; Scan, Apple Image Capture, or your scanner's app.
+                            </p>
+                          </div>
+                        )}
+
+                        {cameraActive && !capturedDataUrl && (
+                          <div className="space-y-3">
+                            <div className="relative rounded-xl overflow-hidden bg-black aspect-video">
+                              <video
+                                ref={videoRef}
+                                autoPlay
+                                playsInline
+                                muted
+                                className="w-full h-full object-cover"
+                              />
+                              <div className="absolute inset-0 border-2 border-violet-400/40 rounded-xl pointer-events-none" />
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={captureFrame}
+                                className="flex-1 bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white gap-2 h-11"
+                              >
+                                <ScanLine className="h-4 w-4" />
+                                Capture Document
+                              </Button>
+                              <Button variant="outline" onClick={stopCamera} className="gap-1.5">
+                                <CameraOff className="h-4 w-4" />
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {capturedDataUrl && (
+                          <div className="space-y-3">
+                            <div className="relative rounded-xl overflow-hidden border">
+                              <img src={capturedDataUrl} alt="Captured document" className="w-full object-contain max-h-72" />
+                              <div className="absolute top-2 right-2 bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                Captured
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={useCapture}
+                                className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white gap-2 h-11"
+                              >
+                                <Check className="h-4 w-4" />
+                                Use This Photo
+                              </Button>
+                              <Button variant="outline" onClick={retakePhoto} className="gap-1.5">
+                                <RotateCcw className="h-4 w-4" />
+                                Retake
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ) : !driverAvailable ? (
                       <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-4">
