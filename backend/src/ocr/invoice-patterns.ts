@@ -175,6 +175,69 @@ export const HCPCS_CODE_PATTERNS = [
 ];
 
 /**
+ * Common ICD-10 codes seen on Kenyan medical insurance invoices.
+ * Used as a diagnosis-text fallback when only the code is extracted.
+ */
+export const ICD10_COMMON_LABELS: Record<string, string> = {
+  // Chapter I — Infectious / Parasitic
+  'A09': 'Gastroenteritis', 'A15': 'Tuberculosis', 'B54': 'Malaria',
+  'B05': 'Measles', 'B06': 'Rubella', 'B34': 'Viral infection',
+  // Chapter II — Neoplasms
+  'C00': 'Malignant neoplasm of lip', 'C50': 'Breast cancer', 'C67': 'Bladder cancer',
+  // Chapter III — Blood
+  'D50': 'Iron deficiency anaemia', 'D64': 'Anaemia',
+  // Chapter IV — Endocrine / Metabolic
+  'E10': 'Type 1 diabetes mellitus', 'E11': 'Type 2 diabetes mellitus',
+  'E14': 'Diabetes mellitus', 'E39': 'Urinary disorder', 'E66': 'Obesity',
+  // Chapter V — Mental
+  'F32': 'Depressive episode', 'F41': 'Anxiety disorder',
+  // Chapter VI — Nervous
+  'G43': 'Migraine', 'G44': 'Headache',
+  // Chapter VII — Eye
+  'H00': 'Hordeolum / chalazion', 'H10': 'Conjunctivitis', 'H52': 'Refractive error',
+  // Chapter VIII — Ear
+  'H66': 'Otitis media', 'H71': 'Cholesteatoma',
+  // Chapter IX — Circulatory
+  'I10': 'Hypertension', 'I20': 'Angina', 'I25': 'Ischaemic heart disease',
+  'I50': 'Heart failure', 'I63': 'Stroke',
+  // Chapter X — Respiratory
+  'J00': 'Common cold', 'J02': 'Acute pharyngitis', 'J03': 'Acute tonsillitis',
+  'J06': 'Upper respiratory tract infection', 'J18': 'Pneumonia',
+  'J20': 'Acute bronchitis', 'J30': 'Allergic rhinitis', 'J45': 'Asthma',
+  // Chapter XI — Digestive
+  'K02': 'Dental caries', 'K05': 'Periodontal disease', 'K21': 'GERD',
+  'K25': 'Gastric ulcer', 'K29': 'Gastritis', 'K35': 'Appendicitis',
+  'K37': 'Appendicitis', 'K57': 'Diverticular disease', 'K80': 'Cholelithiasis',
+  // Chapter XII — Skin
+  'L02': 'Cutaneous abscess / furuncle', 'L03': 'Cellulitis',
+  'L20': 'Atopic dermatitis', 'L30': 'Dermatitis',
+  // Chapter XIII — Musculoskeletal
+  'M06': 'Rheumatoid arthritis', 'M10': 'Gout', 'M17': 'Knee arthrosis',
+  'M54': 'Back pain',
+  // Chapter XIV — Genitourinary
+  'N17': 'Acute kidney failure', 'N18': 'Chronic kidney disease',
+  'N39': 'Urinary tract infection', 'N40': 'Benign prostatic hyperplasia',
+  // Chapter XV — Pregnancy
+  'O10': 'Hypertensive disorders in pregnancy', 'O20': 'Haemorrhage in pregnancy',
+  'O80': 'Normal delivery', 'O82': 'Caesarean section',
+  // Chapter XIX — Injury
+  'S00': 'Superficial injury of head', 'S72': 'Fracture of femur',
+  'T14': 'Injury', 'T78': 'Adverse effects',
+  // Chapter XXI — Z codes
+  'Z00': 'General medical examination', 'Z30': 'Contraceptive management',
+  'Z34': 'Antenatal care',
+};
+
+/** Return the most specific label for a given ICD-10 code, matching longest prefix. */
+export function icd10Label(code: string): string {
+  const upper = code.toUpperCase().replace('.', '');
+  // Try 4-char, then 3-char prefix
+  return ICD10_COMMON_LABELS[upper.slice(0, 4)]
+    || ICD10_COMMON_LABELS[upper.slice(0, 3)]
+    || '';
+}
+
+/**
  * Extract all medical codes from text.
  * Returns { cptCodes, icd10Codes, hcpcsCodes, allCodes }
  */

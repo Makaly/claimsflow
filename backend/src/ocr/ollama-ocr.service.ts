@@ -21,7 +21,22 @@ const VISION_MODEL = process.env.OLLAMA_VISION_MODEL || 'moondream';
 // on CPU, so prefer it unless a GPU-class model is explicitly configured.
 const MODEL_PRIORITY = ['moondream', 'llava', 'llama3.2-vision', 'llava:13b'];
 
-const EXTRACT_PROMPT = `Look at this medical invoice image carefully. Read every line of text visible. Tell me: 1) Patient/client name 2) Provider/clinic name 3) Invoice or receipt number 4) Date 5) Total amount 6) Any diagnosis or treatment listed. Be specific with exact values you see.`;
+const EXTRACT_PROMPT = `You are reading a Kenyan medical insurance invoice. Extract every field visible. Look carefully at headers, labels, and tables.
+
+Return these values exactly as printed:
+1. Patient full name (look for "Patient:", "Patient Name:", "Bill To:", "Name:", or the name at the top after the provider)
+2. Patient registration / hospital number (look for "Patient No.", "Reg No.", "OP No.", "Account Number:", "IP No.")
+3. AK / membership / HMN number (look for "AK Number:", "HMN NO.", "Membership No.", "Member No.", any code starting with AK followed by digits)
+4. Provider / hospital name (usually the largest text at the very top)
+5. Invoice or receipt number (look for "Invoice No.", "Receipt No.", "Inv#", or codes like Nyr/13277)
+6. Invoice date
+7. Total amount billed to insurance / sponsor (look for "Sponsor Coverage", "Amount Due", "Grand Total")
+8. Service or visit date
+9. Diagnosis or reason for visit (look for "Diagnosis:", "Reason for Visit:", "Complaint:", ICD-10 codes like E39)
+10. Treatment or procedure performed
+
+Be specific. Use exact text from the document. Empty string if not found.`;
+
 
 @Injectable()
 export class OllamaOcrService implements OnModuleInit {
@@ -103,7 +118,9 @@ export class OllamaOcrService implements OnModuleInit {
   /** Extract invoice fields from a single image (base64 PNG) */
   private async extractFromImage(imageBase64: string, modelOverride?: string): Promise<Partial<ParsedInvoice>> {
     const model = modelOverride || this.activeModel || VISION_MODEL;
-    const prompt = 'Extract all fields from this medical invoice. Return ONLY valid JSON: {"patientName":"","membershipNumber":"","providerName":"","invoiceNumber":"","invoiceDate":"","invoiceAmount":0,"serviceDate":"","diagnosis":"","treatment":"","confidence":0.9}';
+    const prompt = `You are reading a Kenyan medical insurance invoice. Extract every visible field. For Aga Khan invoices look for "Patient Name:", "Bill To:", "AK Number:", "HMN NO.", "Account Number:", "Sponsor Coverage", "Diagnosis:".
+Return ONLY valid JSON with no extra text:
+{"patientName":"","patientId":"","membershipNumber":"","providerName":"","invoiceNumber":"","invoiceDate":"","invoiceAmount":0,"serviceDate":"","diagnosis":"","treatment":"","insuranceCompany":"","accountName":"","confidence":0.9}`;
 
     // llama3.2-vision requires the /api/chat endpoint
     const isLlama32 = model.startsWith('llama3.2-vision');
@@ -161,6 +178,7 @@ export class OllamaOcrService implements OnModuleInit {
         const json = JSON.parse(m[0]);
         return {
           patientName:      json.patientName      || '',
+          patientId:        json.patientId        || '',
           membershipNumber: json.membershipNumber || '',
           providerName:     json.providerName     || '',
           invoiceNumber:    json.invoiceNumber    || '',
@@ -168,7 +186,9 @@ export class OllamaOcrService implements OnModuleInit {
           invoiceAmount:    parseFloat(json.invoiceAmount) || 0,
           serviceDate:      json.serviceDate      || '',
           diagnosis:        json.diagnosis        || '',
-          treatment:        json.treatment        || '',
+          treatment:        json.treatment        || json.diagnosis || '',
+          insuranceCompany: json.insuranceCompany || '',
+          accountName:      json.accountName      || '',
           confidence:       parseFloat(json.confidence) || 0.85,
         };
       }

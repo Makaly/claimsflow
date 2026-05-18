@@ -8,7 +8,7 @@ import * as path from 'path';
 import {
   INVOICE_NUMBER_PATTERNS, INVOICE_DATE_PATTERNS, TOTAL_AMOUNT_PATTERNS,
   LINE_ITEM_PATTERNS, PATIENT_NAME_PATTERNS, PATIENT_ID_PATTERNS,
-  MEMBERSHIP_PATTERNS, PROVIDER_PATTERNS, DIAGNOSIS_PATTERNS,
+  MEMBERSHIP_PATTERNS, PROVIDER_PATTERNS, DIAGNOSIS_PATTERNS, icd10Label,
   SERVICE_DATE_PATTERNS, INSURANCE_PATTERNS, ACCOUNT_PATTERNS,
   extractMedicalCodes,
 } from './invoice-patterns';
@@ -1004,6 +1004,10 @@ export class OcrService {
     // Prefer CPT codes from dedicated extraction; fall back to generic procedureCode
     const finalProcedureCode = medicalCodes.cptCodes[0] || (finalDiagnosisCode ? '99214' : '');
 
+    // If no free-text diagnosis was extracted but we have an ICD-10 code, expand it to a
+    // human-readable label (e.g. E39 → "Urinary disorder") so the claim card is not blank.
+    const finalDiagnosis = result.diagnosis || (finalDiagnosisCode ? icd10Label(finalDiagnosisCode) : '');
+
     return {
       patientName: result.patientName || 'Unknown Patient',
       patientId: result.patientId || '',
@@ -1013,14 +1017,14 @@ export class OcrService {
       invoiceDate: result.invoiceDate || '',
       invoiceAmount: result.invoiceAmount || 0,
       serviceDate: result.serviceDate || result.invoiceDate || '',
-      diagnosis: result.diagnosis || '',
+      diagnosis: finalDiagnosis,
       diagnosisCode: finalDiagnosisCode,
       procedureCode: finalProcedureCode,
       cptCodes: medicalCodes.cptCodes,
       icd10Codes: medicalCodes.icd10Codes,
       hcpcsCodes: medicalCodes.hcpcsCodes,
       allMedicalCodes: medicalCodes.allCodes,
-      treatment: result.diagnosis || '',
+      treatment: finalDiagnosis,
       insuranceCompany: result.insuranceCompany || '',
       accountName: result.accountName || '',
       confidence: result.confidence,
