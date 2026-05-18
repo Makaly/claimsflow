@@ -3,7 +3,6 @@ version: 2.1
 # ── Orbs ──────────────────────────────────────────────────────────────────────
 orbs:
   node: circleci/node@5.2.0
-  python: circleci/python@2.1.1
 
 # ── Reusable commands ─────────────────────────────────────────────────────────
 commands:
@@ -81,25 +80,27 @@ jobs:
     resource_class: medium
     steps:
       - checkout
-      - python/install-packages:
-          pkg-manager: pip
-          app-dir: ml-sidecar
-          pip-dependency-file: requirements.txt
+      - run:
+          name: Verify Python version
+          command: python --version
+      - run:
+          name: Install dependencies
+          command: pip install --upgrade pip && pip install -r requirements.txt
+          working_directory: ml-sidecar
       - run:
           name: Lint (flake8, non-blocking)
-          command: |
-            pip install flake8 --quiet
-            flake8 ml-sidecar --max-line-length=120 --ignore=E501,W503 || true
+          command: pip install flake8 --quiet && flake8 . --max-line-length=120 --ignore=E501,W503 || true
+          working_directory: ml-sidecar
       - run:
-          name: Smoke-test FastAPI app imports
+          name: Smoke-test imports
           command: |
-            cd ml-sidecar
             python -c "
             import fastapi, uvicorn, sklearn, numpy, pydantic, scipy, PIL
-            print('sklearn:', sklearn.__version__)
-            print('numpy:', numpy.__version__)
-            print('All ML sidecar imports OK')
+            print('sklearn :', sklearn.__version__)
+            print('numpy   :', numpy.__version__)
+            print('All imports OK')
             "
+          working_directory: ml-sidecar
 
   # ── Docker lint ──────────────────────────────────────────────────────────────
   lint-docker:
