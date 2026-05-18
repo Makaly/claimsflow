@@ -22,7 +22,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:seed": "ts-node prisma/seed.ts",
-    "simulate": "ts-node prisma/simulate.ts"
+    "simulate": "ts-node prisma/simulate.ts",
+    "backfill:encrypt": "ts-node -r tsconfig-paths/register src/scripts/backfill-encrypt-sensitive-fields.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.0",

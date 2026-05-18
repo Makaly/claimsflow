@@ -9,8 +9,11 @@ import { decryptField, encryptField } from '../common/services/field-encryption'
  * codebase keeps using plain string assignments.
  */
 const ENCRYPTED_FIELDS: Record<string, ReadonlyArray<string>> = {
-  Claim:         ['diagnosis', 'treatment'],
-  OcrExtraction: ['diagnosis'],
+  // GDPR Art. 9 / KDPA s.44-46: health data must be encrypted at rest.
+  // All string fields below are encrypted by the write middleware and
+  // decrypted transparently on read. Add new fields here — never inline.
+  Claim:         ['diagnosis', 'treatment', 'rejectionReason'],
+  OcrExtraction: ['diagnosis', 'memberName', 'patientName'],
 };
 
 type AnyObject = Record<string, any>;
