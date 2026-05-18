@@ -3540,7 +3540,7 @@ export default function BatchUpload() {
                               <div className="rounded-md border bg-background p-3 space-y-2">
                                 <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Windows</p>
                                 <a
-                                  href="https://github.com/Makaly/claimsflow/releases/tag/scan-agent-latest"
+                                  href="https://github.com/Makaly/claimsflow/releases/download/scan-agent-latest/ClaimsFlow-Scan-Agent-Setup.exe"
                                   target="_blank"
                                   rel="noreferrer"
                                   className="inline-flex items-center gap-2 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold px-3 py-1.5 transition-colors"
