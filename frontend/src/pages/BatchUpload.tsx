@@ -2067,6 +2067,11 @@ export default function BatchUpload() {
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null)
   const [capturedDataUrl, setCapturedDataUrl] = useState<string | null>(null)
   const [cameraError, setCameraError] = useState<string | null>(null)
+
+  // ── Local scan agent (localhost:7420) ──────────────────────────────────────
+  const AGENT_URL = 'http://127.0.0.1:7420'
+  const [agentAvailable, setAgentAvailable] = useState<boolean | null>(null) // null = checking
+
   const [scanDpi, setScanDpi] = useState('300')
   const [scanMode, setScanMode] = useState('Color')
   const [scanning, setScanning] = useState(false)
@@ -2444,7 +2449,21 @@ export default function BatchUpload() {
     setScannersLoading(true)
     setScanError(null)
     try {
-      const { data } = await api.get('/scanner/devices')
+      const data = await (async () => {
+        // Try the local scan agent first — works even on cloud-hosted deployments
+        try {
+          const r = await fetch(`${AGENT_URL}/health`, { signal: AbortSignal.timeout(1500) })
+          if (r.ok) {
+            setAgentAvailable(true)
+            const sr = await fetch(`${AGENT_URL}/scanners`)
+            return await sr.json()
+          }
+        } catch { /* agent not running — fall through to backend */ }
+        setAgentAvailable(false)
+        const { data: d } = await api.get('/scanner/devices')
+        return d
+      })()
+
       const devs: ScannerDevice[] = data.devices ?? []
       setScanners(devs)
       setDriverAvailable(data.driverAvailable ?? data.saneAvailable ?? true)
@@ -2469,24 +2488,43 @@ export default function BatchUpload() {
     setScanning(true)
     setScanError(null)
     try {
-      const resp = await api.post(
-        '/scanner/scan',
-        { deviceId: selectedScanner, resolution: parseInt(scanDpi, 10), mode: scanMode },
-        { responseType: 'blob' },
-      )
       const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-      const file = new File([resp.data], `scan-${ts}.pdf`, { type: 'application/pdf' })
+      let blob: Blob
+
+      if (agentAvailable) {
+        // Route through local agent — scanner is on the user's machine
+        const resp = await fetch(`${AGENT_URL}/scan`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deviceId: selectedScanner, resolution: parseInt(scanDpi, 10), mode: scanMode }),
+        })
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}))
+          throw new Error(err.error ?? 'Scan failed')
+        }
+        blob = await resp.blob()
+      } else {
+        // On-premises: scanner is on the server
+        const resp = await api.post(
+          '/scanner/scan',
+          { deviceId: selectedScanner, resolution: parseInt(scanDpi, 10), mode: scanMode },
+          { responseType: 'blob' },
+        )
+        blob = resp.data
+      }
+
+      const file = new File([blob], `scan-${ts}.pdf`, { type: 'application/pdf' })
       setUploadedFiles(prev => [...prev, file])
       const sid = session?.sessionId ?? `ses-${Date.now()}`
       upsertSession({ sessionId: sid })
       cacheFile(sid, file).catch(() => {})
       setInputTab('upload')
     } catch (err: any) {
-      setScanError(err?.response?.data?.message ?? 'Scan failed. Check scanner connection and try again.')
+      setScanError(err?.message ?? err?.response?.data?.message ?? 'Scan failed. Check scanner connection and try again.')
     } finally {
       setScanning(false)
     }
-  }, [selectedScanner, scanning, scanDpi, scanMode, session, upsertSession])
+  }, [agentAvailable, selectedScanner, scanning, scanDpi, scanMode, session, upsertSession])
 
   // ── Camera helpers ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -3405,50 +3443,153 @@ export default function BatchUpload() {
                       </div>
                     ) : cloudHostedScanner ? (
                       <div className="space-y-4">
-                        {/* hidden canvas used for frame capture */}
+                        {/* hidden canvas — always mounted for frame capture */}
                         <canvas ref={canvasRef} className="hidden" />
 
-                        {!cameraActive && !capturedDataUrl && (
-                          <div className="rounded-xl border-2 border-dashed border-violet-200 dark:border-violet-800 p-6 text-center space-y-3">
-                            <Camera className="h-10 w-10 text-violet-400 mx-auto" />
-                            <div>
-                              <p className="text-sm font-semibold">Scan with your camera</p>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                Point your device camera at the document — the photo is converted to an image file and processed identically to an uploaded PDF.
+                        {/* ── Local agent running → full TWAIN/SANE/ISIS scanner UI ── */}
+                        {agentAvailable === true && !cameraActive && !capturedDataUrl && (
+                          <>
+                            {scannersLoading ? (
+                              <div className="flex items-center justify-center py-8">
+                                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                                <span className="ml-2 text-sm text-muted-foreground">Detecting scanners…</span>
+                              </div>
+                            ) : scanners.length === 0 ? (
+                              <div className="rounded-xl border-2 border-dashed p-8 text-center">
+                                <WifiOff className="h-8 w-8 text-muted-foreground/40 mx-auto mb-3" />
+                                <p className="text-sm font-medium text-muted-foreground">No scanners detected</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Connect a scanner via USB or network and click Refresh.<br />
+                                  Supports TWAIN, WIA, SANE, and ISIS-compatible devices.
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="space-y-2">
+                                {scanners.map(s => (
+                                  <label
+                                    key={s.id}
+                                    className={cn(
+                                      'flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all',
+                                      selectedScanner === s.id
+                                        ? 'border-violet-400 bg-violet-50/50 dark:bg-violet-950/20'
+                                        : 'border-border hover:border-violet-300/60',
+                                    )}
+                                  >
+                                    <input type="radio" name="scanner-device" value={s.id}
+                                      checked={selectedScanner === s.id}
+                                      onChange={() => setSelectedScanner(s.id)}
+                                      className="accent-violet-600" />
+                                    <Printer className="h-5 w-5 text-violet-600 shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium truncate">{s.model}</p>
+                                      <p className="text-[11px] text-muted-foreground font-mono truncate">{s.id}</p>
+                                    </div>
+                                    {selectedScanner === s.id && (
+                                      <Badge variant="secondary" className="text-[10px] shrink-0">Selected</Badge>
+                                    )}
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+                            {scanners.length > 0 && (
+                              <div className="grid grid-cols-2 gap-3 pt-1">
+                                <div className="space-y-1.5">
+                                  <Label className="text-xs">Resolution</Label>
+                                  <Select value={scanDpi} onValueChange={setScanDpi}>
+                                    <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="75">75 DPI — Draft</SelectItem>
+                                      <SelectItem value="150">150 DPI — Fast</SelectItem>
+                                      <SelectItem value="300">300 DPI — Standard</SelectItem>
+                                      <SelectItem value="600">600 DPI — High quality</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label className="text-xs">Color Mode</Label>
+                                  <Select value={scanMode} onValueChange={setScanMode}>
+                                    <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="Color">Color</SelectItem>
+                                      <SelectItem value="Gray">Grayscale</SelectItem>
+                                      <SelectItem value="Lineart">Black &amp; White</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-800 px-3 py-2">
+                              <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse shrink-0" />
+                              <span className="text-xs text-green-700 dark:text-green-400 font-medium">Scan Agent connected — TWAIN / SANE / ISIS ready</span>
+                            </div>
+                          </>
+                        )}
+
+                        {/* ── Agent not running → instructions + camera fallback ── */}
+                        {agentAvailable === false && !cameraActive && !capturedDataUrl && (
+                          <div className="space-y-3">
+                            <div className="rounded-lg border border-violet-200 bg-violet-50/60 dark:bg-violet-950/20 dark:border-violet-800 p-4 space-y-2.5">
+                              <p className="text-sm font-semibold flex items-center gap-2">
+                                <Printer className="h-4 w-4 text-violet-600 shrink-0" />
+                                Connect your TWAIN / SANE / ISIS scanner
+                              </p>
+                              <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
+                                <li>Open a terminal on your computer</li>
+                                <li>
+                                  Run:{'  '}
+                                  <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-[11px]">
+                                    cd scan-agent &amp;&amp; npm install &amp;&amp; npm start
+                                  </code>
+                                </li>
+                                <li>Click <strong>Refresh</strong> above — your scanner will appear</li>
+                              </ol>
+                              <p className="text-[11px] text-muted-foreground">
+                                Supports all TWAIN, WIA, ISIS (Kodak Alaris, Panasonic), SANE, Epson, HP, Canon, Fujitsu, and network scanners.
                               </p>
                             </div>
-                            <Button
-                              onClick={startCamera}
-                              className="bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white gap-2"
-                            >
-                              <Camera className="h-4 w-4" />
-                              Open Camera
-                            </Button>
-                            {cameraError && (
-                              <p className="text-xs text-red-500 dark:text-red-400 flex items-center gap-1 justify-center">
-                                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />{cameraError}
-                              </p>
-                            )}
-                            <p className="text-xs text-muted-foreground">
-                              Or{' '}
-                              <button className="underline font-medium" onClick={() => setInputTab('upload')}>
-                                upload a scanned PDF
-                              </button>{' '}
-                              saved from Windows Fax &amp; Scan, Apple Image Capture, or your scanner's app.
-                            </p>
+                            <div className="relative flex items-center gap-2">
+                              <div className="flex-1 border-t" />
+                              <span className="text-xs text-muted-foreground shrink-0">or use your camera</span>
+                              <div className="flex-1 border-t" />
+                            </div>
+                            <div className="rounded-xl border-2 border-dashed border-blue-200 dark:border-blue-800 p-5 text-center space-y-3">
+                              <Camera className="h-8 w-8 text-blue-400 mx-auto" />
+                              <div>
+                                <p className="text-sm font-semibold">Camera scan</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                  Point your device camera at the document — processed identically to an uploaded PDF.
+                                </p>
+                              </div>
+                              <Button
+                                onClick={startCamera}
+                                variant="outline"
+                                className="gap-2 border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                              >
+                                <Camera className="h-4 w-4" />
+                                Open Camera
+                              </Button>
+                              {cameraError && (
+                                <p className="text-xs text-red-500 dark:text-red-400 flex items-center gap-1 justify-center">
+                                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />{cameraError}
+                                </p>
+                              )}
+                            </div>
                           </div>
                         )}
 
+                        {/* ── Checking agent status ── */}
+                        {agentAvailable === null && !cameraActive && !capturedDataUrl && (
+                          <div className="flex items-center justify-center py-8">
+                            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                            <span className="ml-2 text-sm text-muted-foreground">Checking for local scan agent…</span>
+                          </div>
+                        )}
+
+                        {/* ── Camera active: live preview ── */}
                         {cameraActive && !capturedDataUrl && (
                           <div className="space-y-3">
                             <div className="relative rounded-xl overflow-hidden bg-black aspect-video">
-                              <video
-                                ref={videoRef}
-                                autoPlay
-                                playsInline
-                                muted
-                                className="w-full h-full object-cover"
-                              />
+                              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
                               <div className="absolute inset-0 border-2 border-violet-400/40 rounded-xl pointer-events-none" />
                             </div>
                             <div className="flex gap-2">
@@ -3467,6 +3608,7 @@ export default function BatchUpload() {
                           </div>
                         )}
 
+                        {/* ── Captured: review before submitting ── */}
                         {capturedDataUrl && (
                           <div className="space-y-3">
                             <div className="relative rounded-xl overflow-hidden border">
@@ -3489,6 +3631,28 @@ export default function BatchUpload() {
                               </Button>
                             </div>
                           </div>
+                        )}
+
+                        {/* ── Scan button when agent is connected ── */}
+                        {agentAvailable === true && scanners.length > 0 && !cameraActive && !capturedDataUrl && (
+                          <>
+                            {scanError && (
+                              <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 p-3 text-sm text-red-700 dark:text-red-400 flex items-center gap-2">
+                                <AlertTriangle className="h-4 w-4 shrink-0" />{scanError}
+                              </div>
+                            )}
+                            <Button
+                              className="w-full bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white gap-2 h-11"
+                              disabled={!selectedScanner || scanning}
+                              onClick={handleScan}
+                            >
+                              {scanning ? (
+                                <><Loader2 className="h-4 w-4 animate-spin" />Scanning document…</>
+                              ) : (
+                                <><ScanLine className="h-4 w-4" />Scan Document</>
+                              )}
+                            </Button>
+                          </>
                         )}
                       </div>
                     ) : !driverAvailable ? (

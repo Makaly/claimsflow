@@ -1,0 +1,20 @@
+{
+  "name": "claimsflow-scan-agent",
+  "version": "1.0.0",
+  "description": "Local scan agent for ClaimsFlow — bridges TWAIN / SANE / WIA / ISIS scanners to the web UI over localhost",
+  "main": "agent.js",
+  "scripts": {
+    "start": "node agent.js",
+    "dev": "node agent.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "pdfkit": "^0.15.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": ["scanner", "twain", "sane", "wia", "isis", "claimsflow"],
+  "license": "MIT"
+}
