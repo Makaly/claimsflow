@@ -161,10 +161,14 @@ jobs:
           name: Bundle Node.js + agent.js into Windows .exe (pkg)
           command: |
             mkdir -p dist
+            # Build without GZip compression — packed binaries are a top trigger
+            # for Windows Defender false-positives on unsigned pkg-bundled exes.
             npx @yao-pkg/pkg agent.js \
               --target node20-win-x64 \
               --output dist/claimsflow-scan-agent.exe \
-              --compress GZip
+              --no-bytecode \
+              --public \
+              --public-packages "*"
             test -f dist/claimsflow-scan-agent.exe || (echo "pkg failed" && exit 1)
             ls -lh dist/claimsflow-scan-agent.exe
           working_directory: scan-agent

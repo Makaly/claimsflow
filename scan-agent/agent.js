@@ -28,6 +28,15 @@ const ALLOWED_ORIGINS = [
 // ── Express setup ───────────────────────────────────────────────────────────
 const app = express();
 app.use(express.json({ limit: '2mb' }));
+
+// Chrome Private Network Access (PNA): public-origin HTTPS pages calling
+// localhost must receive Access-Control-Allow-Private-Network: true in the
+// preflight, otherwise the fetch is blocked silently. Set it on every response.
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Private-Network', 'true');
+  next();
+});
+
 app.use(cors({
   origin: (origin, cb) => {
     // Allow requests with no origin (e.g. curl) and all localhost variants
@@ -37,6 +46,9 @@ app.use(cors({
     cb(new Error(`CORS: origin '${origin}' not allowed`));
   },
   credentials: true,
+  // Allow the preflight to advertise PNA support
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Content-Disposition'],
 }));
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
