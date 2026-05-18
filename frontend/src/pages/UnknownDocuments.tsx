@@ -56,20 +56,21 @@ export default function UnknownDocuments() {
         window.open(blobUrlsRef.current[doc.id], '_blank')
         return
       }
-      const baseUrl = import.meta.env.VITE_API_URL || '/api'
-      const token = localStorage.getItem('token')
-      const res = await fetch(`${baseUrl}/unknown-documents/${doc.id}/file`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (res.status === 404) {
-        setMissingFileIds(prev => new Set([...prev, doc.id]))
-        toast.error('Original file no longer on disk', {
-          description: 'This record can be safely deleted — the source file was in a temporary folder that has been cleaned up.',
-        })
+      let blob: Blob
+      try {
+        const { data } = await api.get(`/unknown-documents/${doc.id}/file`, { responseType: 'blob' })
+        blob = data
+      } catch (err: any) {
+        if (err?.response?.status === 404) {
+          setMissingFileIds(prev => new Set([...prev, doc.id]))
+          toast.error('Original file no longer on disk', {
+            description: 'This record can be safely deleted — the source file was in a temporary folder that has been cleaned up.',
+          })
+        } else {
+          throw err
+        }
         return
       }
-      if (!res.ok) throw new Error(`Server returned ${res.status}`)
-      const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       blobUrlsRef.current[doc.id] = url
       window.open(url, '_blank')

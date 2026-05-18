@@ -23,6 +23,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
 import { rbacService, Role, Permission, UserRole } from '@/services/rbacService'
 import { formatDate, getInitials } from '@/lib/utils'
+import api from '@/services/api'
 
 interface FormState {
   name: string
@@ -170,11 +171,8 @@ export default function Roles() {
     if (!editing) return
     setUsersLoading(true)
     try {
-      const token = localStorage.getItem('token')
       const [usersRes, urs] = await Promise.all([
-        fetch('/api/users?limit=500', {
-          headers: { Authorization: `Bearer ${token}` },
-        }).then((r) => (r.ok ? r.json() : { users: [] })),
+        api.get('/users?limit=500').then(({ data }) => data).catch(() => ({ users: [] })),
         rbacService.getRole(editing.id),
       ])
       setAllUsers(Array.isArray(usersRes.users) ? usersRes.users : [])

@@ -550,6 +550,7 @@ export default function Providers() {
           blob = data
         } catch { setOcrText('Could not load document for OCR.'); setOcrLoading(false); return }
       }
+      if (!blob) { setOcrText('Could not load document for OCR.'); setOcrLoading(false); return }
       const isPdf = selectedProvider.proofDocumentName.toLowerCase().endsWith('.pdf')
       if (isPdf) {
         const arrayBuffer = await blob.arrayBuffer()

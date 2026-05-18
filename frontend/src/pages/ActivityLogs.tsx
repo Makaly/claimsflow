@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/select'
 import { formatDateTime } from '@/lib/utils'
 import { Pagination } from '@/components/Pagination'
+import api from '@/services/api'
 
 interface ActivityLog {
   id: string
@@ -154,7 +155,6 @@ export default function ActivityLogs() {
   const [pageSize, setPageSize] = useState(20)
 
   const fetchLogs = useCallback(async (off = 0) => {
-    const token = localStorage.getItem('token')
     const params = new URLSearchParams({
       limit: String(PAGE_SIZE),
       offset: String(off),
@@ -163,15 +163,10 @@ export default function ActivityLogs() {
       ...(statusFilter !== 'all' && { status: statusFilter }),
     })
     try {
-      const res = await fetch(`/api/activity-logs?${params}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setLogs(Array.isArray(data.logs) ? data.logs : DEMO_LOGS)
-        setTotal(data.total ?? DEMO_LOGS.length)
-        setOffset(off)
-      }
+      const { data } = await api.get(`/activity-logs?${params}`)
+      setLogs(Array.isArray(data.logs) ? data.logs : DEMO_LOGS)
+      setTotal(data.total ?? DEMO_LOGS.length)
+      setOffset(off)
     } catch { /* keep current data */ }
   }, [search, actionFilter, statusFilter])
 

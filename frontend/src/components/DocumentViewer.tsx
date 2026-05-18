@@ -944,8 +944,7 @@ export function DocumentViewer({ bytes, url, ready = true, filename = 'document'
       if (bytes) {
         blob = new Blob([new Uint8Array(bytes)], { type: mimeType || 'application/octet-stream' })
       } else if (url) {
-        const token = localStorage.getItem('token')
-        const r = await fetch(url, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined)
+        const r = await fetch(url, { credentials: 'include' })
         blob = await r.blob()
       } else return
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob)

@@ -397,17 +397,12 @@ export default function FraudQueue() {
   // ── Evidence upload helper ─────────────────────────────────────────────────
   const uploadEvidenceFiles = async (claimId: string): Promise<void> => {
     if (evidenceFiles.length === 0) return
-    const token = localStorage.getItem('token')
     for (const file of evidenceFiles) {
       const fd = new FormData()
       fd.append('file', file)
       fd.append('claimId', claimId)
       fd.append('documentType', 'supporting')
-      await fetch('/api/documents/upload', {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: fd,
-      }).catch(() => {})
+      await api.post('/documents/upload', fd).catch(() => {})
     }
   }
 

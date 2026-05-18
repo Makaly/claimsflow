@@ -88,10 +88,7 @@ export default function Payment() {
   }
 
   const exportCsv = async (id: string, adviceNumber: string) => {
-    const res = await fetch(`/api/payment/advices/${id}/export`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-    })
-    const blob = await res.blob()
+    const { data: blob } = await api.get(`/payment/advices/${id}/export`, { responseType: 'blob' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url

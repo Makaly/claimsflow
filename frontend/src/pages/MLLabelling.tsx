@@ -80,12 +80,7 @@ export default function MLLabelling() {
   const downloadFile = async (path: string, filename: string) => {
     setExporting(true)
     try {
-      const token = localStorage.getItem('token')
-      const res = await fetch(`/api${path}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (!res.ok) throw new Error('Export failed')
-      const blob = await res.blob()
+      const { data: blob } = await api.get(path, { responseType: 'blob' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url

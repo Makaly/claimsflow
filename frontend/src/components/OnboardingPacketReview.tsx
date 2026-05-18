@@ -4,6 +4,7 @@ import {
   Building2, Calendar, Award, Handshake, Users,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import api from '@/services/api'
 
 /**
  * Read-only summary of a provider's onboarding packet, shown inside the admin
@@ -16,11 +17,8 @@ export function OnboardingPacketReview({ providerId }: { providerId: string }) {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    fetch(`/api/providers/${providerId}/onboarding-packet`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-    })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (!cancelled) { setPacket(d); setLoading(false) } })
+    api.get(`/providers/${providerId}/onboarding-packet`)
+      .then(({ data }) => { if (!cancelled) { setPacket(data); setLoading(false) } })
       .catch(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [providerId])

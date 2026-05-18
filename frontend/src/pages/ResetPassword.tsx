@@ -7,6 +7,7 @@ import { ShieldCheck, Lock, Loader2, AlertCircle, CheckCircle2, Eye, EyeOff } fr
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import api from '@/services/api'
 
 const schema = z.object({
   password: z.string().min(8, 'Password must be at least 8 characters'),
@@ -35,13 +36,7 @@ export default function ResetPassword() {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch('/api/auth/reset-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, password: data.password }),
-      })
-      const body = await res.json()
-      if (!res.ok) throw new Error(body.message || 'Reset failed')
+      await api.post('/auth/reset-password', { token, password: data.password })
       setDone(true)
       setTimeout(() => navigate('/login'), 3000)
     } catch (e: any) {

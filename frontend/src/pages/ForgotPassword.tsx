@@ -18,6 +18,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import api from '@/services/api'
 
 const schema = z.object({
   email: z.string().email('Enter a valid email address'),
@@ -39,11 +40,7 @@ export default function ForgotPassword() {
     setError('')
     try {
       // Best-effort request; backend endpoint may not exist in demo environments.
-      await fetch('/api/auth/forgot-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: data.email }),
-      }).catch(() => null)
+      await api.post('/auth/forgot-password', { email: data.email }).catch(() => null)
       setSentTo(data.email)
     } catch (err: any) {
       setError(err?.message || 'Unable to send reset link. Please try again.')
@@ -56,11 +53,7 @@ export default function ForgotPassword() {
     if (!sentTo) return
     setLoading(true)
     try {
-      await fetch('/api/auth/forgot-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: sentTo }),
-      }).catch(() => null)
+      await api.post('/auth/forgot-password', { email: sentTo }).catch(() => null)
     } finally {
       setLoading(false)
     }

@@ -581,14 +581,11 @@ export default function DocumentClassifierEditor() {
     if (!template?.sampleFilePath) return
     setPdfLoading(true); setPdfError(null)
     try {
-      const token = localStorage.getItem('token')
-      const response = await fetch(`/api/document-classifiers/${id}/sample`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      })
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-
-      const arrayBuffer = await response.arrayBuffer()
-      const contentType = response.headers.get('Content-Type') || ''
+      const { data: arrayBuffer, headers: resHeaders } = await api.get(
+        `/document-classifiers/${id}/sample`,
+        { responseType: 'arraybuffer' },
+      )
+      const contentType = resHeaders['content-type'] || ''
       const isImage = template.sampleFileName
         ? /\.(jpe?g|png)$/i.test(template.sampleFileName)
         : contentType.startsWith('image/')
