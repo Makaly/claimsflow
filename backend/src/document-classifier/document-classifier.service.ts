@@ -551,11 +551,29 @@ Focus on: invoice/claim numbers, dates, amounts, patient demographics, provider 
     } catch (err) { this.rethrowAnthropicError(err, 'classifyAndExtract/classify'); }
 
     const classifyInput = (classifyResp!.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')?.input ?? {}) as any;
-    const matchedId: string | null = classifyInput.templateId && classifyInput.templateId !== 'none'
-      ? classifyInput.templateId : null;
+    const rawTemplateId: string = classifyInput.templateId ?? '';
+    this.logger.log(`Classifier raw response: templateId="${rawTemplateId}" confidence=${classifyInput.confidence ?? '?'}`);
+
+    let matchedId: string | null = null;
+    if (rawTemplateId && rawTemplateId !== 'none') {
+      // Primary: model returned the UUID directly
+      if (templates.some((t) => t.id === rawTemplateId)) {
+        matchedId = rawTemplateId;
+      } else {
+        // Fallback: model returned the template name instead of the UUID
+        const byName = templates.find(
+          (t) => t.name.toLowerCase() === rawTemplateId.toLowerCase()
+               || t.specificProvider?.toLowerCase() === rawTemplateId.toLowerCase(),
+        );
+        if (byName) {
+          this.logger.warn(`Classifier returned name "${rawTemplateId}" instead of UUID — resolved to ${byName.id}`);
+          matchedId = byName.id;
+        }
+      }
+    }
 
     if (!matchedId) {
-      this.logger.log('No template matched — recording unknown document');
+      this.logger.log(`No template matched (model returned "${rawTemplateId}") — recording unknown document`);
       try {
         const rec = await this.unknownDocService.recordUnknown({
           filePath,
@@ -572,7 +590,10 @@ Focus on: invoice/claim numbers, dates, amounts, patient demographics, provider 
     }
 
     const matchedTemplate = templates.find((t) => t.id === matchedId);
-    if (!matchedTemplate) return empty;
+    if (!matchedTemplate) {
+      this.logger.warn(`Classifier matched ID "${matchedId}" not found in loaded templates`);
+      return empty;
+    }
 
     this.logger.log(`Matched template: "${matchedTemplate.name}" (conf=${(classifyInput.confidence ?? 0).toFixed(2)})`);
 

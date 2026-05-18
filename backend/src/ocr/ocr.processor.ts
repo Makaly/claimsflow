@@ -66,7 +66,10 @@ export class OcrProcessor extends WorkerHost {
           this.logger.log(`No classifier template matched for document ${documentId} — using Tesseract/Ollama`);
         }
       } catch (err: any) {
-        this.logger.warn(`Classifier skipped for ${documentId}: ${err?.message}`);
+        this.logger.warn(`Classifier skipped for ${documentId}: ${err?.message ?? err}`);
+        if (err?.status || err?.response) {
+          this.logger.warn(`Classifier API response: status=${err?.status} body=${JSON.stringify(err?.response?.data ?? err?.error ?? {}).slice(0, 200)}`);
+        }
       }
 
       // ── Step 2: Tesseract/Ollama — fills any gaps the classifier missed ────
