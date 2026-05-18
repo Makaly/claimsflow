@@ -74,7 +74,7 @@ export class AuthService {
   }
 
   async login(loginDto: LoginDto) {
-    const { email, password } = loginDto;
+    const { email, password, rememberMe } = loginDto;
 
     const user = await this.prisma.user.findUnique({
       where: { email },
@@ -98,6 +98,12 @@ export class AuthService {
       );
     }
 
+    // Check isActive before bcrypt so we don't reset the lockout counter for
+    // inactive accounts or waste CPU on the hash comparison.
+    if (!user.isActive) {
+      throw new UnauthorizedException('Account is inactive');
+    }
+
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
@@ -116,10 +122,6 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    if (!user.isActive) {
-      throw new UnauthorizedException('Account is inactive');
-    }
-
     // Reset lockout state and record login time on success
     await this.prisma.user.update({
       where: { id: user.id },
@@ -132,19 +134,32 @@ export class AuthService {
     return {
       user: { ...result, failedLoginAttempts: 0, lockedUntil: null },
       access_token,
+      rememberMe: !!rememberMe,
     };
   }
 
   async validateUser(email: string, password: string): Promise<any> {
-    const user = await this.prisma.user.findUnique({
-      where: { email },
-    });
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) return null;
+    if (user.deletedAt) return null;
+    if (!user.isActive) return null;
+    if (user.lockedUntil && user.lockedUntil > new Date()) return null;
 
-    if (user && (await bcrypt.compare(password, user.password))) {
-      const { password: _, ...result } = user;
-      return result;
+    const valid = await bcrypt.compare(password, user.password);
+    if (!valid) {
+      const attempts = (user.failedLoginAttempts ?? 0) + 1;
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          failedLoginAttempts: attempts,
+          ...(attempts >= 5 && { lockedUntil: new Date(Date.now() + 15 * 60_000) }),
+        },
+      });
+      return null;
     }
-    return null;
+
+    const { password: _, ...result } = user;
+    return result;
   }
 
   async getProfile(userId: string) {

@@ -26,16 +26,18 @@ export class AuthController {
     const result = await this.authService.login(loginDto);
     const isProduction = process.env.NODE_ENV === 'production';
     // In production the frontend (claimsflow-frontend.onrender.com) calls the
-    // backend (claimsflow-backend.onrender.com) cross-origin — Render's static
-    // CDN does not proxy HTTP. SameSite=None;Secure is required so browsers
-    // send the cookie on credentialed cross-origin requests. In dev the Vite
-    // proxy makes requests same-origin, so Lax is fine (and Secure cannot be
-    // set without HTTPS).
+    // backend (claimsflow-backend.onrender.com) cross-origin — SameSite=None;Secure
+    // is required so browsers send the cookie on credentialed cross-origin requests.
+    // In dev the Vite proxy makes requests same-origin, so Lax is fine.
+    // rememberMe extends the cookie from 1 day to 30 days.
+    const maxAge = result.rememberMe
+      ? 30 * 24 * 60 * 60 * 1000   // 30 days
+      : 24 * 60 * 60 * 1000;        // 1 day (default)
     res.cookie('access_token', result.access_token, {
       httpOnly: true,
       secure: isProduction,
       sameSite: isProduction ? 'none' : 'lax',
-      maxAge: 24 * 60 * 60 * 1000,
+      maxAge,
       path: '/',
     });
     return result;
@@ -113,9 +115,10 @@ export class AuthController {
   }
 
   @Post('logout')
-  @UseGuards(JwtAuthGuard)
   @HttpCode(200)
-  async logout(@Request() req, @Response({ passthrough: true }) res: any) {
+  // No JwtAuthGuard — cookie must be clearable even when the token has already
+  // expired. Clearing a cookie on an unauthenticated request is always safe.
+  async logout(@Response({ passthrough: true }) res: any) {
     const isProduction = process.env.NODE_ENV === 'production';
     res.clearCookie('access_token', {
       httpOnly: true,
