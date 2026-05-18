@@ -12,43 +12,54 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **`rememberMe` on login** — `POST /auth/login` now accepts an optional
   `rememberMe` boolean. When `true`, the `access_token` HttpOnly cookie is
   issued with a 30-day `maxAge` instead of the default 24-hour window. The
-  `LoginDto` is updated with an `@IsBoolean() @IsOptional()` decorator so the
-  field is validated when present and silently ignored when absent.
+  `LoginDto` carries a new `@IsBoolean() @IsOptional()` field; the flag is
+  validated when present and silently ignored when absent.
 
-### Changed
-
-- **`POST /auth/logout` no longer requires authentication** — the `JwtAuthGuard`
-  was removed from the logout endpoint. Attempting to clear an already-expired
-  cookie with a guarded endpoint returned a 401 and left the cookie in place;
-  removing the guard ensures the browser-side cookie is always cleared even
-  after token expiry.
-
-### Fixed
-
-- **Account inactive check moved before bcrypt** — `AuthService.login()` now
-  short-circuits with `401 Account is inactive` before calling `bcrypt.compare`.
-  Previously the expensive hash comparison ran first, wasting CPU and
-  incrementing the failed-login counter for locked/inactive accounts.
-- **`validateUser` hardened against soft-deleted and locked accounts** —
-  `deletedAt`, `isActive`, and `lockedUntil` are now checked before the password
-  hash comparison. Failed attempts increment `failedLoginAttempts` and lock the
-  account for 15 minutes after 5 consecutive failures.
-
----
-
-### Added
-
-- **OCR knowledge base `GET /classifier/zone-hits/best-values`** — new endpoint
-  backed by `getBestKnownValues()` that returns the highest-quality known value
-  per field for a given document type (confirmed-correct hits first, then
-  high-confidence recent extractions). Designed to pre-populate fields on
-  re-uploads of the same template without a second round-trip.
+- **OCR knowledge base `GET /classifier/zone-hits/best-values`** — returns the
+  highest-quality known value per field for a given document type
+  (confirmed-correct hits first, then high-confidence recent extractions).
+  Designed to pre-populate fields on re-uploads of the same template without a
+  second round-trip.
 
 - **`templateId` surfaced in OCR extraction result** — the matched classifier
   template ID is now included in the OCR response payload so the frontend can
   immediately query the knowledge-base endpoint without an extra lookup.
 
+### Changed
+
+- **`POST /auth/logout` no longer requires authentication** — the `JwtAuthGuard`
+  was removed from the logout endpoint. Attempting to clear an already-expired
+  cookie with a guarded route returned a 401 and left the cookie in place;
+  removing the guard ensures the browser-side cookie is always cleared, even
+  after token expiry.
+
+- **Frontend session management centralised through `authStore` and Axios** —
+  `useAuthStore.logout()` is now asynchronous: it calls `POST /auth/logout` to
+  clear the server-side HttpOnly cookie before wiping local state. All `fetch()`
+  call sites across the frontend have been migrated to the shared Axios `api`
+  instance (configured with `withCredentials: true`), eliminating the manual
+  `Authorization: Bearer …` header pattern and direct `localStorage` token
+  reads. The 401 interceptor uses a lazy import to avoid a circular dependency
+  between `api.ts` and `authStore.ts`, and skips logout logic on the
+  `/auth/logout` and `/auth/login` endpoints to prevent redirect loops on
+  expired-session requests.
+
+- **Session validated on every app boot** — `AppRoutes` calls `fetchProfile()`
+  unconditionally on mount (previously only when `user` was absent). This detects
+  stale `localStorage` user objects whose HttpOnly cookie has since expired on
+  the first render, rather than waiting for an authenticated API call to fail.
+
 ### Fixed
+
+- **Account inactive check moved before bcrypt** — `AuthService.login()` now
+  short-circuits with `401 Account is inactive` before calling `bcrypt.compare`,
+  avoiding a wasted hash comparison and spurious failed-attempt counter increment
+  for inactive or suspended accounts.
+
+- **`validateUser` hardened against soft-deleted and locked accounts** —
+  `deletedAt`, `isActive`, and `lockedUntil` are now checked before the password
+  hash comparison. Failed attempts increment `failedLoginAttempts` and lock the
+  account for 15 minutes after 5 consecutive failures.
 
 - **Batch upload did not trigger OCR or fraud detection** — `BatchSubmissionService`
   stored documents but never enqueued an OCR job, so the `OcrProcessor` (which
@@ -57,10 +68,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   immediately after each document is persisted. The Fraud column now populates
   for all batch-uploaded claims.
 
-- **`dateOfService` blank for admission invoices** — `dateOfService` / `admissionDate`
-  zone-mapped values were not forwarded to the `serviceDate` claim field. The
-  merge step now includes both aliases, ensuring service dates on admission forms
-  are written to the claim record.
+- **`dateOfService` blank for admission invoices** — `dateOfService` /
+  `admissionDate` zone-mapped values were not forwarded to the `serviceDate`
+  claim field. The merge step now includes both aliases, ensuring service dates
+  on admission forms are written to the claim record.
 
 - **`sane` missing from production Docker image** — the `sane` package was
   installed in the builder stage but omitted from the runtime stage of
