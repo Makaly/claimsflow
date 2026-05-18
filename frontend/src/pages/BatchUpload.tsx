@@ -3528,24 +3528,41 @@ export default function BatchUpload() {
                         {/* ── Agent not running → instructions + camera fallback ── */}
                         {agentAvailable === false && !cameraActive && !capturedDataUrl && (
                           <div className="space-y-3">
-                            <div className="rounded-lg border border-violet-200 bg-violet-50/60 dark:bg-violet-950/20 dark:border-violet-800 p-4 space-y-2.5">
+                            <div className="rounded-lg border border-violet-200 bg-violet-50/60 dark:bg-violet-950/20 dark:border-violet-800 p-4 space-y-3">
                               <p className="text-sm font-semibold flex items-center gap-2">
                                 <Printer className="h-4 w-4 text-violet-600 shrink-0" />
-                                Connect your TWAIN / SANE / ISIS scanner
+                                Connect your physical scanner
                               </p>
-                              <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
-                                <li>Open a terminal on your computer</li>
-                                <li>
-                                  Run:{'  '}
-                                  <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-[11px]">
-                                    cd scan-agent &amp;&amp; npm install &amp;&amp; npm start
-                                  </code>
-                                </li>
-                                <li>Click <strong>Refresh</strong> above — your scanner will appear</li>
+                              <p className="text-xs text-muted-foreground">
+                                Install the <strong>ClaimsFlow Scan Agent</strong> — a small service that runs on your computer and exposes your TWAIN, WIA, ISIS, and SANE-compatible scanners to the web UI.
+                              </p>
+                              {/* Windows installer */}
+                              <div className="rounded-md border bg-background p-3 space-y-2">
+                                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Windows</p>
+                                <a
+                                  href="https://github.com/Makaly/claimsflow/releases/tag/scan-agent-latest"
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-2 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold px-3 py-1.5 transition-colors"
+                                >
+                                  <Download className="h-3.5 w-3.5" />
+                                  Download ClaimsFlow-Scan-Agent-Setup.exe
+                                </a>
+                                <p className="text-[10px] text-muted-foreground">
+                                  Installs as a Windows service. Supports TWAIN, WIA, ISIS (Kodak Alaris, Fujitsu, Panasonic), Epson, HP, Canon, and network scanners.
+                                </p>
+                              </div>
+                              {/* Linux/Mac */}
+                              <div className="rounded-md border bg-background p-3 space-y-1.5">
+                                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Linux / macOS</p>
+                                <code className="block bg-muted px-2 py-1.5 rounded text-[11px] font-mono">
+                                  cd scan-agent &amp;&amp; npm install &amp;&amp; npm start
+                                </code>
+                              </div>
+                              <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+                                <li>Install the agent using one of the options above</li>
+                                <li>Click <strong>Refresh</strong> — your scanner will appear in the list</li>
                               </ol>
-                              <p className="text-[11px] text-muted-foreground">
-                                Supports all TWAIN, WIA, ISIS (Kodak Alaris, Panasonic), SANE, Epson, HP, Canon, Fujitsu, and network scanners.
-                              </p>
                             </div>
                             <div className="relative flex items-center gap-2">
                               <div className="flex-1 border-t" />

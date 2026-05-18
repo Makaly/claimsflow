@@ -5,12 +5,22 @@
   "main": "agent.js",
   "scripts": {
     "start": "node agent.js",
-    "dev": "node agent.js"
+    "dev": "node agent.js",
+    "build:win": "npx @yao-pkg/pkg agent.js --target node20-win-x64 --output dist/claimsflow-scan-agent.exe",
+    "build:linux": "npx @yao-pkg/pkg agent.js --target node20-linux-x64 --output dist/claimsflow-scan-agent-linux",
+    "build:mac": "npx @yao-pkg/pkg agent.js --target node20-macos-x64 --output dist/claimsflow-scan-agent-mac"
+  },
+  "pkg": {
+    "assets": [],
+    "scripts": []
   },
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.19.2",
     "pdfkit": "^0.15.0"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "^5.13.0"
   },
   "engines": {
     "node": ">=18"

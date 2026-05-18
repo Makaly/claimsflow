@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  WinSW service descriptor for ClaimsFlow Scan Agent.
+  Installed by the NSIS setup wizard to $INSTDIR\winsw.xml.
+  WinSW reads this file from the same directory as winsw.exe.
+-->
+<service>
+  <id>ClaimsFlowScanAgent</id>
+  <name>ClaimsFlow Scan Agent</name>
+  <description>Bridges TWAIN / WIA / ISIS / SANE scanners to the ClaimsFlow web UI at http://127.0.0.1:7420</description>
+
+  <!-- The bundled exe produced by pkg -->
+  <executable>%BASE%\claimsflow-scan-agent.exe</executable>
+
+  <startmode>Automatic</startmode>
+  <delayedAutoStart>false</delayedAutoStart>
+
+  <!-- Restart on failure: 3 attempts with 60-second delay -->
+  <onfailure action="restart" delay="60 sec"/>
+  <onfailure action="restart" delay="60 sec"/>
+  <onfailure action="none"/>
+  <resetFailureAfter>1 hour</resetFailureAfter>
+
+  <!-- Environment -->
+  <env name="SCAN_AGENT_PORT" value="7420"/>
+
+  <!-- Rolling log: keep 4 × 10 MB files -->
+  <logpath>%BASE%\logs</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>4</keepFiles>
+  </log>
+</service>
