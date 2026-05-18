@@ -20,8 +20,16 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('user')
-      window.location.replace('/login')
+      // Skip logout logic for the logout endpoint itself to avoid an infinite
+      // cycle (expired token → 401 on /auth/logout → tries logout again → …).
+      const url: string = error.config?.url ?? ''
+      if (!url.includes('/auth/logout') && !url.includes('/auth/login')) {
+        // Import lazily to avoid circular dep: api ← authStore ← api.
+        import('@/store/authStore').then(({ useAuthStore }) => {
+          useAuthStore.getState().logout()
+          window.location.replace('/login')
+        })
+      }
     }
     return Promise.reject(error)
   }

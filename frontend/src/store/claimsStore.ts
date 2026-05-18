@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import api from '@/services/api'
 
 export interface ClaimRecord {
   id: string
@@ -140,22 +141,17 @@ interface ClaimsState {
 // Best-effort server delete: swallows errors so local state still updates
 // when backend is unavailable (demo mode) but reports any failures in console.
 async function deleteOnServer(ids: string[]): Promise<Set<string>> {
-  const token = localStorage.getItem('token')
-  if (!token) return new Set(ids) // no auth: treat all as local-only
   const deleted = new Set<string>()
   await Promise.all(ids.map(async (id) => {
     // Skip ephemeral/demo IDs that never reached the server (not UUIDs)
     const looksLikeServerId = /^[0-9a-f-]{10,}$/i.test(id)
     if (!looksLikeServerId) { deleted.add(id); return }
     try {
-      const res = await fetch(`/api/claims/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (res.ok || res.status === 404) deleted.add(id)
-      else console.warn(`Failed to delete claim ${id}: HTTP ${res.status}`)
-    } catch (err) {
-      console.warn(`Network error deleting claim ${id}`, err)
+      await api.delete(`/claims/${id}`)
+      deleted.add(id)
+    } catch (err: any) {
+      if (err?.response?.status === 404) deleted.add(id)
+      else console.warn(`Failed to delete claim ${id}:`, err?.response?.status ?? err)
     }
   }))
   return deleted
@@ -196,20 +192,13 @@ export const useClaimsStore = create<ClaimsState>()(
       ),
 
       fetchFromServer: async () => {
-        const token = localStorage.getItem('token')
-        if (!token) return
         try {
-          const res = await fetch('/api/claims?limit=500', {
-            headers: { Authorization: `Bearer ${token}` },
-          })
-          if (res.ok) {
-            const data = await res.json()
-            const list: any[] = Array.isArray(data) ? data : Array.isArray(data.claims) ? data.claims : []
-            // Replace unconditionally on a successful fetch — an empty response is
-            // a legitimate "no claims for this user," not a failure. Preserving the
-            // prior cache would leak another user's claims after a session switch.
-            set({ claims: list.map(mapBackendClaim), serverLoaded: true })
-          }
+          const { data } = await api.get('/claims?limit=500')
+          const list: any[] = Array.isArray(data) ? data : Array.isArray(data.claims) ? data.claims : []
+          // Replace unconditionally on a successful fetch — an empty response is
+          // a legitimate "no claims for this user," not a failure. Preserving the
+          // prior cache would leak another user's claims after a session switch.
+          set({ claims: list.map(mapBackendClaim), serverLoaded: true })
         } catch { /* keep local */ }
       },
     }),

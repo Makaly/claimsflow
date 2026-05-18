@@ -86,7 +86,7 @@ export default function Login() {
     setLoading(true)
     setError('')
     try {
-      const result = await authService.login(data)
+      const result = await authService.login({ ...data, rememberMe })
       login(result.user, result.access_token)
       navigate('/')
     } catch (err: any) {

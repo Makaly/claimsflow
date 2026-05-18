@@ -134,7 +134,6 @@ export default function Profile() {
     try { return JSON.parse(localStorage.getItem('notif_prefs') || '{}') } catch { return {} }
   })
 
-  const token = () => localStorage.getItem('token')
   const displayName = user?.name || 'User'
   const roleLabel = user?.role?.replace(/_/g, ' ') || '—'
   const memberSince = user?.createdAt
@@ -142,13 +141,8 @@ export default function Profile() {
 
   // ── Fetch the authoritative per-user profile from the backend on mount ─
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch('/api/auth/profile', {
-          headers: { Authorization: `Bearer ${token()}` },
-        })
-        if (!res.ok) return
-        const data = await res.json()
+    api.get('/auth/profile')
+      .then(({ data }) => {
         setName(data.name || '')
         setExtras({
           phone: data.phone,
@@ -162,8 +156,8 @@ export default function Profile() {
         })
         setAvatarDataUrl(data.avatarUrl)
         setUser?.({ ...(user as any), ...data })
-      } catch { /* offline — fall back to cached user fields */ }
-    })()
+      })
+      .catch(() => { /* offline — fall back to cached user fields */ })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -186,27 +180,21 @@ export default function Profile() {
     setSavingProfile(true)
     setProfileMsg(null)
     try {
-      const res = await fetch('/api/auth/profile', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
-        body: JSON.stringify({
-          name,
-          phone: extras.phone,
-          jobTitle: extras.title,
-          department: extras.department,
-          location: extras.location,
-          timezone: extras.timezone,
-          language: extras.language,
-          bio: extras.bio,
-          avatarUrl: avatarDataUrl,
-        }),
+      const { data: updated } = await api.patch('/auth/profile', {
+        name,
+        phone: extras.phone,
+        jobTitle: extras.title,
+        department: extras.department,
+        location: extras.location,
+        timezone: extras.timezone,
+        language: extras.language,
+        bio: extras.bio,
+        avatarUrl: avatarDataUrl,
       })
-      if (!res.ok) throw new Error(`Server returned ${res.status}`)
-      const updated = await res.json()
       setUser?.({ ...(user as any), ...updated })
       setProfileMsg({ text: 'Profile saved', ok: true })
     } catch (err: any) {
-      setProfileMsg({ text: err?.message || 'Could not save profile', ok: false })
+      setProfileMsg({ text: err?.response?.data?.message || err?.message || 'Could not save profile', ok: false })
     }
     setSavingProfile(false)
   }
@@ -237,13 +225,7 @@ export default function Profile() {
       setExtras((x) => ({ ...x, avatarUrl: dataUrl }))
 
       // Persist immediately to the backend so the avatar survives reload & shows in Header
-      const res = await fetch('/api/auth/profile', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
-        body: JSON.stringify({ avatarUrl: dataUrl }),
-      })
-      if (!res.ok) throw new Error(`Upload failed (${res.status})`)
-      const updated = await res.json()
+      const { data: updated } = await api.patch('/auth/profile', { avatarUrl: dataUrl })
       setUser?.({ ...(user as any), ...updated })
       setProfileMsg({ text: 'Profile picture updated', ok: true })
     } catch (err: any) {
@@ -257,17 +239,9 @@ export default function Profile() {
   const removeAvatar = async () => {
     setAvatarDataUrl(undefined)
     setExtras((x) => ({ ...x, avatarUrl: undefined }))
-    try {
-      const res = await fetch('/api/auth/profile', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
-        body: JSON.stringify({ avatarUrl: null }),
-      })
-      if (res.ok) {
-        const updated = await res.json()
-        setUser?.({ ...(user as any), ...updated })
-      }
-    } catch { /* ignore */ }
+    api.patch('/auth/profile', { avatarUrl: null })
+      .then(({ data: updated }) => setUser?.({ ...(user as any), ...updated }))
+      .catch(() => { /* ignore — local state already cleared */ })
   }
 
   // ── Password change ──────────────────────────────────────────────────
@@ -277,20 +251,11 @@ export default function Profile() {
     setSavingPw(true)
     setPwMsg(null)
     try {
-      const res = await fetch('/api/auth/change-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
-        body: JSON.stringify({ currentPassword: currentPw, newPassword: newPw }),
-      })
-      if (res.ok) {
-        setPwMsg({ text: 'Password updated successfully', ok: true })
-        setCurrentPw(''); setNewPw(''); setConfirmPw('')
-      } else {
-        const data = await res.json().catch(() => ({}))
-        setPwMsg({ text: data.message || 'Failed to change password', ok: false })
-      }
-    } catch {
-      setPwMsg({ text: 'Could not reach the server', ok: false })
+      await api.post('/auth/change-password', { currentPassword: currentPw, newPassword: newPw })
+      setPwMsg({ text: 'Password updated successfully', ok: true })
+      setCurrentPw(''); setNewPw(''); setConfirmPw('')
+    } catch (err: any) {
+      setPwMsg({ text: err?.response?.data?.message || 'Failed to change password', ok: false })
     }
     setSavingPw(false)
   }
@@ -304,10 +269,7 @@ export default function Profile() {
     if (!confirm('Disable two-factor authentication? Your account will be less protected.')) return
     setTwoFaBusy(true)
     try {
-      await fetch('/api/auth/2fa/disable', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token()}` },
-      }).catch(() => null)
+      await api.post('/auth/2fa/disable').catch(() => null)
       setTwoFaEnabled(false)
       if (user) setUser?.({ ...user, twoFactorEnabled: false })
     } finally {
@@ -317,19 +279,13 @@ export default function Profile() {
 
   // ── Sessions ─────────────────────────────────────────────────────────
   const revokeSession = async (id: string) => {
-    await fetch(`/api/auth/sessions/${id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token()}` },
-    }).catch(() => null)
+    await api.delete(`/auth/sessions/${id}`).catch(() => null)
     setSessions(prev => prev.filter(s => s.id !== id))
   }
 
   const revokeAllOthers = async () => {
     if (!confirm('Sign out of all other devices? You will remain signed in here.')) return
-    await fetch('/api/auth/sessions/revoke-others', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token()}` },
-    }).catch(() => null)
+    await api.post('/auth/sessions/revoke-others').catch(() => null)
     setSessions(prev => prev.filter(s => s.current))
   }
 
@@ -876,7 +832,7 @@ function PrivacyAndDataTab() {
     setBusy('delete'); setError(null)
     try {
       await api.delete('/gdpr/account', { data: { confirmation: confirmText } })
-      logout?.()
+      await logout?.()
       navigate('/login', { replace: true })
     } catch (e: any) {
       setError(e?.response?.data?.message || 'Could not erase your account.')

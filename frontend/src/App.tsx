@@ -77,13 +77,17 @@ function AppRoutes() {
   const { isAuthenticated, user, fetchProfile } = useAuthStore()
   const { fetchFromServer, serverLoaded } = useClaimsStore()
 
-  // Re-hydrate user profile when a token exists but user data is absent
-  // (e.g. after a corrupt-localStorage recovery or a hard refresh)
+  // Validate the session against the live HttpOnly cookie on every app boot.
+  // This catches stale localStorage user objects whose cookie has since expired,
+  // and keeps the cached profile in sync with the DB.
+  // The api interceptor handles any 401 by calling logout() + redirecting.
   useEffect(() => {
-    if (isAuthenticated && !user) {
+    if (isAuthenticated) {
       fetchProfile()
     }
-  }, [isAuthenticated, user])
+    // Run once on mount — deliberately omitting deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Load claims from server once after login
   useEffect(() => {

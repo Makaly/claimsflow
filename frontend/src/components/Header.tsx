@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { Moon, Sun, LogOut, User, Settings, Menu } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { useThemeStore } from '@/store/themeStore'
+import api from '@/services/api'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
@@ -18,24 +19,18 @@ export function Header() {
   const { theme, toggleTheme, toggleMobileSidebar } = useThemeStore()
   const avatarUrl = user?.avatarUrl
 
-  // Refresh the cached user on mount so avatar/name/etc. reflect the current DB row
-  // (the login response is snapshotted — if the user updated their profile from
-  // another device/browser, this pulls the authoritative values).
+  // Refresh the cached user on mount so avatar/name/etc. reflect the current DB row.
+  // Uses the Axios instance (withCredentials: true) so the HttpOnly auth cookie is
+  // sent — no dependency on the localStorage token.
   useEffect(() => {
-    const token = localStorage.getItem('token')
-    if (!token) return
-    fetch('/api/auth/profile', { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => {
-        if (r.status === 401) { logout(); navigate('/login'); return null }
-        return r.ok ? r.json() : null
-      })
-      .then((data) => { if (data && user) setUser({ ...user, ...data }) })
-      .catch(() => { /* offline */ })
+    api.get('/auth/profile')
+      .then(({ data }) => { if (user) setUser({ ...user, ...data }) })
+      .catch(() => { /* offline or 401 — the api interceptor handles 401 */ })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handleLogout = () => {
-    logout()
+  const handleLogout = async () => {
+    await logout()
     navigate('/login')
   }
 
