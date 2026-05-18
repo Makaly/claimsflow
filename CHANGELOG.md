@@ -36,9 +36,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
     interpolated into `-Command` to prevent injection). Supports all WIA 1.0
     compatible devices (Epson, HP, Canon, Fujitsu, Kodak Alaris, etc.).
   - `GET /scanner/devices` response shape updated: `saneAvailable: boolean` →
-    `driverAvailable: boolean` + `platform: "linux" | "windows" | "other"`.
-    The frontend reads `driverAvailable` with a fallback to `saneAvailable` for
-    backward compatibility with cached responses.
+    `driverAvailable: boolean` + `platform: "linux" | "windows" | "other"` +
+    optional `cloudHosted: boolean`. The frontend reads `driverAvailable` with
+    a fallback to `saneAvailable` for backward compatibility with cached responses.
+  - Batch Upload UI is now cloud-aware: when the backend reports `cloudHosted: true`
+    (set automatically on Render via `RENDER=true`, or any host with
+    `CLOUD_HOSTED=true`), a blue info panel explains that direct scanner access
+    is unavailable and links the user to the Upload Files tab. The amber
+    driver-not-installed error is reserved for on-premises deployments where a
+    scanner is expected but the driver is genuinely missing.
   - Batch Upload UI driver-error message is now OS-aware: Windows shows WIA /
     Device Manager guidance; Linux shows the `apt install sane-utils` command.
 

@@ -21,13 +21,21 @@ export interface DeviceListResult {
   devices: ScannerDevice[];
   driverAvailable: boolean;
   platform: 'linux' | 'windows' | 'other';
+  cloudHosted?: boolean;
 }
 
 @Injectable()
 export class ScannerService {
   private readonly osPlatform = platform();
+  // Render sets RENDER=true; honour an opt-in override for other cloud hosts
+  private readonly isCloudHosted =
+    process.env.RENDER === 'true' || process.env.CLOUD_HOSTED === 'true';
 
   async listDevices(): Promise<DeviceListResult> {
+    const osPlatform = this.osPlatform === 'win32' ? 'windows' : 'linux';
+    if (this.isCloudHosted) {
+      return { devices: [], driverAvailable: false, platform: osPlatform, cloudHosted: true };
+    }
     if (this.osPlatform === 'win32') return this.listWindowsDevices();
     return this.listLinuxDevices();
   }

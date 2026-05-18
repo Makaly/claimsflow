@@ -2057,6 +2057,7 @@ export default function BatchUpload() {
   const [scannersLoading, setScannersLoading] = useState(false)
   const [driverAvailable, setDriverAvailable] = useState(true)
   const [serverPlatform, setServerPlatform] = useState<'linux' | 'windows' | 'other'>('linux')
+  const [cloudHostedScanner, setCloudHostedScanner] = useState(false)
   const [selectedScanner, setSelectedScanner] = useState('')
   const [scanDpi, setScanDpi] = useState('300')
   const [scanMode, setScanMode] = useState('Color')
@@ -2440,6 +2441,7 @@ export default function BatchUpload() {
       setScanners(devs)
       setDriverAvailable(data.driverAvailable ?? data.saneAvailable ?? true)
       setServerPlatform(data.platform ?? 'linux')
+      setCloudHostedScanner(data.cloudHosted ?? false)
       if (devs.length > 0 && !selectedScanner) setSelectedScanner(devs[0].id)
     } catch {
       setScanners([])
@@ -3314,6 +3316,24 @@ export default function BatchUpload() {
                       <div className="flex items-center justify-center py-8">
                         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                         <span className="ml-2 text-sm text-muted-foreground">Detecting scanners…</span>
+                      </div>
+                    ) : cloudHostedScanner ? (
+                      <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800 p-4">
+                        <div className="flex items-center gap-2 text-blue-700 dark:text-blue-400 font-medium text-sm">
+                          <WifiOff className="h-4 w-4 shrink-0" />
+                          Direct scanner access is not available on cloud-hosted deployments
+                        </div>
+                        <p className="text-blue-600 dark:text-blue-400 text-xs mt-1.5">
+                          Scan your document using any scanner app on your computer (e.g. Windows Fax &amp; Scan,
+                          Apple Image Capture, or your scanner's own software), save it as a PDF, then use{' '}
+                          <button
+                            className="underline font-medium"
+                            onClick={() => setInputTab('upload')}
+                          >
+                            Upload Files
+                          </button>{' '}
+                          to submit it here.
+                        </p>
                       </div>
                     ) : !driverAvailable ? (
                       <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-4">
