@@ -1,0 +1,163 @@
+version: 2.1
+
+# ── Orbs ──────────────────────────────────────────────────────────────────────
+orbs:
+  node: circleci/node@5.2.0
+  python: circleci/python@2.1.1
+
+# ── Reusable commands ─────────────────────────────────────────────────────────
+commands:
+  install_backend:
+    steps:
+      - node/install-packages:
+          pkg-manager: npm
+          app-dir: backend
+          override-ci-command: npm ci --legacy-peer-deps
+
+  install_frontend:
+    steps:
+      - node/install-packages:
+          pkg-manager: npm
+          app-dir: frontend
+
+# ── Jobs ──────────────────────────────────────────────────────────────────────
+jobs:
+
+  # ── Backend build ────────────────────────────────────────────────────────────
+  build-backend:
+    docker:
+      - image: cimg/node:20.19
+    resource_class: medium
+    steps:
+      - checkout
+      - install_backend
+      - run:
+          name: Generate Prisma client
+          command: npx prisma generate
+          working_directory: backend
+      - run:
+          name: Build NestJS
+          command: npm run build
+          working_directory: backend
+      - run:
+          name: Verify dist/main.js
+          command: test -f dist/main.js || (echo "ERROR — dist/main.js not produced" && exit 1)
+          working_directory: backend
+      - persist_to_workspace:
+          root: .
+          paths:
+            - backend/dist
+            - backend/node_modules/.prisma
+
+  # ── Frontend build ───────────────────────────────────────────────────────────
+  build-frontend:
+    docker:
+      - image: cimg/node:20.19
+    resource_class: medium
+    steps:
+      - checkout
+      - install_frontend
+      - run:
+          name: Lint (non-blocking)
+          command: npm run lint || true
+          working_directory: frontend
+      - run:
+          name: Build Vite
+          command: npm run build
+          working_directory: frontend
+      - run:
+          name: Verify dist/index.html
+          command: test -f dist/index.html || (echo "ERROR — Vite dist not produced" && exit 1)
+          working_directory: frontend
+      - persist_to_workspace:
+          root: .
+          paths:
+            - frontend/dist
+
+  # ── ML sidecar (Python 3.12 — matches Dockerfile) ───────────────────────────
+  build-python:
+    docker:
+      - image: cimg/python:3.12
+    resource_class: medium
+    steps:
+      - checkout
+      - python/install-packages:
+          pkg-manager: pip
+          app-dir: ml-sidecar
+          pip-dependency-file: requirements.txt
+      - run:
+          name: Lint (flake8, non-blocking)
+          command: |
+            pip install flake8 --quiet
+            flake8 ml-sidecar --max-line-length=120 --ignore=E501,W503 || true
+      - run:
+          name: Smoke-test FastAPI app imports
+          command: |
+            cd ml-sidecar
+            python -c "
+            import fastapi, uvicorn, sklearn, numpy, pydantic, scipy, PIL
+            print('sklearn:', sklearn.__version__)
+            print('numpy:', numpy.__version__)
+            print('All ML sidecar imports OK')
+            "
+
+  # ── Docker lint ──────────────────────────────────────────────────────────────
+  lint-docker:
+    docker:
+      - image: hadolint/hadolint:latest-debian
+    resource_class: small
+    steps:
+      - checkout
+      - run:
+          name: Lint backend Dockerfile
+          command: hadolint backend/Dockerfile || true
+      - run:
+          name: Lint backend Dockerfile.prod
+          command: hadolint backend/Dockerfile.prod || true
+      - run:
+          name: Lint frontend Dockerfile
+          command: hadolint frontend/Dockerfile || true
+      - run:
+          name: Lint ml-sidecar Dockerfile
+          command: hadolint ml-sidecar/Dockerfile || true
+
+  # ── Dependency audit ─────────────────────────────────────────────────────────
+  audit-deps:
+    docker:
+      - image: cimg/node:20.19
+    resource_class: small
+    steps:
+      - checkout
+      - install_backend
+      - install_frontend
+      - run:
+          name: Audit backend (critical only)
+          command: npm audit --omit=dev --audit-level=critical || true
+          working_directory: backend
+      - run:
+          name: Audit frontend (critical only)
+          command: npm audit --omit=dev --audit-level=critical || true
+          working_directory: frontend
+
+  # ── Secret scan ──────────────────────────────────────────────────────────────
+  scan-secrets:
+    docker:
+      - image: zricethezav/gitleaks:latest
+    resource_class: small
+    steps:
+      - checkout
+      - run:
+          name: Gitleaks secret scan
+          command: gitleaks detect --source . --verbose || true
+
+# ── Workflows ─────────────────────────────────────────────────────────────────
+workflows:
+
+  build-and-test:
+    jobs:
+      - build-backend
+      - build-frontend
+      - build-python
+      - lint-docker
+      - audit-deps
+      - scan-secrets

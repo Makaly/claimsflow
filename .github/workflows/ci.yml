@@ -1,10 +1,9 @@
 name: CI
 
 on:
-  push:
-    branches: [master]
-  pull_request:
-    branches: [master]
+  # CI has moved to CircleCI (.circleci/config.yml).
+  # This workflow is kept as a manual fallback only.
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
