@@ -23,7 +23,56 @@ export interface ClaimFeatureVector {
   fraudSignalCount: number;
   fraudSignalCritical: number;
   resubmissionCount: number;
-  memberNumberPresent: number; // 1 = present, 0 = missing
+  memberNumberPresent: number;
+  // Line-item derived features
+  lineItemCount?: number;
+  arithmeticErrorCount?: number;
+  highRiskItemCount?: number;
+  maxItemPriceDeviation?: number;
+  itemPriceStdDev?: number;
+}
+
+export interface MlLineItem {
+  description: string;
+  quantity?: number;
+  unitPrice?: number;
+  totalPrice?: number;
+  taxAmount?: number;
+  discount?: number;
+  serviceDate?: string;
+  procedureCode?: string;
+  ocrConfidence?: number;
+}
+
+export interface MlLineItemsResult {
+  claimId: string;
+  itemCount: number;
+  results: Array<{
+    lineNumber: number;
+    description: string;
+    fraudRisk: 'low' | 'medium' | 'high';
+    fraudScore: number;
+    flags: string[];
+    arithmeticValid: boolean;
+  }>;
+  invoiceLevelFlags: string[];
+  arithmeticErrors: number;
+  overallRisk: 'low' | 'medium' | 'high';
+  invoiceFraudProbability: number;
+  calculatedTotal: number;
+}
+
+export interface ImageQualityResult {
+  overallScore: number;
+  sharpnessScore: number;
+  brightnessScore: number;
+  contrastScore: number;
+  resolutionScore: number;
+  estimatedDpi: number;
+  orientation: string;
+  ocrReady: boolean;
+  recommendations: string[];
+  recommendedPipeline: string[];
 }
 
 interface LabeledRow {
@@ -78,6 +127,38 @@ export class MlScoringService {
     });
   }
 
+  /** Score line items via the ML sidecar's Isolation Forest endpoint. */
+  async scoreLineItems(
+    claimId: string,
+    lineItems: MlLineItem[],
+    invoiceTotal: number,
+  ): Promise<MlLineItemsResult | null> {
+    if (!this.enabled || lineItems.length === 0) return null;
+    try {
+      return await this.fetch<MlLineItemsResult>('/score-line-items', {
+        method: 'POST',
+        body: JSON.stringify({ claimId, lineItems, invoiceTotal }),
+      });
+    } catch (err: any) {
+      this.logger.warn(`Line item ML scoring unavailable: ${err.message}`);
+      return null;
+    }
+  }
+
+  /** Score an image's OCR-readiness via the ML sidecar. */
+  async scoreImageQuality(imageBase64: string, filename?: string): Promise<ImageQualityResult | null> {
+    if (!this.enabled) return null;
+    try {
+      return await this.fetch<ImageQualityResult>('/image-quality', {
+        method: 'POST',
+        body: JSON.stringify({ imageBase64, filename }),
+      });
+    } catch (err: any) {
+      this.logger.warn(`Image quality scoring unavailable: ${err.message}`);
+      return null;
+    }
+  }
+
   async getWeights(): Promise<Record<string, any>> {
     if (!this.enabled) return { modelLoaded: false };
     try {
@@ -97,12 +178,17 @@ export class MlScoringService {
   }
 
   private heuristicScore(claimId: string, f: ClaimFeatureVector): MlScoreResult {
+    const itemBoost = Math.min(0.20,
+      (f.highRiskItemCount ?? 0) * 0.05 +
+      (f.arithmeticErrorCount ?? 0) * 0.06,
+    );
     const prob = Math.min(1, (
-      f.fraudSignalCritical * 0.25 +
+      f.fraudSignalCritical * 0.22 +
       f.fraudSignalCount * 0.05 +
-      f.anomalyScore * 0.40 +
+      f.anomalyScore * 0.38 +
       (1 - Math.min(1, f.ocrConfidence)) * 0.10 +
-      (1 - f.memberNumberPresent) * 0.20
+      (1 - f.memberNumberPresent) * 0.18 +
+      itemBoost
     ));
     return {
       claimId,

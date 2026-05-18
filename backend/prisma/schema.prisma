@@ -395,6 +395,7 @@ model Claim {
   documents             Document[]
   edmsData              EdmsDocument?
   ocrData               OcrExtraction?
+  lineItems             InvoiceLineItem[]
   appeals               Appeal[]
   slaBreached           Boolean              @default(false)
   slaBreachedAt         DateTime?
@@ -1091,6 +1092,44 @@ model OcrZoneHit {
   @@index([fieldName])
   @@index([createdAt])
   @@map("ocr_zone_hits")
+}
+
+/// Per-line-item extraction from an invoice.
+/// Each row represents one billed service, drug, or procedure extracted
+/// from the invoice table via layout-aware OCR or a vision model.
+model InvoiceLineItem {
+  id                  String   @id @default(uuid())
+  claimId             String
+  lineNumber          Int?
+  description         String
+  itemName            String?
+  category            String?
+  quantity            Float?
+  unitPrice           Float?
+  totalPrice          Float?
+  taxAmount           Float?
+  discount            Float?
+  currency            String   @default("KES")
+  serviceDate         String?
+  procedureCode       String?
+  // Confidence scores (0-1)
+  ocrConfidence       Float?
+  layoutConfidence    Float?
+  semanticConfidence  Float?
+  overallConfidence   Float?
+  // Fraud detection
+  fraudRisk           String?  // "low" | "medium" | "high"
+  fraudRiskScore      Float?   // 0-1
+  fraudFlags          String[]
+  arithmeticValid     Boolean? // qty × unitPrice ≈ totalPrice
+  rawText             String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  claim               Claim    @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  @@index([claimId])
+  @@index([fraudRisk])
+  @@map("invoice_line_items")
 }
 
 /// Persists the calibrated per-factor weights produced by

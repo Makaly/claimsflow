@@ -44,6 +44,25 @@ const EXTRACT_TOOL: Anthropic.Tool = {
       treatment:        { type: 'string', description: 'Treatment / procedure description' },
       insuranceCompany: { type: 'string', description: 'Insurance company name' },
       accountName:      { type: 'string', description: 'Employer / account / scheme name if shown' },
+      lineItems: {
+        type: 'array',
+        description: 'Every billed line item visible in the invoice table. Extract ALL rows from the billing table.',
+        items: {
+          type: 'object',
+          properties: {
+            description:   { type: 'string', description: 'Service or item description exactly as printed' },
+            quantity:      { type: 'number', description: 'Quantity or units billed (1 if not shown)' },
+            unitPrice:     { type: 'number', description: 'Unit price / rate per item (KES numeric)' },
+            totalPrice:    { type: 'number', description: 'Line total = quantity × unit price (KES numeric)' },
+            taxAmount:     { type: 'number', description: 'VAT or tax on this line item if shown' },
+            discount:      { type: 'number', description: 'Discount applied to this line if shown' },
+            procedureCode: { type: 'string', description: 'CPT / ICD / procedure code for this line if printed' },
+            serviceDate:   { type: 'string', description: 'Date this specific service was rendered YYYY-MM-DD' },
+            confidence:    { type: 'number', description: 'Confidence 0.0-1.0 for this line item extraction' },
+          },
+          required: ['description', 'totalPrice'],
+        },
+      },
       confidence:       { type: 'number', description: 'Your confidence 0.0-1.0 that the extraction above is correct and complete' },
     },
     required: ['patientName', 'providerName', 'invoiceAmount', 'confidence'],
@@ -82,6 +101,25 @@ const MULTI_EXTRACT_TOOL: Anthropic.Tool = {
             treatment:        { type: 'string',  description: 'Treatment / procedure description from MCF Management Plan or invoice line items' },
             insuranceCompany: { type: 'string' },
             accountName:      { type: 'string',  description: 'Employer / scheme name (from MCF or auth letter)' },
+            lineItems: {
+              type: 'array',
+              description: 'Every billed line item from the invoice table for this claim packet. Extract ALL rows.',
+              items: {
+                type: 'object',
+                properties: {
+                  description:   { type: 'string', description: 'Service or item description exactly as printed' },
+                  quantity:      { type: 'number', description: 'Quantity or units billed' },
+                  unitPrice:     { type: 'number', description: 'Unit price per item (KES numeric)' },
+                  totalPrice:    { type: 'number', description: 'Line total (KES numeric)' },
+                  taxAmount:     { type: 'number', description: 'VAT / tax on this line if shown' },
+                  discount:      { type: 'number', description: 'Discount on this line if shown' },
+                  procedureCode: { type: 'string', description: 'CPT / ICD / procedure code for this line' },
+                  serviceDate:   { type: 'string', description: 'Service date YYYY-MM-DD for this line' },
+                  confidence:    { type: 'number', description: 'Confidence 0.0-1.0 for this line extraction' },
+                },
+                required: ['description', 'totalPrice'],
+              },
+            },
             documentPages: {
               type: 'array',
               description: 'Per-page classification for every page in this claim packet',
@@ -151,6 +189,7 @@ For each claim packet:
 • patientName: check MCF "Name:" field (may be handwritten) and invoice header
 • membershipNumber: MCF "Membership No." field, invoice "HMN NO." or "AK Number", auth letter "MEMBER NO:"
 • invoiceNumber: from invoice page only (e.g. Nyr/13277, ZMC2024/024329, UH283003051_3)
+• lineItems: extract EVERY billed row from the invoice table — description, quantity, unit price, and total. Leave empty if no billing table is visible.
 
 For documentPages, classify EVERY page in the packet with its absolute PDF page number (1-based).
 
@@ -165,6 +204,7 @@ PRIORITY — search the entire document for these fields:
 • invoiceAmount: the GRAND TOTAL or AMOUNT DUE — the largest "total" figure on the page
 • diagnosis: look for "Diagnosis:", "Presenting Complaint:", "Assessment:", "Clinical Impression:", or ICD-10 codes (letter + 2-3 digits, e.g. E39, J06.9)
 • membershipNumber: look near "Member No.", "Policy No.", "NHIF No.", "AK No.", "Scheme No."
+• lineItems: extract EVERY row from the billing / charges table — description, quantity, unit price, and line total. If no billing table exists, leave lineItems empty.
 
 Copy all values character-for-character. Leave fields empty if genuinely absent — never guess or approximate.
 Rate your confidence 0.0–1.0 on how clearly all priority fields were visible. Call record_invoice_fields with your results.`;
@@ -400,6 +440,22 @@ export class ClaudeVisionService {
       // Strip document-type header strings that bleed into diagnosis
       const rawDiagnosis = (c.diagnosis || '').replace(DIAGNOSIS_NOISE, '').replace(/\s{2,}/g, ' ').trim();
 
+      const lineItems = Array.isArray(c.lineItems)
+        ? c.lineItems.map((item: any, idx: number) => ({
+            description:   String(item.description || ''),
+            quantity:      item.quantity != null ? Number(item.quantity) : undefined,
+            unitPrice:     item.unitPrice != null ? Number(item.unitPrice) : undefined,
+            totalPrice:    item.totalPrice != null ? Number(item.totalPrice) : undefined,
+            taxAmount:     item.taxAmount != null ? Number(item.taxAmount) : undefined,
+            discount:      item.discount != null ? Number(item.discount) : undefined,
+            procedureCode: item.procedureCode || undefined,
+            serviceDate:   item.serviceDate || undefined,
+            ocrConfidence: item.confidence != null ? Number(item.confidence) : confidence,
+            currency:      'KES',
+            lineNumber:    idx + 1,
+          }))
+        : undefined;
+
       return {
         patientName:      c.patientName      || '',
         patientId:        c.patientId        || '',
@@ -423,6 +479,7 @@ export class ClaudeVisionService {
         rawText:          '',
         pageRange:        c.pageRange || '1',
         documentPages,
+        lineItems,
       };
     });
   }
@@ -481,6 +538,22 @@ export class ClaudeVisionService {
       }
     }
 
+    const lineItems = Array.isArray(fields.lineItems)
+      ? fields.lineItems.map((item: any, idx: number) => ({
+          description:   String(item.description || ''),
+          quantity:      item.quantity != null ? Number(item.quantity) : undefined,
+          unitPrice:     item.unitPrice != null ? Number(item.unitPrice) : undefined,
+          totalPrice:    item.totalPrice != null ? Number(item.totalPrice) : undefined,
+          taxAmount:     item.taxAmount != null ? Number(item.taxAmount) : undefined,
+          discount:      item.discount != null ? Number(item.discount) : undefined,
+          procedureCode: item.procedureCode || undefined,
+          serviceDate:   item.serviceDate || undefined,
+          ocrConfidence: item.confidence != null ? Number(item.confidence) : confidence,
+          currency:      'KES',
+          lineNumber:    idx + 1,
+        }))
+      : undefined;
+
     return {
       patientName:      fields.patientName      || '',
       patientId:        fields.patientId        || '',
@@ -504,6 +577,7 @@ export class ClaudeVisionService {
       rawText:          '',
       pageRange:        '1',
       documentPages:    [],
+      lineItems,
     };
   }
 }

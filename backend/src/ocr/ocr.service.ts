@@ -17,6 +17,30 @@ import { VisionRouterService } from './vision-router.service';
 import { DocumentClassifierService } from '../document-classifier/document-classifier.service';
 import { buildPageHintsMap, PageHintEntry } from './gemini-vision.service';
 
+export interface ExtractedLineItem {
+  description: string
+  itemName?: string
+  category?: string
+  quantity?: number
+  unitPrice?: number
+  totalPrice?: number
+  taxAmount?: number
+  discount?: number
+  currency: string
+  serviceDate?: string
+  procedureCode?: string
+  ocrConfidence?: number
+  layoutConfidence?: number
+  semanticConfidence?: number
+  overallConfidence?: number
+  fraudRisk?: 'low' | 'medium' | 'high'
+  fraudRiskScore?: number
+  fraudFlags?: string[]
+  arithmeticValid?: boolean
+  lineNumber?: number
+  rawText?: string
+}
+
 export interface DocumentPage {
   pageNumber: number;
   category: 'invoice' | 'claim_form' | 'prescription' | 'lab_result' | 'medical_report' | 'discharge_summary' | 'referral' | 'pre_auth' | 'supporting' | 'unknown';
@@ -48,6 +72,7 @@ export interface ParsedInvoice {
   rawText: string;
   pageRange: string;
   documentPages: DocumentPage[];
+  lineItems?: ExtractedLineItem[];
 }
 
 @Injectable()

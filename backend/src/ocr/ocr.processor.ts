@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EoxegenIntegrationService } from '../common/services/eoxegen-integration.service';
 import { DocumentClassifierService } from '../document-classifier/document-classifier.service';
 import { AnomalyScoringService } from '../claims/anomaly-scoring.service';
+import { LineItemFraudService } from '../claims/line-item-fraud.service';
 import { computeFraudSignals, DuplicateClaimRef, CrossProviderMatch } from '../claims/fraud-signals';
 
 // concurrency: 2 — OCR is CPU-bound via Tesseract; more than 2 saturates the process
@@ -19,6 +20,7 @@ export class OcrProcessor extends WorkerHost {
     private eoxegenService: EoxegenIntegrationService,
     private classifierService: DocumentClassifierService,
     private anomalyScoringService: AnomalyScoringService,
+    private lineItemFraudService: LineItemFraudService,
   ) {
     super();
   }
@@ -331,6 +333,19 @@ export class OcrProcessor extends WorkerHost {
             this.anomalyScoringService.scoreClaim(claimId).catch(e =>
               this.logger.warn(`Anomaly scoring failed for ${claimId}: ${e.message}`)
             );
+
+            // Line item fraud analysis — fire-and-forget
+            const allLineItems = invoices.flatMap(inv => inv.lineItems ?? []);
+            if (allLineItems.length > 0) {
+              this.lineItemFraudService.analyseAndPersist(
+                claimId,
+                mergedProviderName || 'Unknown',
+                allLineItems,
+                mergedInvoiceAmount ?? 0,
+              ).catch(e =>
+                this.logger.warn(`Line item fraud analysis failed for ${claimId}: ${e.message}`)
+              );
+            }
           }
         } catch (fraudErr: any) {
           this.logger.warn(`Fraud detection post-OCR failed for claim ${claimId}: ${fraudErr.message}`);
