@@ -13,6 +13,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Save, Mail, RefreshCw, CheckCircle, AlertTriangle, ExternalLink, ScanSearch } from 'lucide-react'
 import DocumentClassifiersTab from '@/components/DocumentClassifiersTab'
+import api from '@/services/api'
 
 export default function Settings() {
   const [searchParams] = useSearchParams()
@@ -34,12 +35,9 @@ export default function Settings() {
   const getAuthUrl = async () => {
     setOauthStatus('loading')
     try {
-      const token = localStorage.getItem('token')
-      const res = await fetch(
-        `/api/email-ingestion/oauth/authorize?redirect_uri=${encodeURIComponent(window.location.origin + '/settings')}`,
-        { headers: { Authorization: `Bearer ${token}` } }
+      const { data } = await api.get(
+        `/email-ingestion/oauth/authorize?redirect_uri=${encodeURIComponent(window.location.origin + '/settings')}`
       )
-      const data = await res.json()
       if (data.authorizationUrl) {
         window.open(data.authorizationUrl, '_blank')
         setOauthStatus('success')
@@ -54,12 +52,7 @@ export default function Settings() {
   const triggerPoll = async () => {
     setPollStatus('loading')
     try {
-      const token = localStorage.getItem('token')
-      const res = await fetch('/api/email-ingestion/trigger-poll', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      const data = await res.json()
+      const { data } = await api.post('/email-ingestion/trigger-poll')
       setLastPollResult(`Processed ${data.processed ?? 0} email(s), found ${data.attachments ?? 0} attachment(s)`)
       setPollStatus('success')
     } catch {

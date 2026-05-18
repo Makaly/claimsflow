@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { FileText, Loader2, AlertTriangle, Download, ExternalLink } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import api from '@/services/api'
 
 export interface InlineDocument {
   id?: string
@@ -50,12 +51,8 @@ export default function InlineDocumentPreview({ documents, emptyHint, className 
 
     ;(async () => {
       try {
-        const token = localStorage.getItem('token')
-        const res = await fetch(`/api/documents/${current.id}/preview`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        })
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const blob = await res.blob()
+        const res = await api.get(`/documents/${current.id}/preview`, { responseType: 'blob' })
+        const blob = res.data as Blob
         if (cancelled) return
         const url = URL.createObjectURL(blob)
         if (lastUrlRef.current) URL.revokeObjectURL(lastUrlRef.current)
@@ -63,7 +60,7 @@ export default function InlineDocumentPreview({ documents, emptyHint, className 
         setObjectUrl(url)
         setMime(blob.type || current.mimetype || null)
       } catch (err: any) {
-        if (!cancelled) setError(err?.message || 'Failed to load document')
+        if (!cancelled) setError(err?.response?.data?.message || err?.message || 'Failed to load document')
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -86,13 +83,9 @@ export default function InlineDocumentPreview({ documents, emptyHint, className 
 
   const download = async () => {
     if (!current?.id) return
-    const token = localStorage.getItem('token')
     try {
-      const res = await fetch(`/api/documents/${current.id}/download`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      })
-      if (!res.ok) return
-      const blob = await res.blob()
+      const res = await api.get(`/documents/${current.id}/download`, { responseType: 'blob' })
+      const blob = res.data as Blob
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url

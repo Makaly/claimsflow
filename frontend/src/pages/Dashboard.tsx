@@ -22,6 +22,7 @@ import { formatCurrency, formatDate, getStatusColor } from '@/lib/utils'
 import { useClaimsStore } from '@/store/claimsStore'
 import { useAuthStore } from '@/store/authStore'
 import ProviderDashboard from './ProviderDashboard'
+import api from '@/services/api'
 
 const STATUS_COLORS: Record<string, string> = {
   approved:     'hsl(160,60%,45%)',
@@ -85,16 +86,14 @@ function CICDashboard() {
 
   const fetchStats = useCallback(async () => {
     setRefreshing(true)
-    const token = localStorage.getItem('token')
-    const h = { Authorization: `Bearer ${token}` }
     try {
-      const [cRes, wRes] = await Promise.all([
-        fetch('/api/claims/statistics', { headers: h }),
-        fetch('/api/workflow/statistics', { headers: h }),
+      const [cRes, wRes] = await Promise.allSettled([
+        api.get('/claims/statistics'),
+        api.get('/workflow/statistics'),
       ])
       const s: ServerStats = { total: 0, approved: 0, pending: 0, rejected: 0, totalAmount: 0 }
-      if (cRes.ok) {
-        const d = await cRes.json()
+      if (cRes.status === 'fulfilled') {
+        const d = cRes.value.data
         s.total          = d.total          ?? 0
         s.approved       = (d.approved ?? 0) + (d.paid ?? 0)
         s.pending        = d.pending        ?? 0
@@ -108,14 +107,14 @@ function CICDashboard() {
         s.fraudHold      = d.fraudHold      ?? 0
         s.fraudConfirmed = d.fraudConfirmed ?? 0
       }
-      if (wRes.ok) {
-        const w = await wRes.json()
+      if (wRes.status === 'fulfilled') {
+        const w = wRes.value.data
         s.initial_review        = w.initialReview        ?? w.initial_review        ?? 0
         s.maker_checker_review  = w.makerCheckerReview   ?? w.maker_checker_review  ?? 0
         s.claims_officer_review = w.claimsOfficerReview  ?? w.claims_officer_review ?? 0
         s.fraud_review          = w.fraudReview          ?? w.fraud_review          ?? 0
       }
-      if (cRes.ok || wRes.ok) {
+      if (cRes.status === 'fulfilled' || wRes.status === 'fulfilled') {
         setServerStats(s)
         setLastRefresh(new Date())
         setCountdown(AUTO_REFRESH_SECS)

@@ -118,13 +118,8 @@ export default function Documents() {
     setThumbsLoading(true)
     setThumbnails([])
     try {
-      const baseUrl = import.meta.env.VITE_API_URL || '/api'
-      const token = localStorage.getItem('token')
-      const res = await fetch(`${baseUrl}/documents/${doc.id}/download`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (!res.ok) throw new Error('Download failed')
-      const arrayBuffer = await res.arrayBuffer()
+      const res = await api.get(`/documents/${doc.id}/download`, { responseType: 'arraybuffer' })
+      const arrayBuffer = res.data as ArrayBuffer
       const pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise
       splitPdfDocRef.current = pdfDoc
       const total = pdfDoc.numPages
@@ -212,23 +207,13 @@ export default function Documents() {
   // ─── Viewer ───────────────────────────────────────────────────
 
   const openViewer = async (doc: Document) => {
-    const baseUrl = import.meta.env.VITE_API_URL || '/api'
-    const token = localStorage.getItem('token')
     setViewerFilename(doc.originalName)
     setViewerOpen(true)
-    // Fetch with auth header and create a blob URL so pdfjsLib can load it
     try {
-      const res = await fetch(`${baseUrl}/documents/${doc.id}/download`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (res.ok) {
-        const blob = await res.blob()
-        setViewerUrl(URL.createObjectURL(blob))
-      } else {
-        // Fallback to direct URL (will 401 without token, but shows error in viewer)
-        setViewerUrl(`${baseUrl}/documents/${doc.id}/download`)
-      }
+      const res = await api.get(`/documents/${doc.id}/download`, { responseType: 'blob' })
+      setViewerUrl(URL.createObjectURL(res.data as Blob))
     } catch {
+      const baseUrl = import.meta.env.VITE_API_URL || '/api'
       setViewerUrl(`${baseUrl}/documents/${doc.id}/download`)
     }
   }

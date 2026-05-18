@@ -16,6 +16,7 @@ import { Separator } from '@/components/ui/separator'
 import { Input } from '@/components/ui/input'
 import { formatDate } from '@/lib/utils'
 import { Pagination } from '@/components/Pagination'
+import api from '@/services/api'
 
 interface PendingProvider {
   id: string
@@ -80,17 +81,8 @@ export default function ProviderApprovals() {
 
   const fetchProviders = async () => {
     try {
-      const token = localStorage.getItem('token')
-      const res = await fetch('/api/providers/approvals/pending', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (res.status === 401) { window.location.href = '/login'; return }
-      if (res.ok) {
-        const data = await res.json()
-        setProviders(Array.isArray(data) ? data : Array.isArray(data?.providers) ? data.providers : [])
-      } else {
-        setProviders([])
-      }
+      const { data } = await api.get('/providers/approvals/pending')
+      setProviders(Array.isArray(data) ? data : Array.isArray(data?.providers) ? data.providers : [])
     } catch {
       setProviders([])
     }
@@ -129,28 +121,17 @@ export default function ProviderApprovals() {
     if (!selectedProvider || !actionType || actionType === 'view') return
     setSubmitting(true)
     try {
-      const token = localStorage.getItem('token')
       const endpoint = actionType === 'approve'
-        ? `/api/providers/${selectedProvider.id}/approve`
-        : `/api/providers/${selectedProvider.id}/reject`
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(actionType === 'approve' ? { notes } : { reason }),
-      })
-      if (res.status === 401) { window.location.href = '/login'; return }
-      if (res.ok) {
-        setProviders(prev => prev.filter(p => p.id !== selectedProvider.id))
-        toast.success(actionType === 'approve'
-          ? `${selectedProvider.name} approved successfully`
-          : `${selectedProvider.name} rejected`)
-        closeAction()
-      } else {
-        const err = await res.json().catch(() => ({}))
-        toast.error(err?.message || `Failed to ${actionType} provider`)
-      }
-    } catch {
-      toast.error('Network error — please try again')
+        ? `/providers/${selectedProvider.id}/approve`
+        : `/providers/${selectedProvider.id}/reject`
+      await api.post(endpoint, actionType === 'approve' ? { notes } : { reason })
+      setProviders(prev => prev.filter(p => p.id !== selectedProvider.id))
+      toast.success(actionType === 'approve'
+        ? `${selectedProvider.name} approved successfully`
+        : `${selectedProvider.name} rejected`)
+      closeAction()
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || `Failed to ${actionType} provider`)
     }
     setSubmitting(false)
   }

@@ -5,6 +5,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { useAuthStore } from '@/store/authStore'
 import { ProviderOnboarding } from './ProviderOnboarding'
+import api from '@/services/api'
 
 interface ProviderInfo {
   name: string
@@ -40,11 +41,9 @@ export function ProviderApprovalGate({ children }: { children: React.ReactNode }
     }
     setRefreshing(true)
     try {
-      const res = await fetch(`/api/providers/${user.providerId}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-      })
-      if (res.ok) setProviderInfo(await res.json())
-    } finally {
+      const { data } = await api.get(`/providers/${user.providerId}`)
+      setProviderInfo(data)
+    } catch { /* tolerate */ } finally {
       setLoading(false)
       setRefreshing(false)
     }
@@ -59,21 +58,11 @@ export function ProviderApprovalGate({ children }: { children: React.ReactNode }
     try {
       const fd = new FormData()
       fd.append('proofDocument', uploadDocFile)
-      const res = await fetch('/api/providers/self-service/proof-document', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-        body: fd,
-      })
-      if (res.ok) {
-        const updated = await res.json()
-        setProviderInfo(prev => prev ? { ...prev, ...updated } : updated)
-        setUploadDocFile(null)
-      } else {
-        const err = await res.json().catch(() => ({}))
-        setUploadDocError(err?.message ?? 'Upload failed')
-      }
+      const { data: updated } = await api.post('/providers/self-service/proof-document', fd)
+      setProviderInfo(prev => prev ? { ...prev, ...updated } : updated)
+      setUploadDocFile(null)
     } catch (e: any) {
-      setUploadDocError(e?.message ?? 'Upload failed')
+      setUploadDocError(e?.response?.data?.message ?? e?.message ?? 'Upload failed')
     } finally {
       setUploadingDoc(false)
     }

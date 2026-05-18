@@ -22,6 +22,7 @@ import { Pagination } from '@/components/Pagination'
 import InlineDocumentPreview from '@/components/InlineDocumentPreview'
 import BulkActionsBar from '@/components/BulkActionsBar'
 import { formatCurrency, formatDate, getPriorityColor } from '@/lib/utils'
+import api from '@/services/api'
 
 function claimNumSubseq(claimNumber: string, query: string): boolean {
   const hay = claimNumber.toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -79,11 +80,7 @@ export default function ClaimsOfficerQueue() {
   useEffect(() => {
     const load = async () => {
       try {
-        const token = localStorage.getItem('token')
-        const headers = { Authorization: `Bearer ${token}` }
-        const res = await fetch('/api/workflow/claims/claims_officer_review', { headers })
-        if (!res.ok) { setClaims([]); return }
-        const data = await res.json()
+        const { data } = await api.get('/workflow/claims/claims_officer_review')
         const list: any[] = Array.isArray(data) ? data : Array.isArray(data?.claims) ? data.claims : []
 
         const enriched = await Promise.all(list.map(async (c: any) => {
@@ -91,17 +88,15 @@ export default function ClaimsOfficerQueue() {
           let makerCheckerApprovedAt: string | undefined
           let makerCheckerComments: string | undefined
           try {
-            const hRes = await fetch(`/api/workflow/approval-history/${c.id}`, { headers })
-            if (hRes.ok) {
-              const approvals: any[] = await hRes.json()
-              const last = [...approvals].reverse().find(
-                a => a.level === 'maker_checker' && a.decision === 'approved'
-              )
-              if (last) {
-                makerCheckerApprovedBy = last.approver?.name || last.approver?.email
-                makerCheckerApprovedAt = last.createdAt
-                makerCheckerComments = last.comments || undefined
-              }
+            const hRes = await api.get(`/workflow/approval-history/${c.id}`)
+            const approvals: any[] = hRes.data
+            const last = [...approvals].reverse().find(
+              a => a.level === 'maker_checker' && a.decision === 'approved'
+            )
+            if (last) {
+              makerCheckerApprovedBy = last.approver?.name || last.approver?.email
+              makerCheckerApprovedAt = last.createdAt
+              makerCheckerComments = last.comments || undefined
             }
           } catch { /* tolerate */ }
 
@@ -140,11 +135,7 @@ export default function ClaimsOfficerQueue() {
     setLoading(true)
     const load = async () => {
       try {
-        const token = localStorage.getItem('token')
-        const headers = { Authorization: `Bearer ${token}` }
-        const res = await fetch('/api/workflow/claims/claims_officer_review', { headers })
-        if (!res.ok) { setClaims([]); return }
-        const data = await res.json()
+        const { data } = await api.get('/workflow/claims/claims_officer_review')
         const list: any[] = Array.isArray(data) ? data : Array.isArray(data?.claims) ? data.claims : []
         setClaims(list.map((c: any) => ({
           id: c.id,
@@ -206,13 +197,12 @@ export default function ClaimsOfficerQueue() {
     setSubmitting(true)
     setActionError(null)
     try {
-      const token = localStorage.getItem('token')
       const endpoints: Record<string, string> = {
-        approve:             '/api/workflow/claims-officer/approve',
-        reject:              '/api/workflow/claims-officer/reject',
-        return_maker_checker:'/api/workflow/claims-officer/return-to-maker-checker',
-        return_provider:     '/api/workflow/claims-officer/return-to-provider',
-        escalate_fraud:      '/api/workflow/claims-officer/escalate-to-fraud',
+        approve:             '/workflow/claims-officer/approve',
+        reject:              '/workflow/claims-officer/reject',
+        return_maker_checker:'/workflow/claims-officer/return-to-maker-checker',
+        return_provider:     '/workflow/claims-officer/return-to-provider',
+        escalate_fraud:      '/workflow/claims-officer/escalate-to-fraud',
       }
       const bodies: Record<string, object> = {
         approve:             { claimId: selectedClaim.id, comments },
@@ -221,26 +211,13 @@ export default function ClaimsOfficerQueue() {
         return_provider:     { claimId: selectedClaim.id, reason: comments, missingDocuments: missingDocs },
         escalate_fraud:      { claimId: selectedClaim.id, reason: comments },
       }
-      const res = await fetch(endpoints[actionType], {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(bodies[actionType]),
-      })
-      if (!res.ok) {
-        let msg = `Request failed (${res.status})`
-        try {
-          const body = await res.json()
-          msg = body?.message || body?.error || msg
-        } catch { /* non-JSON */ }
-        setActionError(res.status === 403 ? `Not authorised: ${msg}` : msg)
-        setSubmitting(false)
-        return
-      }
+      await api.post(endpoints[actionType], bodies[actionType])
       setClaims(prev => prev.filter(c => c.id !== selectedClaim.id))
       setSubmitting(false)
       closeAction()
     } catch (err: any) {
-      setActionError(err?.message || 'Network error — please try again')
+      const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Network error — please try again'
+      setActionError(err?.response?.status === 403 ? `Not authorised: ${msg}` : msg)
       setSubmitting(false)
     }
   }
