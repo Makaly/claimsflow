@@ -55,11 +55,21 @@ export const LINE_ITEM_PATTERNS = [
 export const PATIENT_NAME_PATTERNS = [
   // Aga Khan discharge summary: "Patient: NYIKA,DAVID" — stops at newline, not word boundary
   /\bPatient\s*:\s*([A-Z][^\n\r]{3,40}?)(?=\s*[\n\r]|\s+DOB|\s+Age|\s+Reg|$)/,
+  // "Patient Name:" label (common on Aga Khan outpatient invoices)
+  /Patient\s+Name\s*[:\-]\s*([A-Z][A-Za-z\s.'-]{2,40}?)(?:\s*\n|\s+(?:DOB|Age|Sex|Gender|Reg|Date|No[.:\s]))/i,
+  /Patient\s+Name\s*[:\-]\s*([A-Z][A-Za-z\s.'-]{2,40})/i,
+  // "Bill To:" — used on Aga Khan Nyeri / outpatient receipts
+  /Bill\s+To\s*[:\-]?\s*([A-Z][A-Za-z\s.'-]{3,40}?)(?:\s*\n|\s+(?:Address|P\.?O|Box|Account|Tel|Phone))/i,
+  /Bill\s+To\s*[:\-]?\s*([A-Z][A-Za-z\s.'-]{3,40})/i,
   // Standard single-line with stop lookahead
   /(?:Patient\s*)?Name\s*[:\-]\s*([A-Z][A-Z\s.'-]{2,40}?)(?:\s*\n|\s+(?:Patient|Invoice|Reg|Date|Visit|No[.:\s]|Age|Sex|Gender))/i,
   /(?:Patient\s*)?Name\s*[:\-]\s*([A-Z][A-Z\s.'-]{2,40})/i,
+  // "Client Name:" or "Insured Name:" (Jubilee, AAR formats)
+  /(?:Client|Insured|Beneficiary)\s+Name\s*[:\-]\s*([A-Z][A-Za-z\s.'-]{2,40})/i,
   /(?:Mr\.|Mrs\.|Ms\.|Dr\.)\s+([A-Z][a-zA-Z\s.'-]{3,40})/i,
   /Member\s*Name\s*[:\-]\s*([A-Z][a-zA-Z\s.'-]{2,40})/i,
+  // Aga Khan: name directly after "To:" on a receipt (no extra label)
+  /^To\s*:\s*([A-Z][A-Za-z\s.'-]{3,40})/m,
 ];
 
 // Patient ID / registration number patterns
@@ -95,8 +105,15 @@ export const PROVIDER_PATTERNS = [
 // Diagnosis patterns
 export const DIAGNOSIS_PATTERNS = [
   /(?:Final\s*Diagnosis|Impression|Clinical\s*(?:Diagnosis|Notes?))\s*[:\-]?\s*\n?\s*(.{3,150}?)(?:\n\s*\n|Detailed|Bill|Treatment|$)/is,
+  // "Diagnosis:" or "Dx:" label — with a line-break between label and value (common on Aga Khan forms)
+  /(?:Diagnosis|Dx)\s*[:\-]?\s*\n+\s*(.{3,120}?)(?:\n|$)/is,
   /(?:Diagnosis)\s*[:\-]?\s*\n?\s*(.{3,150}?)(?:\n\s*\n|Invoice|Bill|$)/is,
-  /(?:CELLULITIS|MALARIA|DIABETES|HYPERTENSION|PNEUMONIA|FRACTURE|INFECTION|ULCER|PAIN|ABSCESS|CARIES|GINGIVITIS|PERIODONTITIS|GASTRITIS|ANAEMIA|APPENDICITIS|TONSILLITIS|BRONCHITIS|ASTHMA|ARTHRITIS)[A-Z\s\-]*/i,
+  // "Reason for Visit / Complaint / Presenting Complaint"
+  /(?:Reason\s+for\s+(?:Visit|Consultation)|Chief\s+Complaint|Presenting\s+Complaint|Complaint)\s*[:\-]\s*(.{3,120}?)(?:\n|$)/i,
+  // "Assessment:" or "Clinical Impression:" (discharge summaries)
+  /(?:Assessment|Clinical\s+Impression)\s*[:\-]\s*(.{3,150}?)(?:\n\s*\n|$)/is,
+  // Standalone common diseases — catches invoice line-item descriptions
+  /\b(CELLULITIS|MALARIA|DIABETES(?:\s+MELLITUS)?|HYPERTENSION|PNEUMONIA|FRACTURE|INFECTION|ULCER|ABDOMINAL\s+PAIN|ABSCESS|DENTAL\s+CARIES|GINGIVITIS|PERIODONTITIS|GASTRITIS|ANAEMIA|APPENDICITIS|TONSILLITIS|BRONCHITIS|ASTHMA|ARTHRITIS|URINARY\s+TRACT\s+INFECTION|UTI|UPPER\s+RESPIRATORY\s+(?:TRACT\s+)?INFECTION|URTI|GASTROENTERITIS|ANTENATAL|DIARRHOEA|FEVER|HYPERTENSIVE|TYPHOID|MALNUTRITION|SEPSIS|TRAUMA)\b[A-Z\s\-]*/i,
 ];
 
 // Service/visit date patterns
