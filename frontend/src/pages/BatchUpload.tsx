@@ -250,7 +250,9 @@ const simulateExtractFromPdf = async (file: File, _baseIndex: number): Promise<E
       diagnosisCode: diag.code,
       procedureCode: diag.proc,
       treatment: diag.treatment,
-      aiConfidence: 1,
+      // 0 confidence — never claim AI-extracted on synthetic fallback data.
+      // The UI shows "Fill in fields manually or auto-fill" when confidence is 0.
+      aiConfidence: 0,
       pageRange: pageStart === pageEnd ? `${pageStart}` : `${pageStart}-${pageEnd}`,
     })
   }
@@ -2709,8 +2711,62 @@ export default function BatchUpload() {
           console.error('PDF extraction failed, using filename-based fallback:', err)
           result = await simulateExtractFromPdf(file, i)
         }
+      } else if (isImage) {
+        // Camera captures and image uploads — send to the real OCR backend.
+        // The /ocr/extract endpoint handles images via Tesseract (or the AI
+        // vision model when one is selected).
+        try {
+          const primaryModel = extractionMode === 'ocr' ? 'tesseract' : selectedModel || undefined
+          const extracted = await extractInvoicesFromPdf(file, setOcrProgress, primaryModel)
+          result = {
+            invoices: extracted.invoices.map((inv) => ({
+              patientName:   inv.patientName,
+              patientId:     inv.patientId,
+              memberNumber:  inv.membershipNumber,
+              providerName:  inv.providerName,
+              invoiceNumber: inv.invoiceNumber,
+              invoiceDate:   inv.invoiceDate,
+              invoiceAmount: inv.invoiceAmount,
+              serviceDate:   inv.serviceDate,
+              diagnosis:     inv.diagnosis,
+              diagnosisCode: inv.diagnosisCode,
+              procedureCode: inv.procedureCode,
+              treatment:     inv.treatment,
+              aiConfidence:  inv.confidence ?? 0.5,
+              pageRange:     '1',
+              documentPages: inv.documentPages,
+              lineItems:     inv.lineItems,
+            }))
+          }
+          // Backend returned no invoices — surface an empty extraction rather
+          // than fabricating data. The user reviews and fills in manually.
+          if (result.invoices.length === 0) {
+            result = {
+              invoices: [{
+                patientName: '', patientId: '', memberNumber: '',
+                providerName: '', invoiceNumber: '', invoiceDate: '',
+                invoiceAmount: 0, serviceDate: '',
+                diagnosis: '', diagnosisCode: '', procedureCode: '', treatment: '',
+                aiConfidence: 0, pageRange: '1',
+              }]
+            }
+          }
+        } catch (err) {
+          console.error('Image OCR failed:', err)
+          // On real backend failure, return an empty-field claim with 0 confidence
+          // so the user knows extraction failed and can fill in manually.
+          result = {
+            invoices: [{
+              patientName: '', patientId: '', memberNumber: '',
+              providerName: '', invoiceNumber: '', invoiceDate: '',
+              invoiceAmount: 0, serviceDate: '',
+              diagnosis: '', diagnosisCode: '', procedureCode: '', treatment: '',
+              aiConfidence: 0, pageRange: '1',
+            }]
+          }
+        }
       } else {
-        // For images, use simulated extraction (would need real OCR backend)
+        // Unknown file type (shouldn't happen — dropzone restricts inputs).
         result = await simulateExtractFromPdf(file, i)
       }
 
@@ -3551,6 +3607,12 @@ export default function BatchUpload() {
                                 <p className="text-[10px] text-muted-foreground">
                                   Installs as a Windows service. Supports TWAIN, WIA, ISIS (Kodak Alaris, Fujitsu, Panasonic), Epson, HP, Canon, and network scanners.
                                 </p>
+                                <div className="rounded border border-amber-200 dark:border-amber-800/60 bg-amber-50/70 dark:bg-amber-950/20 px-2 py-1.5 text-[10px] text-amber-700 dark:text-amber-400 flex items-start gap-1.5">
+                                  <AlertTriangle className="h-3 w-3 shrink-0 mt-px" />
+                                  <span>
+                                    Windows SmartScreen may show <strong>&quot;Windows protected your PC&quot;</strong> because this installer is not code-signed. Click <strong>More info → Run anyway</strong> — the agent is a small open-source Node.js service published from this repository.
+                                  </span>
+                                </div>
                               </div>
                               {/* Linux/Mac */}
                               <div className="rounded-md border bg-background p-3 space-y-1.5">
