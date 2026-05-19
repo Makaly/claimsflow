@@ -50,6 +50,17 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- **Scan-agent installer UX overhaul** — `scan-agent/install.sh` has been
+  rewritten for a polished first-run experience: a bordered banner, numbered
+  step headers (`[1/5]` → `[5/5]`), a Braille spinner for long-running package
+  installs, a `curl --progress-bar` download with a size sanity-check, and a
+  post-install health probe that polls `http://127.0.0.1:7420/health` for up to
+  five seconds and prints the agent's reported version. The script ends with a
+  green success banner showing total elapsed time. Behaviour is unchanged in
+  piped (`curl … | bash`) mode — colours and spinners auto-disable when stdout
+  isn't a TTY. `claimsflow-install.sh` is now gitignored so the downloaded copy
+  produced by the README one-liner doesn't get accidentally committed.
+
 - **Cross-platform hardware scanner support** — `ScannerService` now detects the
   server OS at startup and branches to the appropriate scanning back-end:
   - **Linux**: unchanged `scanimage` / SANE path; requires `sane-utils` package.
