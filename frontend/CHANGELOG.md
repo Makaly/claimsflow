@@ -10,6 +10,52 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 
 ### Added
 
+- **Scan metering hook and Batch Upload UI gate** — new
+  `hooks/useScanMetering` calls `GET /scan-metering/check` on mount and
+  exposes `enabled`, `costPerScan`, `currency`, and a `recordScan(meta)`
+  helper to the rest of the app. `BatchUpload` consumes the hook to:
+  (a) refuse to start a scan when the user's organization has scanning
+  disabled, surfacing a red banner instead of an opaque error;
+  (b) show a small "Each scan is billed at KES X.XX …" chip when scanning
+  is enabled and priced; (c) record scan events from the in-browser
+  paths (local agent + camera) that the backend never sees. The
+  server-side `/scanner/scan` path is already metered server-side, so the
+  frontend skips `recordScan` there to avoid double-counting.
+
+- **`lib/deviceInfo.ts` device classification helper** — derives a coarse
+  `deviceClass` (`desktop` / `mobile` / `camera`) and normalized OS string
+  from `navigator.userAgentData` with a UA-string fallback, so scan events
+  carry enough channel information for the dashboard breakdown without
+  any heavy fingerprinting.
+
+- **Scan-agent hostname forwarded to the metering log** — `BatchUpload`
+  reads `hostname` from the local agent's `/health` response (now exposed
+  in scan-agent ≥ 1.0.0) and includes it on every recorded scan event so
+  the dashboard can attribute scans to specific physical machines.
+
+- **Admin: scan-billing editor** — new `components/ScanMeteringEditor`
+  (enable/disable Switch, currency Select, per-scan price Input,
+  Save/Reset buttons) is reachable from two places: a new
+  **Settings → Scan Billing** tab (`components/ScanMeteringTab`) that
+  lists every provider and lets admins edit any of them, and a new
+  **Providers → \[Provider\] → Scan Billing** sub-tab that opens the
+  same editor scoped to one provider. Saves issue
+  `PATCH /scan-metering/settings/:providerId` and reflect the change in
+  the table without a full reload.
+
+- **Scan Metering dashboard page (`/scan-metering`)** — new
+  `pages/ScanMeteringDashboard` shows today / 7-day / 30-day aggregates,
+  a per-provider month-to-date breakdown (admin/finance only), and the
+  50 most recent scan events with device class, OS, machine hostname,
+  and outcome badges. Routed from `App.tsx` behind `ProtectedRoute`
+  (admin, finance, provider_admin, claims_officer, maker_checker,
+  fraud_officer) and surfaced in the sidebar under **Finance**.
+
+- **`formatCurrency` accepts a currency code** — `lib/utils.ts`
+  `formatCurrency(amount, currency?)` now defaults to KES but can render
+  any ISO-4217 code (used by the metering dashboard so non-KES providers
+  show the correct symbol).
+
 - **Per-OS scan-agent install commands in the Scan Document tab** — the
   scanner-pairing panel in `BatchUpload` now renders separate cards for Linux
   and macOS, each with a copy-to-clipboard `curl … | bash` one-liner that

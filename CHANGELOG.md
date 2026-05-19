@@ -9,6 +9,90 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **Admin UI for editing the per-scan charge** — administrators can now set the
+  amount charged per scan from two places:
+  - **Settings → Scan Billing** — a new tab lists every provider with the
+    current rate, currency, and enabled state at a glance; expanding a row
+    reveals an inline editor (enabled toggle, cost input, ISO-4217 currency
+    selector) that PATCHes `/scan-metering/settings/:providerId` and updates the
+    list optimistically on save.
+  - **Providers → \[provider\] → Scan Billing tab** — the same editor is
+    embedded in each provider's detail dialog as a dedicated tab, fetching its
+    initial state from `GET /scan-metering/settings` on open. Both surfaces use
+    a single shared `<ScanMeteringEditor>` component (`card` and `inline`
+    variants) so validation, toast feedback, and the "last updated" footer stay
+    consistent. Client-side bounds match the server (0 ≤ cost ≤ 100 000) so
+    invalid input is caught before the request.
+
+- **Per-organization scan metering and billing** — every scan captured via
+  the local scan agent, the server-side `/scanner/scan` endpoint, or the
+  in-browser camera fallback is now recorded as a `ScanEvent` in Postgres.
+  A companion `ScanMeteringSettings` row per `Provider` lets administrators
+  toggle scanning on/off for an organization and set the per-scan price
+  (`Decimal(10,2)`, default `KES 5.00`). Historic events stamp the price
+  that was in effect at scan time, so later rate changes don't rewrite past
+  charges. New REST surface under `/scan-metering`:
+  - `GET /scan-metering/check` — pre-flight used by the UI to enable/disable
+    the scan button and surface the current rate.
+  - `GET /scan-metering/settings` — admin/finance list of all provider
+    configurations.
+  - `PATCH /scan-metering/settings/:providerId` — admin-only update of
+    `enabled` / `costPerScan` / `currency`, validated against safe bounds
+    (0 ≤ `costPerScan` ≤ 100 000; ISO-4217 3-letter currency).
+  - `POST /scan-metering/events` — used by the in-browser flows
+    (scan-agent, camera) to log the event the backend doesn't see.
+  - `GET /scan-metering/dashboard` — today / week / month aggregates plus
+    50 most-recent events, scoped to the caller's `providerId` for non-
+    admin/non-finance roles. Database changes are shipped in migration
+    `20260519000000_add_scan_metering` (two new tables, three indexes,
+    foreign keys with `ON DELETE CASCADE / SET NULL`).
+
+- **`POST /scanner/scan` is now metered and gated** — the server-side
+  scanner endpoint refuses the scan with `403 Forbidden` when the user's
+  organization has scanning disabled, and on both success and failure it
+  writes a `ScanEvent` (with `deviceClass: 'desktop'`, scanner name,
+  resolution, mode, optional `machineHostname` / `os` forwarded from the
+  client). The metering call is wrapped in `.catch(() => {})` so a logging
+  outage never blocks the PDF response.
+
+- **Local scan agent reports its hostname** — `GET /health` on the
+  127.0.0.1:7420 agent now returns `hostname` (from Node's `os.hostname()`)
+  alongside the existing `os` / `version` / `port` fields. The frontend
+  reads this on every health check and forwards it to the metering log so
+  the dashboard can show which physical machine each scan came from.
+
+- **Frontend metering hook + UI gate** — new `useScanMetering` hook calls
+  `/scan-metering/check` on mount, exposes `enabled` / `costPerScan` /
+  `currency` to the Batch Upload UI, and provides a `recordScan(meta)`
+  helper used by the scan-agent and camera capture paths (server-side
+  `/scanner/scan` already meters itself, so that path skips the hook to
+  avoid double-counting). A new `lib/deviceInfo.ts` derives a coarse
+  `deviceClass` (`desktop` / `mobile` / `camera`) and normalized OS from
+  `navigator.userAgentData` (with a UA-string fallback) so the dashboard
+  can break usage down by channel. The Batch Upload scanner panel now
+  shows a red "Scanning is disabled" banner when the org is switched off
+  and a small price chip ("Each scan is billed at KES 5.00 …") when it
+  isn't.
+
+- **Admin scan-billing editor** — new `ScanMeteringEditor` component
+  (enable/disable toggle, currency selector, per-scan price input with
+  save/reset controls) is reachable from two places: the
+  **Settings → Scan Billing** tab via `ScanMeteringTab` (lists all
+  providers and lets admin/finance edit any of them), and the
+  **Providers → \[Provider\] → Scan Billing** sub-tab via the same
+  editor scoped to a single provider. Save calls
+  `PATCH /scan-metering/settings/:providerId`.
+
+- **Scan Metering dashboard (`/scan-metering`)** — new page that surfaces
+  the data behind the metering API: today / 7-day / 30-day scan counts
+  and charges, per-provider month-to-date breakdown (admin/finance only),
+  and the 50 most recent events with `deviceClass`, OS, machine hostname,
+  scanner name, page count, and success state. Linked from the sidebar
+  under **Finance** for admin / finance / provider_admin /
+  claims_officer / maker_checker / fraud_officer. `formatCurrency` now
+  accepts a `currency` argument so non-KES charges (USD, EUR, GBP, UGX,
+  TZS) format correctly.
+
 - **One-step Linux & macOS installer for the scan agent** — new
   `scan-agent/install.sh` downloads a prebuilt single-file binary (no Node.js
   runtime required), optionally installs SANE backends via the host's package
