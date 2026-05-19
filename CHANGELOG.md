@@ -9,6 +9,16 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **System Enhancement Proposal v2** —
+  `docs/ClaimsFlow_Enhancement_Proposal_2026-05-19.html` is a rendered
+  A4-printable proposal covering the full v2 feature roadmap: M-Pesa B2C /
+  Airtel Money payout adapters (v2-B1), Gemini structured-extraction prompt
+  refinement (v2-T1.1), automated weekly fraud-model retrain with drift
+  detection (v2-T2.1), N+1 elimination on SLA/aging endpoints (v2-T4.1),
+  SearchablePdf hOCR integration (v2-T1.2), and the complete 35-track
+  implementation backlog with effort estimates and dependency graph.
+  Intended as the shareable executive summary of the ClaimsFlow v2 programme.
+
 - **Zero-trust auth/authz design document** —
   `docs/architecture/AUTH_AUTHZ_DESIGN.md` captures the target identity and
   access architecture for the platform: an audit of today's NestJS +

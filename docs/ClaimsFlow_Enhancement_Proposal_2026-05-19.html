@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ClaimsFlow — System Enhancement Proposal v2</title>
+<style>
+  @page {
+    size: A4;
+    margin: 22mm 18mm 22mm 18mm;
+    @top-left  { content: "ClaimsFlow — Enhancement Proposal · v2"; font-family: 'Helvetica', sans-serif; font-size: 8.5pt; color: #888; }
+    @top-right { content: "CIC Insurance Group PLC"; font-family: 'Helvetica', sans-serif; font-size: 8.5pt; color: #888; }
+    @bottom-center { content: "Page " counter(page) " of " counter(pages); font-family: 'Helvetica', sans-serif; font-size: 8.5pt; color: #888; }
+  }
+  @page :first { @top-left { content: ""; } @top-right { content: ""; } }
+
+  html, body { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 10.5pt; line-height: 1.45; color: #1f2933; }
+  body { margin: 0; }
+
+  .cover {
+    page-break-after: always;
+    text-align: left;
+    padding: 35mm 0 0 0;
+  }
+  .cover .brand-bar {
+    height: 6px; width: 60mm; background: #b91c1c; margin-bottom: 18mm;
+  }
+  .cover .eyebrow {
+    text-transform: uppercase; letter-spacing: 3px; font-size: 9pt; color: #6b7280; margin-bottom: 6mm;
+  }
+  .cover h1 {
+    font-size: 30pt; line-height: 1.1; margin: 0 0 6mm 0; color: #111827;
+  }
+  .cover .subtitle {
+    font-size: 13pt; color: #374151; margin-bottom: 30mm; max-width: 140mm;
+  }
+  .cover .meta {
+    font-size: 10pt; color: #4b5563; border-top: 1px solid #e5e7eb; padding-top: 6mm; max-width: 140mm;
+  }
+  .cover .meta div { margin-bottom: 1.5mm; }
+  .cover .meta strong { color: #111827; display: inline-block; width: 32mm; }
+  .cover .version-tag { display: inline-block; background: #b91c1c; color: white; padding: 1mm 3mm; border-radius: 3px; font-size: 9pt; letter-spacing: 1px; margin-bottom: 6mm; }
+
+  h2 {
+    font-size: 16pt; color: #b91c1c; border-bottom: 2px solid #fecaca; padding-bottom: 2mm; margin-top: 10mm; margin-bottom: 4mm;
+  }
+  h3 {
+    font-size: 12.5pt; color: #111827; margin-top: 6mm; margin-bottom: 2mm;
+  }
+  h4 { font-size: 11pt; color: #1f2933; margin: 3mm 0 1mm 0; }
+  p { margin: 0 0 3mm 0; text-align: justify; }
+  ul { margin: 0 0 3mm 5mm; padding: 0; }
+  li { margin-bottom: 1.5mm; }
+
+  .part-header {
+    page-break-before: always;
+    text-align: center;
+    padding: 60mm 0 0 0;
+  }
+  .part-header .part-label {
+    text-transform: uppercase; letter-spacing: 4px; font-size: 11pt; color: #b91c1c; margin-bottom: 4mm;
+  }
+  .part-header .part-title {
+    font-size: 26pt; color: #111827; margin: 0 0 6mm 0;
+  }
+  .part-header .part-lede {
+    font-size: 12pt; color: #4b5563; max-width: 140mm; margin: 0 auto; font-style: italic;
+  }
+  .part-header .divider {
+    width: 30mm; height: 3px; background: #b91c1c; margin: 8mm auto;
+  }
+
+  table { border-collapse: collapse; width: 100%; margin: 3mm 0 5mm 0; font-size: 9.5pt; }
+  th { background: #fef2f2; color: #7f1d1d; text-align: left; padding: 2mm 2.5mm; border-bottom: 2px solid #fecaca; font-weight: 600; }
+  td { padding: 2mm 2.5mm; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+  tr:nth-child(even) td { background: #fafafa; }
+
+  .card {
+    border: 1px solid #e5e7eb; border-left: 4px solid #b91c1c; border-radius: 4px; padding: 4mm 5mm; margin: 3mm 0 4mm 0; background: #fffdfd; page-break-inside: avoid;
+  }
+  .card.tuning { border-left-color: #0e7490; background: #f8fbfc; }
+  .card.tuning h4 { color: #0e7490; }
+  .card h4 { margin-top: 0; color: #7f1d1d; font-size: 11.5pt; }
+  .card .meta-row { font-size: 9pt; color: #4b5563; margin: 1.5mm 0 3mm 0; }
+  .card .meta-row span { display: inline-block; margin-right: 6mm; }
+  .card .meta-row strong { color: #111827; }
+  .card .why { font-size: 10pt; }
+  .card .req { font-size: 9.5pt; color: #374151; margin-top: 2.5mm; padding-top: 2.5mm; border-top: 1px dashed #e5e7eb; }
+  .card .req strong { color: #111827; }
+
+  .pill {
+    display: inline-block; font-size: 8pt; padding: 0.7mm 2.2mm; border-radius: 10px; margin-right: 2mm;
+    font-weight: 600; letter-spacing: 0.3px;
+  }
+  .pill-high   { background: #fee2e2; color: #991b1b; }
+  .pill-med    { background: #fef3c7; color: #92400e; }
+  .pill-low    { background: #dcfce7; color: #166534; }
+  .pill-effort { background: #e0e7ff; color: #3730a3; }
+  .pill-q      { background: #f3f4f6; color: #1f2933; }
+  .pill-tune   { background: #cffafe; color: #155e75; }
+
+  .legend { font-size: 9pt; color: #4b5563; margin: 0 0 4mm 0; }
+  .legend .pill { font-size: 8pt; }
+
+  .section-intro { color: #4b5563; font-size: 10pt; font-style: italic; margin-bottom: 4mm; }
+
+  .signoff {
+    margin-top: 10mm; padding-top: 4mm; border-top: 1px solid #e5e7eb; font-size: 9.5pt; color: #4b5563;
+  }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<section class="cover">
+  <div class="brand-bar"></div>
+  <div class="eyebrow">Internal Discussion Paper</div>
+  <div class="version-tag">VERSION 2.0</div>
+  <h1>ClaimsFlow<br><span style="color:#6b7280; font-size:18pt;">Functional Requirements &amp; Fine-Tuning Proposal</span></h1>
+  <div class="subtitle">A team-lead and business-analyst view of (i) the new functional capabilities to add to the medical claims platform, and (ii) the targeted fine-tuning of features already in production — ordered by business value, member impact, and delivery effort.</div>
+
+  <div class="meta">
+    <div><strong>Prepared for:</strong> Head of Digital, Claims Operations, CIO Office</div>
+    <div><strong>Prepared by:</strong> ClaimsFlow Engineering &amp; BA</div>
+    <div><strong>Date:</strong> 19 May 2026</div>
+    <div><strong>Platform release:</strong> v1.7 (post maker-checker refactor, scan metering live)</div>
+    <div><strong>Status:</strong> Draft v2 · supersedes v1.0 (19 May 2026)</div>
+    <div><strong>v2 changes:</strong> regulatory theme removed; replaced with explicit functional-requirement statements per card and a new Part II covering fine-tuning of existing features.</div>
+  </div>
+</section>
+
+<!-- 1 EXEC SUMMARY -->
+<h2>1 · Executive summary</h2>
+<p>
+ClaimsFlow has matured into a production-grade platform: batch intake with barcoded provider submissions,
+OCR + AI extraction (Gemini / Ollama / Tesseract), maker-checker dual control, SLA tracking, appeals,
+payment advice, pre-authorisation, ML fraud scoring with a Python sidecar, line-item extraction, and a
+labelling deep-analysis tab. The recent rollout of per-provider scan metering closes out a strong v1.x cycle.
+</p>
+<p>
+This v2 paper proposes the next round of capabilities in two parts:
+</p>
+<ul>
+  <li><strong>Part I — Functional requirements:</strong> new capabilities the system does not yet have. Each item is stated as a numbered functional requirement with clear acceptance criteria.</li>
+  <li><strong>Part II — Fine-tuning &amp; optimisation:</strong> targeted improvements to features already in production. These are not new features — they are calibration, tuning, and quality-of-life changes that increase the value of what we have already shipped.</li>
+</ul>
+
+<h3>1.1 The six functional themes (Part I)</h3>
+<table>
+  <thead>
+    <tr><th style="width:6%">#</th><th style="width:34%">Theme</th><th>Why it matters now</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>A</td><td>Member &amp; Provider Experience</td><td>The policyholder has no first-party surface today; providers still rely on batch upload only.</td></tr>
+    <tr><td>B</td><td>Payments &amp; Financial Integrations</td><td>Manual payout reconciliation is the largest hidden cost in Finance.</td></tr>
+    <tr><td>C</td><td>Intelligence &amp; Automation</td><td>OCR + heuristics handle structure; we have not yet exploited the unstructured clinical narrative.</td></tr>
+    <tr><td>D</td><td>Clinical &amp; Wellness Extensions</td><td>Reduces severity, moves CIC from payer to partner — a strategic differentiator.</td></tr>
+    <tr><td>E</td><td>Platform Architecture &amp; SRE</td><td>Multi-tenancy, observability, and DR are prerequisites for white-labelling and uptime SLOs.</td></tr>
+    <tr><td>F</td><td>Workflow &amp; Case Management</td><td>The current workflow is fixed-shape; complex/escalated cases break the assembly-line model.</td></tr>
+  </tbody>
+</table>
+
+<h3>1.2 The four fine-tuning tracks (Part II)</h3>
+<table>
+  <thead>
+    <tr><th style="width:6%">#</th><th style="width:34%">Tuning track</th><th>Target outcome</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>T1</td><td>OCR &amp; extraction pipeline</td><td>Higher first-pass extraction accuracy; fewer manual corrections per claim.</td></tr>
+    <tr><td>T2</td><td>Fraud-scoring ML model</td><td>Lower false-positive rate; faster model adaptation to drift; per-provider thresholds.</td></tr>
+    <tr><td>T3</td><td>Workflow, SLA &amp; queue routing</td><td>Better load balance across makers/checkers; SLAs that match real-world claim shape.</td></tr>
+    <tr><td>T4</td><td>Performance &amp; data layer</td><td>Faster queue and dashboard loads; lower database hot-spot pressure.</td></tr>
+  </tbody>
+</table>
+
+<h3>1.3 Top 5 things I would build or tune first</h3>
+<ol>
+  <li><strong>Member self-service mobile app + WhatsApp claim submission</strong> (Part I, A1 + A2) — biggest experience leap, lowest provider dependency.</li>
+  <li><strong>M-Pesa / mobile-money payout rail with auto-reconciliation</strong> (Part I, B1) — directly attacks Finance's largest manual cost centre.</li>
+  <li><strong>OCR prompt &amp; fallback-chain tuning</strong> (Part II, T1.1 + T1.2) — pure-tuning gain with no new infrastructure; visible to every claim that flows through the system.</li>
+  <li><strong>Fraud-model automated retrain + per-provider threshold calibration</strong> (Part II, T2.1 + T2.2) — converts the human-in-the-loop labels we are already collecting into ongoing accuracy gains.</li>
+  <li><strong>Auto-triage / green-lane straight-through processing</strong> (Part I, C3) — directly removes 30–50% of queue volume; we have all the inputs already.</li>
+</ol>
+
+<p class="legend">
+  <strong>Reading the cards below.</strong>
+  <span class="pill pill-high">Value: High</span>
+  <span class="pill pill-med">Value: Medium</span>
+  <span class="pill pill-low">Value: Low/Strategic</span>
+  <span class="pill pill-effort">Effort: S / M / L / XL</span>
+  <span class="pill pill-q">Suggested quarter</span>
+  <span class="pill pill-tune">Tuning</span>
+</p>
+
+<!-- PART I HEADER -->
+<section class="part-header">
+  <div class="part-label">Part I</div>
+  <div class="part-title">Functional Requirements</div>
+  <div class="divider"></div>
+  <div class="part-lede">New capabilities the platform does not yet have, expressed as numbered functional requirements with clear acceptance criteria.</div>
+</section>
+
+<!-- THEME A -->
+<h2>2 · Theme A — Member &amp; Provider Experience</h2>
+<p class="section-intro">Today the policyholder cannot see, submit, or appeal a claim without going through a provider or call-centre. Closing that loop is the single biggest brand and NPS lever available to us.</p>
+
+<div class="card">
+  <h4>A1. Member mobile app (React Native) — submit, track, appeal</h4>
+  <div class="meta-row">
+    <span class="pill pill-high">Value: High</span>
+    <span class="pill pill-effort">Effort: XL</span>
+    <span class="pill pill-q">Q3 2026 (MVP)</span>
+  </div>
+  <div class="why">
+    Photo-capture of receipts, real-time claim status, e-card display, dependant management, push notifications,
+    digital pre-auth requests, and direct appeals. Reuses existing consent ledger and JWT auth.
+  </div>
+  <div class="req">
+    <strong>FR-A1.1</strong> A member SHALL be able to register, log in, and complete 2FA from the mobile app using the same credentials as the web portal.<br>
+    <strong>FR-A1.2</strong> A member SHALL be able to submit a new claim by capturing one or more receipt photos, selecting a dependant if applicable, and entering an incident date.<br>
+    <strong>FR-A1.3</strong> The system SHALL display the live status (received / under review / awaiting maker / awaiting checker / paid / rejected / appealed) for every claim attached to the member or their dependants.<br>
+    <strong>FR-A1.4</strong> A member SHALL be able to lodge an appeal against any rejected claim from within the app, attaching supporting documents.<br>
+    <strong>FR-A1.5</strong> The app SHALL display a digital e-card with member number, plan name, and validity that can be shown to providers.
+  </div>
+</div>
+
+<div class="card">
+  <h4>A2. WhatsApp Business API channel — submit + status + 2FA OTP</h4>
+  <div class="meta-row">
+    <span class="pill pill-high">Value: High</span>
+    <span class="pill pill-effort">Effort: M</span>
+    <span class="pill pill-q">Q3 2026</span>
+  </div>
+  <div class="why">
+    WhatsApp is the de-facto messaging channel for members in EA. Offer "send a photo of the receipt" intake,
+    claim-status queries, and OTP delivery alongside the existing SMS provider. The OCR/AI pipeline is
+    already channel-agnostic — we need only the inbound webhook adapter and a session state machine.
+  </div>
+  <div class="req">
+    <strong>FR-A2.1</strong> A member SHALL be able to start a session by sending any message from their registered WhatsApp number and be authenticated via OTP echoed back through the same channel.<br>
+    <strong>FR-A2.2</strong> The system SHALL accept image attachments via WhatsApp, route them through the same OCR pipeline as web uploads, and create a draft claim awaiting member confirmation.<br>
+    <strong>FR-A2.3</strong> A member SHALL be able to query the status of any claim by sending its reference number; the bot SHALL reply with the current state and SLA countdown.<br>
+    <strong>FR-A2.4</strong> The system SHALL persist all WhatsApp interactions against the claim audit log with the same retention rules as web interactions.
+  </div>
+</div>
+
+<div class="card">
+  <h4>A3. Provider Portal v2 — claims search, dispute, statements, scorecard</h4>
+  <div class="meta-row">
+    <span class="pill pill-med">Value: Medium</span>
+    <span class="pill pill-effort">Effort: M</span>
+    <span class="pill pill-q">Q4 2026</span>
+  </div>
+  <div class="why">
+    The provider surface today is "upload batches". Add a self-service view for: claim status by reference,
+    rejection reasons with one-click resubmission, monthly statement and remittance download, and the
+    provider scorecard we already compute internally.
+  </div>
+  <div class="req">
+    <strong>FR-A3.1</strong> A provider_admin SHALL be able to search claims by date range, status, member, or amount, scoped to their own organisation.<br>
+    <strong>FR-A3.2</strong> A provider SHALL be able to view the rejection reason on any rejected claim and submit additional documents in a single action, generating a re-review event.<br>
+    <strong>FR-A3.3</strong> A provider SHALL be able to download monthly remittance statements in PDF and CSV.<br>
+    <strong>FR-A3.4</strong> A provider SHALL be able to view their own scorecard (currently visible only to internal users), with trend over the last 12 months.
+  </div>
+</div>
+
+<div class="card">
+  <h4>A4. In-app feedback &amp; NPS module</h4>
+  <div class="meta-row">
+    <span class="pill pill-low">Value: Strategic</span>
+    <span class="pill pill-effort">Effort: S</span>
+    <span class="pill pill-q">Q4 2026</span>
+  </div>
+  <div class="req">
+    <strong>FR-A4.1</strong> The system SHALL prompt a member for an NPS rating (0–10) and an optional free-text comment within 24 hours of a claim reaching a terminal state (paid or rejected).<br>
+    <strong>FR-A4.2</strong> An admin SHALL be able to view an NPS dashboard segmented by claim type, provider, and rejection-reason category.
+  </div>
+</div>
+
+<!-- THEME B -->
+<h2>3 · Theme B — Payments &amp; Financial Integrations</h2>
+<p class="section-intro">Payment advice is generated, but the rails to actually move money and reconcile back into the GL are still partially manual. This theme attacks the highest-friction hand-off in the business.</p>
+
+<div class="card">
+  <h4>B1. M-Pesa B2C / Airtel Money payout rail with auto-reconciliation</h4>
+  <div class="meta-row">
+    <span class="pill pill-high">Value: High</span>
+    <span class="pill pill-effort">Effort: L</span>
+    <span class="pill pill-q">Q3 2026</span>
+  </div>
+  <div class="why">
+    Many small-provider and member-reimbursement payouts are below the EFT economical threshold. Wiring
+    M-Pesa B2C and Airtel Money behind the existing Payment module — with idempotent callback handling and
+    automatic two-way reconciliation against the payment-advice ledger — would compress the
+    advice-to-funds-cleared cycle from days to minutes for the bulk of small payouts.
+  </div>
+  <div class="req">
+    <strong>FR-B1.1</strong> The system SHALL initiate an M-Pesa B2C or Airtel Money payout from an approved payment advice, given a registered mobile-money number on the payee record.<br>
+    <strong>FR-B1.2</strong> The system SHALL handle the mobile-money callback idempotently, marking the payment advice as paid only after a confirmed success callback.<br>
+    <strong>FR-B1.3</strong> The system SHALL retry transient failures up to a configurable limit and surface terminal failures to Finance with the carrier error code.<br>
+    <strong>FR-B1.4</strong> The system SHALL produce a daily mobile-money reconciliation report matching initiated payouts to confirmed transfers.
+  </div>
+</div>
+
+<div class="card">
+  <h4>B2. ERP / GL posting connector (SAP / Oracle / Sage)</h4>
+  <div class="meta-row">
+    <span class="pill pill-high">Value: High</span>
+    <span class="pill pill-effort">Effort: L</span>
+    <span class="pill pill-q">Q4 2026</span>
+  </div>
+  <div class="req">
+    <strong>FR-B2.1</strong> The system SHALL emit a daily posting feed of paid claims, accruals, and provider liabilities, mapped to the customer's chart of accounts.<br>
+    <strong>FR-B2.2</strong> The system SHALL maintain a replay-safe posting log such that a re-run on the same day produces no duplicate journal entries.<br>
+    <strong>FR-B2.3</strong> An admin SHALL be able to configure the chart-of-accounts mapping without an engineering release.
+  </div>
+</div>
+
+<div class="card">
+  <h4>B3. Bank statement ingestion + reconciliation engine</h4>
+  <div class="meta-row">
+    <span class="pill pill-med">Value: Medium</span>
+    <span class="pill pill-effort">Effort: M</span>
+    <span class="pill pill-q">Q1 2027</span>
+  </div>
+  <div class="req">
+    <strong>FR-B3.1</strong> The system SHALL ingest daily bank statements in MT940, camt.053, or CSV formats.<br>
+    <strong>FR-B3.2</strong> The system SHALL match incoming statement lines to issued payment advices using reference number, amount, and value-date heuristics.<br>
+    <strong>FR-B3.3</strong> The system SHALL present unreconciled items as a Finance queue with manual-match and write-off actions.
+  </div>
+</div>
+
+<div class="card">
+  <h4>B4. Co-pay / deductible / plan-limit calculator engine</h4>
+  <div class="meta-row">
+    <span class="pill pill-med">Value: Medium</span>
+    <span class="pill pill-effort">Effort: M</span>
+    <span class="pill pill-q">Q4 2026</span>
+  </div>
+  <div class="req">
+    <strong>FR-B4.1</strong> The system SHALL compute, for any invoice, the payable amount given the member's plan, year-to-date consumption, dependant relationship, and benefit-category limits.<br>
+    <strong>FR-B4.2</strong> The system SHALL expose the calculation breakdown (gross, sub-limit cap, deductible, co-pay, net payable) on the claim detail view and on member-facing surfaces.<br>
+    <strong>FR-B4.3</strong> An admin SHALL be able to model new plan structures without an engineering release.
+  </div>
+</div>
+
+<!-- THEME C -->
+<h2>4 · Theme C — Intelligence &amp; Automation</h2>
+<p class="section-intro">We have a strong fraud-scoring foundation (GBM sidecar, 12 heuristic signals, self-calibrating weights, human-in-the-loop labels). The next moves shift from <em>structured</em> to <em>unstructured</em> signals — narratives, images, and conversational interaction.</p>
+
+<div class="card">
+  <h4>C1. Image-tamper / receipt-forgery detector in the ML sidecar</h4>
+  <div class="meta-row">
+    <span class="pill pill-high">Value: High</span>
+    <span class="pill pill-effort">Effort: M</span>
+    <span class="pill pill-q">Q3 2026</span>
+  </div>
+  <div class="req">
+    <strong>FR-C1.1</strong> The ML sidecar SHALL expose a /score-image endpoint that returns a tamper-probability score and a list of triggered indicators (ELA artefacts, EXIF inconsistency, perceptual-hash collision, font-substitution anomaly).<br>
+    <strong>FR-C1.2</strong> Every claim document image SHALL be scored at ingestion and the score persisted with the document record.<br>
+    <strong>FR-C1.3</strong> A configurable threshold SHALL automatically raise a fraud signal when the tamper-probability exceeds the threshold.
+  </div>
+</div>
+
+<div class="card">
+  <h4>C2. Conversational claim assistant — RAG over SRD, policy docs, claim history</h4>
+  <div class="meta-row">
+    <span class="pill pill-high">Value: High</span>
+    <span class="pill pill-effort">Effort: L</span>
+    <span class="pill pill-q">Q4 2026</span>
+  </div>
+  <div class="req">
+    <strong>FR-C2.1</strong> A claims officer SHALL be able to ask natural-language questions against an index of the SRD, policy plans, prior appeal decisions, and circulars, and receive a grounded answer with source citations.<br>
+    <strong>FR-C2.2</strong> The assistant SHALL refuse to answer questions outside the indexed corpus rather than confabulating.<br>
+    <strong>FR-C2.3</strong> All assistant interactions SHALL be logged for audit and quality-review purposes.
+  </div>
+</div>
+
+<div class="card">
+  <h4>C3. Auto-triage &amp; straight-through processing for low-risk claims</h4>
+  <div class="meta-row">
+    <span class="pill pill-high">Value: High</span>
+    <span class="pill pill-effort">Effort: M</span>
+    <span class="pill pill-q">Q4 2026</span>
+  </div>
+  <div class="why">
+    Define a "green-lane" policy: claims under value threshold X, from providers with scorecard ≥ Y, OCR
+    confidence ≥ Z, no fraud signals, no plan-limit conflict — auto-approve and route directly to payment.
+    Maker-Checker only on amber/red. Expected to remove 30–50% of queue volume; we have all the inputs already.
+  </div>
+  <div class="req">
+    <strong>FR-C3.1</strong> An admin SHALL be able to define a green-lane policy as a set of rules over claim value, provider scorecard, OCR confidence, fraud score, and plan-limit availability.<br>
+    <strong>FR-C3.2</strong> A claim that satisfies the green-lane policy SHALL bypass the maker and checker queues and proceed directly to payment, with a clear audit marker indicating auto-approval.<br>
+    <strong>FR-C3.3</strong> The system SHALL produce a daily green-lane summary report (count, total value, breakdown by provider).<br>
+    <strong>FR-C3.4</strong> A claims officer SHALL be able to disable the green-lane globally or for a specific provider at any time.
+  </div>
+</div>
+
+<div class="card">
+  <h4>C4. NLP on clinical notes &amp; diagnosis narratives</h4>
+  <div class="meta-row">
+    <span class="pill pill-med">Value: Medium</span>
+    <span class="pill pill-effort">Effort: L</span>
+    <span class="pill pill-q">Q1 2027</span>
+  </div>
+  <div class="req">
+    <strong>FR-C4.1</strong> The system SHALL extract ICD-10 and CPT code hints, medication mentions, and red-flag phrasing from free-text clinical notes attached to a claim.<br>
+    <strong>FR-C4.2</strong> The system SHALL surface a discrepancy when extracted clinical hints are inconsistent with the billed procedure codes.
+  </div>
+</div>
+
+<div class="card">
+  <h4>C5. Multilingual support — Swahili extraction + UI</h4>
+  <div class="meta-row">
+    <span class="pill pill-low">Value: Strategic</span>
+    <span class="pill pill-effort">Effort: M</span>
+    <span class="pill pill-q">Q1 2027</span>
+  </div>
+  <div class="req">
+    <strong>FR-C5.1</strong> The system SHALL allow each user to select English or Kiswahili as the UI language; all member-facing screens, SMS, WhatsApp, and email content SHALL respect this preference.<br>
+    <strong>FR-C5.2</strong> The OCR extraction prompts SHALL be tuned to handle Kiswahili-language receipts and notes.
+  </div>
+</div>
+
+<!-- THEME D -->
+<h2>5 · Theme D — Clinical &amp; Wellness Extensions</h2>
+<p class="section-intro">These move CIC from "the company that pays when you're sick" to "the company that helps you stay well". Slower ROI but materially differentiating against payer-only competitors.</p>
+
+<div class="card">
+  <h4>D1. HL7 / FHIR connector for hospital HMIS systems</h4>
+  <div class="meta-row">
+    <span class="pill pill-high">Value: High</span>
+    <span class="pill pill-effort">Effort: L</span>
+    <span class="pill pill-q">Q4 2026</span>
+  </div>
+  <div class="why">
+    Top-tier hospitals already run HMIS platforms emitting HL7 v2 or FHIR R4. A direct connector eliminates
+    the batch-scan step for those providers — pre-auth requests, discharge summaries, and itemised bills
+    arrive structured. Removes OCR cost <em>and</em> error rate for our highest-volume providers.
+  </div>
+  <div class="req">
+    <strong>FR-D1.1</strong> The system SHALL accept inbound HL7 v2 ADT, DFT, and ORM messages, and FHIR R4 Claim, Patient, and Encounter resources.<br>
+    <strong>FR-D1.2</strong> Inbound HMIS-sourced claims SHALL be flagged as structured-source and bypass the OCR pipeline entirely.<br>
+    <strong>FR-D1.3</strong> The system SHALL emit FHIR ClaimResponse resources back to the originating HMIS once a decision is reached.
+  </div>
+</div>
+
+<div class="card">
+  <h4>D2. Telemedicine session booking + claim auto-creation</h4>
+  <div class="meta-row">
+    <span class="pill pill-med">Value: Medium</span>
+    <span class="pill pill-effort">Effort: L</span>
+    <span class="pill pill-q">Q1 2027</span>
+  </div>
+  <div class="req">
+    <strong>FR-D2.1</strong> A member SHALL be able to book a tele-consultation slot from the mobile app, subject to outpatient cover availability.<br>
+    <strong>FR-D2.2</strong> The completed consultation SHALL produce a structured claim automatically, with the consultation note attached.
+  </div>
+</div>
+
+<div class="card">
+  <h4>D3. Pharmacy Benefit Manager (PBM) module</h4>
+  <div class="meta-row">
+    <span class="pill pill-med">Value: Medium</span>
+    <span class="pill pill-effort">Effort: L</span>
+    <span class="pill pill-q">Q2 2027</span>
+  </div>
+  <div class="req">
+    <strong>FR-D3.1</strong> The system SHALL perform a real-time eligibility + formulary check given a member ID and a list of prescribed drugs.<br>
+    <strong>FR-D3.2</strong> The system SHALL return drug-drug interaction warnings and generic-substitution prompts as part of the eligibility response.
+  </div>
+</div>
+
+<div class="card">
+  <h4>D4. Chronic-disease management cohort tracking</h4>
+  <div class="meta-row">
+    <span class="pill pill-low">Value: Strategic</span>
+    <span class="pill pill-effort">Effort: M</span>
+    <span class="pill pill-q">Q2 2027</span>
+  </div>
+  <div class="req">
+    <strong>FR-D4.1</strong> The system SHALL identify members with qualifying chronic conditions based on claim history.<br>
+    <strong>FR-D4.2</strong> The system SHALL surface care-gap alerts (e.g. missed follow-up, missed annual screening) to the member and to Claims Operations.
+  </div>
+</div>
+
+<!-- THEME E -->
+<h2>6 · Theme E — Platform Architecture &amp; SRE</h2>
+<p class="section-intro">The platform runs well today but it is single-tenant, modestly observable, and the DR story is "we have backups". This theme prepares it to operate at insurer-scale and, eventually, to be white-labelled.</p>
+
+<div class="card">
+  <h4>E1. Observability uplift — OpenTelemetry, SLO dashboards, error budgets</h4>
+  <div class="meta-row">
+    <span class="pill pill-med">Value: Medium</span>
+    <span class="pill pill-effort">Effort: M</span>
+    <span class="pill pill-q">Q3 2026</span>
+  </div>
+  <div class="req">
+    <strong>FR-E1.1</strong> The backend SHALL emit OpenTelemetry traces for every HTTP request, OCR call, and ML-sidecar call.<br>
+    <strong>FR-E1.2</strong> The system SHALL publish a named set of SLOs (claim-submit p95, OCR p95, fraud-score p95, end-to-end claim cycle time) on a public-internal dashboard with error-budget burn alerts.
+  </div>
+</div>
+
+<div class="card">
+  <h4>E2. Disaster recovery automation + quarterly tabletop</h4>
+  <div class="meta-row">
+    <span class="pill pill-med">Value: Medium</span>
+    <span class="pill pill-effort">Effort: M</span>
+    <span class="pill pill-q">Q4 2026</span>
+  </div>
+  <div class="req">
+    <strong>FR-E2.1</strong> The system SHALL run an automated daily restore drill against a staging cluster from the latest production backup.<br>
+    <strong>FR-E2.2</strong> The system SHALL publish RTO and RPO measurements against documented targets on a monthly basis.
+  </div>
+</div>
+
+<div class="card">
+  <h4>E3. SSO via Azure AD / Okta (OIDC + SAML)</h4>
+  <div class="meta-row">
+    <span class="pill pill-med">Value: Medium</span>
+    <span class="pill pill-effort">Effort: M</span>
+    <span class="pill pill-q">Q4 2026</span>
+  </div>
+  <div class="req">
+    <strong>FR-E3.1</strong> Internal users SHALL be able to authenticate via the corporate identity provider using OIDC or SAML.<br>
+    <strong>FR-E3.2</strong> Leaver de-provisioning at the identity provider SHALL revoke ClaimsFlow access within 15 minutes.
+  </div>
+</div>
+
+<div class="card">
+  <h4>E4. Feature-flag service + canary deploys</h4>
+  <div class="meta-row">
+    <span class="pill pill-low">Value: Low</span>
+    <span class="pill pill-effort">Effort: S</span>
+    <span class="pill pill-q">Q4 2026</span>
+  </div>
+  <div class="req">
+    <strong>FR-E4.1</strong> The system SHALL support feature flags with targeting by role, provider, and percentage rollout.<br>
+    <strong>FR-E4.2</strong> An admin SHALL be able to toggle a flag without redeploying.
+  </div>
+</div>
+
+<div class="card">
+  <h4>E5. Multi-tenancy (white-label for partner insurers / brokers)</h4>
+  <div class="meta-row">
+    <span class="pill pill-med">Value: Strategic</span>
+    <span class="pill pill-effort">Effort: XL</span>
+    <span class="pill pill-q">Q2 2027</span>
+  </div>
+  <div class="req">
+    <strong>FR-E5.1</strong> The system SHALL isolate data, branding, and configuration per tenant such that no cross-tenant data leakage is possible.<br>
+    <strong>FR-E5.2</strong> An admin SHALL be able to provision a new tenant without code changes.
+  </div>
+</div>
+
+<!-- THEME F -->
+<h2>7 · Theme F — Workflow &amp; Case Management</h2>
+<p class="section-intro">The current pipeline is excellent for the 80% case but rigid for the 20% — complex claims, multi-document appeals, internal escalations. This theme makes the system handle exceptions as a first-class shape.</p>
+
+<div class="card">
+  <h4>F1. Case-management surface for complex / escalated claims</h4>
+  <div class="meta-row">
+    <span class="pill pill-med">Value: Medium</span>
+    <span class="pill pill-effort">Effort: M</span>
+    <span class="pill pill-q">Q4 2026</span>
+  </div>
+  <div class="req">
+    <strong>FR-F1.1</strong> A claims officer SHALL be able to convert any claim into a "case" that aggregates the claim, related documents, appeals, fraud verdicts, internal notes, and correspondence.<br>
+    <strong>FR-F1.2</strong> A case SHALL support assignment to a named owner, internal comments, and a chronological timeline view.<br>
+    <strong>FR-F1.3</strong> A case SHALL have its own SLA, configurable separately from the underlying claim SLA.
+  </div>
+</div>
+
+<div class="card">
+  <h4>F2. Correspondence / letter-generation module</h4>
+  <div class="meta-row">
+    <span class="pill pill-med">Value: Medium</span>
+    <span class="pill pill-effort">Effort: S</span>
+    <span class="pill pill-q">Q4 2026</span>
+  </div>
+  <div class="req">
+    <strong>FR-F2.1</strong> An admin SHALL be able to define templated letters (rejection, appeal outcome, member acknowledgement) with merge fields.<br>
+    <strong>FR-F2.2</strong> A claims officer SHALL be able to generate a letter from a template against a claim or case in one action, producing a PDF that is emailed and filed against the audit trail.
+  </div>
+</div>
+
+<div class="card">
+  <h4>F3. Bulk operations &amp; supervisor-grade actions</h4>
+  <div class="meta-row">
+    <span class="pill pill-low">Value: Low</span>
+    <span class="pill pill-effort">Effort: S</span>
+    <span class="pill pill-q">Q1 2027</span>
+  </div>
+  <div class="req">
+    <strong>FR-F3.1</strong> A claims officer SHALL be able to multi-select items in any queue view and apply approve, reassign, or export actions in a single operation.<br>
+    <strong>FR-F3.2</strong> Bulk operations SHALL be limited to the claims_officer role and SHALL preserve maker-checker separation on individual approvals.
+  </div>
+</div>
+
+<div class="card">
+  <h4>F4. Visual workflow designer (low-code, BPMN-lite)</h4>
+  <div class="meta-row">
+    <span class="pill pill-low">Value: Strategic</span>
+    <span class="pill pill-effort">Effort: L</span>
+    <span class="pill pill-q">Q2 2027</span>
+  </div>
+  <div class="req">
+    <strong>FR-F4.1</strong> An admin SHALL be able to add, remove, and reorder workflow steps, set SLA timers, and define branching rules without an engineering release.<br>
+    <strong>FR-F4.2</strong> The workflow engine SHALL version each published workflow and allow rollback to a prior version.
+  </div>
+</div>
+
+<!-- PART II HEADER -->
+<section class="part-header">
+  <div class="part-label">Part II</div>
+  <div class="part-title">Fine-Tuning &amp; Optimisation</div>
+  <div class="divider"></div>
+  <div class="part-lede">Calibration, tuning, and quality-of-life improvements to features already in production. No new infrastructure — just better outcomes from what we have already shipped.</div>
+</section>
+
+<!-- T1 OCR -->
+<h2>8 · Track T1 — OCR &amp; Extraction Pipeline Tuning</h2>
+<p class="section-intro">The current pipeline runs Gemini Vision → Ollama → Tesseract as a fallback chain. The tuning gains here are pure prompt and threshold work, no new infrastructure.</p>
+
+<div class="card tuning">
+  <h4>T1.1 Gemini extraction prompt refinement &amp; structured output schemas</h4>
+  <div class="meta-row">
+    <span class="pill pill-tune">Tuning</span>
+    <span class="pill pill-high">Value: High</span>
+    <span class="pill pill-effort">Effort: S</span>
+  </div>
+  <div class="why">
+    Rework the Gemini extraction prompt to request a strictly-typed JSON schema response (invoice header,
+    line items, totals, tax) and enforce schema validation at the boundary. Expected: a measurable reduction
+    in line-item misalignment errors and a sharper signal on which fields the model is uncertain about.
+    <strong>Target:</strong> reduce manual line-item corrections per claim from current baseline by 25–35%.
+  </div>
+</div>
+
+<div class="card tuning">
+  <h4>T1.2 Fallback-chain decision matrix (Gemini → Ollama → Tesseract)</h4>
+  <div class="meta-row">
+    <span class="pill pill-tune">Tuning</span>
+    <span class="pill pill-high">Value: High</span>
+    <span class="pill pill-effort">Effort: S</span>
+  </div>
+  <div class="why">
+    Today the chain falls through on hard failure. Tune it to fall through on <em>confidence</em> — when
+    Gemini returns a result but the field-level confidence is below a threshold, run Ollama as a second
+    opinion and arbitrate by agreement. Expected: better extraction on poor-quality scans without raising
+    cost on clean scans.
+    <strong>Target:</strong> raise first-pass extraction acceptance rate on the bottom-quartile scan-quality bucket by 10–15 percentage points.
+  </div>
+</div>
+
+<div class="card tuning">
+  <h4>T1.3 Image preprocessing — deskew, denoise, contrast normalisation</h4>
+  <div class="meta-row">
+    <span class="pill pill-tune">Tuning</span>
+    <span class="pill pill-med">Value: Medium</span>
+    <span class="pill pill-effort">Effort: S</span>
+  </div>
+  <div class="why">
+    Insert an OpenCV preprocessing step before OCR — deskew, denoise, adaptive thresholding, perspective
+    correction. Cheap on CPU; meaningful uplift on phone-camera receipts where the source quality is the
+    bottleneck. The ML sidecar already does image-quality scoring, so we have the inputs to know when
+    preprocessing should be applied.
+  </div>
+</div>
+
+<div class="card tuning">
+  <h4>T1.4 Line-item extraction confidence-gated auto-flow</h4>
+  <div class="meta-row">
+    <span class="pill pill-tune">Tuning</span>
+    <span class="pill pill-med">Value: Medium</span>
+    <span class="pill pill-effort">Effort: S</span>
+  </div>
+  <div class="why">
+    Gate per-line-item confidence at the row level rather than the document level. High-confidence rows
+    flow through; low-confidence rows are highlighted in the maker UI for targeted review rather than
+    forcing a re-key of the entire invoice.
+  </div>
+</div>
+
+<div class="card tuning">
+  <h4>T1.5 Document-classifier taxonomy expansion + confusion-matrix-driven retraining</h4>
+  <div class="meta-row">
+    <span class="pill pill-tune">Tuning</span>
+    <span class="pill pill-med">Value: Medium</span>
+    <span class="pill pill-effort">Effort: S</span>
+  </div>
+  <div class="why">
+    The "Unknown Documents" queue is itself a labelling source. Use last quarter's confusion matrix to
+    identify the document classes that are most often misclassified, expand the taxonomy where genuinely
+    new types are emerging, and retrain. Expected: visible reduction in the size of the Unknown Documents
+    queue without changing the classifier architecture.
+  </div>
+</div>
+
+<!-- T2 FRAUD -->
+<h2>9 · Track T2 — Fraud-Scoring Model Tuning</h2>
+<p class="section-intro">The fraud sidecar is healthy and the human-in-the-loop labelling loop works. The tuning here is about turning that label stream into ongoing accuracy improvements without engineering intervention each cycle.</p>
+
+<div class="card tuning">
+  <h4>T2.1 Automated weekly retrain from labelled data + drift detection</h4>
+  <div class="meta-row">
+    <span class="pill pill-tune">Tuning</span>
+    <span class="pill pill-high">Value: High</span>
+    <span class="pill pill-effort">Effort: S</span>
+  </div>
+  <div class="why">
+    Schedule a weekly retrain job that pulls the latest labelled claims, refits the gradient-boosting
+    classifier, evaluates it on a held-out set, and promotes the new model only if AUC and precision-at-K
+    are non-degraded. Drift detection on feature distributions raises an alert when the input shape moves
+    away from the training distribution.
+    <strong>Target:</strong> reduce model-staleness lag from "whenever someone remembers" to ≤ 7 days.
+  </div>
+</div>
+
+<div class="card tuning">
+  <h4>T2.2 Per-provider threshold calibration</h4>
+  <div class="meta-row">
+    <span class="pill pill-tune">Tuning</span>
+    <span class="pill pill-high">Value: High</span>
+    <span class="pill pill-effort">Effort: S</span>
+  </div>
+  <div class="why">
+    A single global fraud-score threshold is the wrong shape: high-volume reputable providers tolerate a
+    higher threshold, low-volume new providers a lower one. Calibrate per-provider thresholds against
+    historical false-positive and false-negative rates, recomputed monthly.
+    <strong>Target:</strong> measurable reduction in false-positive fraud flags on top-quartile providers,
+    while holding catch rate constant overall.
+  </div>
+</div>
+
+<div class="card tuning">
+  <h4>T2.3 Heuristic-signal weight rebalancing from labelled outcomes</h4>
+  <div class="meta-row">
+    <span class="pill pill-tune">Tuning</span>
+    <span class="pill pill-med">Value: Medium</span>
+    <span class="pill pill-effort">Effort: S</span>
+  </div>
+  <div class="why">
+    The 12 heuristic detectors have self-calibrating weights already. Add a quarterly review surface that
+    shows analysts which signals are pulling their weight (true-positive contribution) and which are noise,
+    so the signal set itself can be pruned or refined over time.
+  </div>
+</div>
+
+<div class="card tuning">
+  <h4>T2.4 Cross-provider duplicate-detection window tuning</h4>
+  <div class="meta-row">
+    <span class="pill pill-tune">Tuning</span>
+    <span class="pill pill-med">Value: Medium</span>
+    <span class="pill pill-effort">Effort: S</span>
+  </div>
+  <div class="why">
+    The cross-provider duplicate check looks back over a fixed window. Tune the window per claim type:
+    pharmacy duplicates often surface within days; inpatient duplicates across weeks. A single window
+    misses both ends.
+  </div>
+</div>
+
+<!-- T3 WORKFLOW -->
+<h2>10 · Track T3 — Workflow, SLA &amp; Queue Routing Tuning</h2>
+<p class="section-intro">The maker-checker workflow is correct; the tuning is in how work is distributed and how SLAs are measured.</p>
+
+<div class="card tuning">
+  <h4>T3.1 SLA timer per claim-value band + business-hours awareness</h4>
+  <div class="meta-row">
+    <span class="pill pill-tune">Tuning</span>
+    <span class="pill pill-high">Value: High</span>
+    <span class="pill pill-effort">Effort: S</span>
+  </div>
+  <div class="why">
+    A flat SLA penalises low-value claims and under-pressures high-value ones. Define SLA bands by claim
+    value and exclude weekends / public holidays from the elapsed-time count. Aging dashboard becomes a
+    truer signal.
+  </div>
+</div>
+
+<div class="card tuning">
+  <h4>T3.2 Maker-checker assignment — load-balancing + anti-collusion + complexity-aware</h4>
+  <div class="meta-row">
+    <span class="pill pill-tune">Tuning</span>
+    <span class="pill pill-high">Value: High</span>
+    <span class="pill pill-effort">Effort: S</span>
+  </div>
+  <div class="why">
+    Three small changes to the routing rule:
+    <ol>
+      <li><strong>Load-balance</strong> across currently-active staff (skip leave/inactive users).</li>
+      <li><strong>Anti-collusion:</strong> the maker and checker for a given provider's claim must not be the same individual.</li>
+      <li><strong>Complexity-aware:</strong> route claims with above-median OCR-correction or fraud-score to more experienced staff (configurable per-user seniority tier).</li>
+    </ol>
+  </div>
+</div>
+
+<div class="card tuning">
+  <h4>T3.3 Notification batching, digest mode, and quiet-hours</h4>
+  <div class="meta-row">
+    <span class="pill pill-tune">Tuning</span>
+    <span class="pill pill-med">Value: Medium</span>
+    <span class="pill pill-effort">Effort: S</span>
+  </div>
+  <div class="why">
+    The notifications module currently fires per event. Add per-user digest mode (hourly / daily) and
+    quiet-hours that hold non-urgent notifications until the next active window. Reduces notification
+    fatigue without dropping urgent alerts (SLA breach, fraud confirmed) which always go through.
+  </div>
+</div>
+
+<div class="card tuning">
+  <h4>T3.4 Provider scorecard formula rebalance — quality vs. volume dimensions</h4>
+  <div class="meta-row">
+    <span class="pill pill-tune">Tuning</span>
+    <span class="pill pill-med">Value: Medium</span>
+    <span class="pill pill-effort">Effort: S</span>
+  </div>
+  <div class="why">
+    The current scorecard blends volume and quality into a single number. Split it into two: a quality
+    score (rejection rate, fraud rate, OCR re-key rate) and a volume score (claims per month, member
+    reach). Together they support better-shaped decisions — e.g. green-laning a high-quality, low-volume
+    provider that the blended score under-rates today.
+  </div>
+</div>
+
+<div class="card tuning">
+  <h4>T3.5 Scan-metering thresholds &amp; budget pacing alerts</h4>
+  <div class="meta-row">
+    <span class="pill pill-tune">Tuning</span>
+    <span class="pill pill-med">Value: Medium</span>
+    <span class="pill pill-effort">Effort: S</span>
+  </div>
+  <div class="why">
+    Scan metering is now live. Tune the per-tier thresholds against the first 30 days of real consumption
+    data, and add proactive pacing alerts ("provider X is on track to exceed monthly quota by day 22")
+    rather than only after-the-fact breach notifications.
+  </div>
+</div>
+
+<!-- T4 PERFORMANCE -->
+<h2>11 · Track T4 — Performance &amp; Data-Layer Tuning</h2>
+<p class="section-intro">No re-platform, no new infrastructure — just attacking the known hot-spots in the current Postgres / Prisma / Redis stack.</p>
+
+<div class="card tuning">
+  <h4>T4.1 Eliminate N+1 query patterns on the workflow dashboard</h4>
+  <div class="meta-row">
+    <span class="pill pill-tune">Tuning</span>
+    <span class="pill pill-high">Value: High</span>
+    <span class="pill pill-effort">Effort: S</span>
+  </div>
+  <div class="why">
+    Audit the Prisma include/select trees on the workflow, aging, and maker/checker queue endpoints; batch
+    or join where queries are firing per row. Largest single dashboard-latency lever available without new
+    infrastructure.
+  </div>
+</div>
+
+<div class="card tuning">
+  <h4>T4.2 Targeted Postgres indexes on hot query paths</h4>
+  <div class="meta-row">
+    <span class="pill pill-tune">Tuning</span>
+    <span class="pill pill-high">Value: High</span>
+    <span class="pill pill-effort">Effort: S</span>
+  </div>
+  <div class="why">
+    Use pg_stat_statements to find the top-20 slowest recurring queries and add the missing composite
+    indexes (status + assigned-to + created-at on the workflow queues is a known one). A migration-only
+    change, but typically the highest ROI tuning in any maturing Postgres-backed system.
+  </div>
+</div>
+
+<div class="card tuning">
+  <h4>T4.3 Postgres trigram indexes for free-text claim search</h4>
+  <div class="meta-row">
+    <span class="pill pill-tune">Tuning</span>
+    <span class="pill pill-med">Value: Medium</span>
+    <span class="pill pill-effort">Effort: S</span>
+  </div>
+  <div class="why">
+    Add pg_trgm GIN indexes on claim reference, member name, and provider name to make the global search
+    bar perceptibly faster on large tables. No new tech, just an extension and a migration.
+  </div>
+</div>
+
+<div class="card tuning">
+  <h4>T4.4 Redis-backed memoisation for plan-rules evaluation</h4>
+  <div class="meta-row">
+    <span class="pill pill-tune">Tuning</span>
+    <span class="pill pill-med">Value: Medium</span>
+    <span class="pill pill-effort">Effort: S</span>
+  </div>
+  <div class="why">
+    Plan-rules evaluation is deterministic for a given member + date + plan version. Memoise the result in
+    Redis with a short TTL; invalidate on plan-version change. Removes a measurable share of the eligibility
+    endpoint's tail latency.
+  </div>
+</div>
+
+<div class="card tuning">
+  <h4>T4.5 Activity-log partitioning by month</h4>
+  <div class="meta-row">
+    <span class="pill pill-tune">Tuning</span>
+    <span class="pill pill-low">Value: Low</span>
+    <span class="pill pill-effort">Effort: S</span>
+  </div>
+  <div class="why">
+    The activity_logs table grows monotonically. Range-partition by month; query patterns are typically
+    date-bounded, so query time stays flat as history accumulates. Drop-old-partition becomes a one-line
+    archival operation.
+  </div>
+</div>
+
+<div class="card tuning">
+  <h4>T4.6 Frontend bundle splitting per route group</h4>
+  <div class="meta-row">
+    <span class="pill pill-tune">Tuning</span>
+    <span class="pill pill-med">Value: Medium</span>
+    <span class="pill pill-effort">Effort: S</span>
+  </div>
+  <div class="why">
+    Code-split the frontend along role boundaries — admin, finance, provider, claims-officer — so each
+    role only downloads the bundle they actually need. Vite supports this natively; the win is on
+    cold-start time, especially for provider users on mobile data.
+  </div>
+</div>
+
+<div class="card tuning">
+  <h4>T4.7 WebSocket heartbeat + reconnect-backoff tuning</h4>
+  <div class="meta-row">
+    <span class="pill pill-tune">Tuning</span>
+    <span class="pill pill-low">Value: Low</span>
+    <span class="pill pill-effort">Effort: S</span>
+  </div>
+  <div class="why">
+    Real-time notifications run over Socket.IO. Tune heartbeat interval and reconnect backoff so flaky
+    connections degrade gracefully instead of disconnecting and missing notifications.
+  </div>
+</div>
+
+<!-- ROADMAP -->
+<h2>12 · Indicative roadmap</h2>
+<p class="section-intro">A possible sequencing of the above into the next four quarters. Fine-tuning items are intentionally interleaved into every quarter — they are small enough to ship alongside the larger functional builds.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width:14%">Quarter</th>
+      <th>Functional (Part I)</th>
+      <th>Fine-Tuning (Part II)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Q3 2026</strong></td>
+      <td>Member app MVP (A1) · WhatsApp channel (A2) · M-Pesa B2C (B1) · Image-tamper detector (C1) · Observability uplift (E1)</td>
+      <td>T1.1, T1.2, T1.3 OCR &amp; preprocessing · T2.1 fraud auto-retrain · T4.1, T4.2 N+1 &amp; indexes</td>
+    </tr>
+    <tr>
+      <td><strong>Q4 2026</strong></td>
+      <td>Provider Portal v2 (A3) · NPS (A4) · ERP/GL (B2) · Co-pay calculator (B4) · Assistant (C2) · Auto-triage (C3) · HL7/FHIR (D1) · DR (E2) · SSO (E3) · Feature flags (E4) · Case mgmt (F1) · Correspondence (F2)</td>
+      <td>T1.4 line-item gating · T1.5 doc-classifier retrain · T2.2 per-provider thresholds · T3.1 SLA bands · T3.2 routing · T3.3 notification digests · T3.5 metering thresholds · T4.3 trigram · T4.4 plan-rules cache</td>
+    </tr>
+    <tr>
+      <td><strong>Q1 2027</strong></td>
+      <td>Bank reconciliation (B3) · Clinical NLP (C4) · Swahili (C5) · Telemedicine (D2) · Bulk ops (F3)</td>
+      <td>T2.3 weight rebalance · T2.4 duplicate window · T3.4 scorecard split · T4.5 activity-log partitioning · T4.6 bundle splitting</td>
+    </tr>
+    <tr>
+      <td><strong>Q2 2027</strong></td>
+      <td>Multi-tenancy (E5) · PBM (D3) · Chronic-disease cohorts (D4) · Workflow designer (F4)</td>
+      <td>T4.7 WebSocket tuning · ongoing T2 retrain cycle</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- WHAT NOT -->
+<h2>13 · What I am explicitly <em>not</em> recommending (yet)</h2>
+<ul>
+  <li><strong>A full custom LLM trained on CIC claims data.</strong> The RAG approach in C2 captures most of the value at a fraction of the cost and risk. Revisit only if RAG performance plateaus.</li>
+  <li><strong>Replacing PostgreSQL with a "claims-specific" database.</strong> Schema and Prisma are healthy. Performance gaps should be closed with the T4 tuning, not a re-platform.</li>
+  <li><strong>Native mobile app for staff.</strong> Claims officers, makers, and checkers work from desks; the existing web app is sufficient. The mobile app investment goes to members and providers.</li>
+  <li><strong>Rewriting the fraud sidecar in a different ML framework.</strong> The T2 tuning track shows the existing scikit-learn pipeline still has substantial headroom from data and threshold work alone.</li>
+  <li><strong>Workflow designer (F4) before we know the workflow needs to change.</strong> Park until we have evidence operations want to reshape the pipeline often enough to justify the abstraction.</li>
+</ul>
+
+<!-- NEXT STEPS -->
+<h2>14 · Suggested next steps</h2>
+<ol>
+  <li>Stakeholder review of this v2 paper with Claims Operations, Finance, and the CIO Office.</li>
+  <li>Approve the Top 5 in §1.3 as the candidate Q3 2026 sprint scope; engineering responds with a capacity-shaped commitment.</li>
+  <li>Stand up a one-sprint fine-tuning track now (T1.1, T2.1, T4.1, T4.2) — these have no functional dependencies and pay back inside the same quarter.</li>
+  <li>Run a one-week discovery sprint on the highest-value functional cluster: <em>Member app + WhatsApp + M-Pesa B2C</em>, producing concrete SRD updates and a Q3 sprint plan.</li>
+</ol>
+
+<div class="signoff">
+  <div><strong>Prepared by:</strong> ClaimsFlow Engineering &amp; Business Analysis</div>
+  <div><strong>For internal review by:</strong> Head of Digital, Head of Claims, Head of Finance, CIO</div>
+  <div><strong>Document control:</strong> v2.0 · 19 May 2026 · supersedes v1.0 (19 May 2026)</div>
+  <div style="margin-top:3mm;"><em>This is a discussion paper. It is not a project commitment or a budget request. Numbers indicating effort and quarter are planning estimates.</em></div>
+</div>
+
+</body>
+</html>

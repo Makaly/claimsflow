@@ -9,6 +9,11 @@ import { ClaimLabelsService } from './claim-labels.service';
 import { ClaimLabelsController } from './claim-labels.controller';
 import { MlScoringService } from './ml-scoring.service';
 import { LineItemFraudService } from './line-item-fraud.service';
+import { RetrainService } from './retrain.service';
+import { ProviderFraudThresholdsService } from './provider-fraud-thresholds.service';
+import { ProviderFraudThresholdsController } from './provider-fraud-thresholds.controller';
+import { SignalLiftController } from './signal-lift.controller';
+import { ClaimTypeConfigService } from './claim-type-config.service';
 import { OcrModule } from '../ocr/ocr.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { DocumentsModule } from '../documents/documents.module';
@@ -20,8 +25,12 @@ import { DocumentsModule } from '../documents/documents.module';
     NotificationsModule,
     DocumentsModule,
   ],
-  controllers: [ClaimsController, ClaimLabelsController],
-  providers: [ClaimsService, ClaimsProcessor, EligibilityService, AnomalyScoringService, ClaimLabelsService, MlScoringService, LineItemFraudService],
-  exports: [ClaimsService, ClaimLabelsService, MlScoringService, LineItemFraudService],
+  controllers: [ClaimsController, ClaimLabelsController, ProviderFraudThresholdsController, SignalLiftController],
+  providers: [
+    ClaimsService, ClaimsProcessor, EligibilityService, AnomalyScoringService,
+    ClaimLabelsService, MlScoringService, LineItemFraudService,
+    RetrainService, ProviderFraudThresholdsService, ClaimTypeConfigService,
+  ],
+  exports: [ClaimsService, ClaimLabelsService, MlScoringService, LineItemFraudService, RetrainService],
 })
 export class ClaimsModule {}
