@@ -11,6 +11,24 @@ export default defineConfig({
   },
   build: {
     sourcemap: true,
+    rollupOptions: {
+      output: {
+        // Split output by role group so each role downloads only its pages.
+        // Matches the lazy() chunk groupings in App.tsx.
+        manualChunks(id: string) {
+          // Vendor chunks (large deps isolated for long-term caching)
+          if (id.includes('node_modules/recharts') || id.includes('node_modules/d3')) return 'vendor-charts'
+          if (id.includes('node_modules/@radix-ui')) return 'vendor-radix'
+          if (id.includes('node_modules')) return 'vendor'
+
+          // Role chunks (match lazy() groupings in App.tsx)
+          if (/pages\/(UserManagement|Roles|Permissions|Settings|SystemConfig|DocumentClassifier|UnknownDocuments)/.test(id)) return 'chunk-admin'
+          if (/pages\/(Payment|ScanMetering)/.test(id)) return 'chunk-finance'
+          if (/pages\/(ProviderApprovals|Providers|Branches|PreAuth|ScanStation)/.test(id)) return 'chunk-provider'
+          if (/pages\/(WorkflowDashboard|MakerQueue|CheckerQueue|ClaimsOfficerQueue|FraudQueue|ActivityLogs|Reports|ProviderScorecard|AgingDashboard|Appeals|BatchUpload|PolicyPlans|MLLabelling|ZoneAnalytics|TwoFactorSetup)/.test(id)) return 'chunk-claims-officer'
+        },
+      },
+    },
   },
   optimizeDeps: {
     exclude: ['tesseract.js'],
