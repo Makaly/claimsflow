@@ -44,6 +44,8 @@ export interface ExtractedInvoiceData {
     ocrConfidence?: number
     lineNumber?: number
   }>
+  /** Structural warnings raised server-side (sum mismatch, future date, etc.) */
+  validationWarnings?: string[]
 }
 
 /**
@@ -129,6 +131,9 @@ export async function extractInvoicesFromPdf(
           pageRange: inv.pageRange || '1',
           documentPages: inv.documentPages || [],
           lineItems: Array.isArray(inv.lineItems) ? inv.lineItems : undefined,
+          validationWarnings: Array.isArray(inv.validationWarnings) && inv.validationWarnings.length > 0
+            ? inv.validationWarnings
+            : undefined,
         }
       })
 

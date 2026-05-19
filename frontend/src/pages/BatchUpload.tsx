@@ -92,6 +92,8 @@ interface ExtractedClaim {
     ocrConfidence?: number
     lineNumber?: number
   }>
+  /** Structural warnings from the backend extraction validator. */
+  validationWarnings?: string[]
   dbId?: string            // backend claim UUID (set after publish)
   annotations?: Annotation[] // persisted PDF annotations
 }
@@ -2759,7 +2761,7 @@ export default function BatchUpload() {
       const isImage = file.type.startsWith('image/')
 
       // REAL extraction from PDF text
-      type InvoiceRow = { patientName: string; patientId: string; memberNumber: string; providerName: string; invoiceNumber: string; invoiceDate: string; invoiceAmount: number; serviceDate: string; diagnosis: string; diagnosisCode: string; procedureCode: string; treatment: string; aiConfidence: number; pageRange: string; documentPages?: Array<{ pageNumber: number; category: string; categoryLabel: string; confidence: number; summary: string }>; lineItems?: Array<{ description: string; quantity?: number; unitPrice?: number; totalPrice?: number; taxAmount?: number; discount?: number; serviceDate?: string; procedureCode?: string; ocrConfidence?: number; lineNumber?: number }> }
+      type InvoiceRow = { patientName: string; patientId: string; memberNumber: string; providerName: string; invoiceNumber: string; invoiceDate: string; invoiceAmount: number; serviceDate: string; diagnosis: string; diagnosisCode: string; procedureCode: string; treatment: string; aiConfidence: number; pageRange: string; documentPages?: Array<{ pageNumber: number; category: string; categoryLabel: string; confidence: number; summary: string }>; lineItems?: Array<{ description: string; quantity?: number; unitPrice?: number; totalPrice?: number; taxAmount?: number; discount?: number; serviceDate?: string; procedureCode?: string; ocrConfidence?: number; lineNumber?: number }>; validationWarnings?: string[] }
       let result: { invoices: Array<InvoiceRow> }
 
       if (isPdf) {
@@ -2813,6 +2815,7 @@ export default function BatchUpload() {
                 pageRange: inv.pageRange || (startPage === endPage ? `${startPage}` : `${startPage}-${endPage}`),
                 documentPages: inv.documentPages,
                 lineItems: inv.lineItems,
+                validationWarnings: inv.validationWarnings,
               }
             })
           }
@@ -2845,6 +2848,7 @@ export default function BatchUpload() {
               pageRange:     '1',
               documentPages: inv.documentPages,
               lineItems:     inv.lineItems,
+              validationWarnings: inv.validationWarnings,
             }))
           }
           // Backend returned no invoices — surface an empty extraction rather
@@ -2954,6 +2958,7 @@ export default function BatchUpload() {
           pageRange: inv.pageRange,
           documentPages: inv.documentPages,
           lineItems: inv.lineItems,
+          validationWarnings: inv.validationWarnings,
         })
       }
 
@@ -3035,6 +3040,7 @@ export default function BatchUpload() {
         invoiceNumber: string; invoiceDate: string; invoiceAmount: number
         serviceDate: string; diagnosis: string; diagnosisCode: string
         procedureCode: string; treatment: string; confidence: number
+        validationWarnings?: string[]
       } = {
         patientName: '', patientId: '', memberNumber: '',
         providerName: provider && provider !== 'auto' ? provider : '',
@@ -3063,6 +3069,7 @@ export default function BatchUpload() {
               procedureCode: inv.procedureCode || '',
               treatment:     inv.treatment     || '',
               confidence:    inv.confidence    || 0,
+              validationWarnings: inv.validationWarnings,
             }
           }
         } catch { /* OCR failed — leave blank for user to fill */ }
@@ -4489,6 +4496,25 @@ export default function BatchUpload() {
                                     )}
                                   </div>
                                 </div>
+
+                                {/* Validation warnings (line-item sum mismatch, future date, high-value, etc.) */}
+                                {claim.validationWarnings && claim.validationWarnings.length > 0 && (
+                                  <div className="mb-2.5 rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/30 px-2.5 py-1.5">
+                                    <div className="flex items-start gap-1.5">
+                                      <AlertCircle className="h-3 w-3 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                                      <div className="min-w-0 flex-1">
+                                        <p className="text-[10px] uppercase tracking-widest font-bold text-amber-700 dark:text-amber-400 mb-0.5">
+                                          {claim.validationWarnings.length === 1 ? 'Structural warning' : `${claim.validationWarnings.length} structural warnings`}
+                                        </p>
+                                        <ul className="text-[11px] text-amber-800 dark:text-amber-300 leading-snug space-y-0.5">
+                                          {claim.validationWarnings.map((w, wi) => (
+                                            <li key={wi} className="break-words">• {w}</li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
 
                                 {/* Row 2: Main data grid */}
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-2 text-xs">
