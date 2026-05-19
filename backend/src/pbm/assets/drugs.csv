@@ -1,0 +1,27 @@
+drugCode,brandName,genericName,formularyTier,covered,genericAlt,copayAmount
+MET500,Glucophage,metformin,1,true,,50
+LIS10,Zestril,lisinopril,1,true,,50
+ATV40,Lipitor,atorvastatin,1,true,,80
+AML5,Norvasc,amlodipine,1,true,,60
+OMP20,Prilosec,omeprazole,2,true,,100
+AMX500,Amoxil,amoxicillin,1,true,,40
+CIP500,Cipro,ciprofloxacin,2,true,,120
+MNZ400,Flagyl,metronidazole,1,true,,45
+DOX100,Vibramycin,doxycycline,2,true,,90
+AZI500,Zithromax,azithromycin,2,true,,150
+PCT500,Panadol,paracetamol,1,true,,20
+IBU400,Brufen,ibuprofen,1,true,,30
+DICLO50,Voltaren,diclofenac,1,true,,35
+TRAM50,Ultram,tramadol,2,true,,100
+SALB100,Ventolin,salbutamol,1,true,,80
+PRED5,Prednisolone,prednisolone,1,true,,40
+FURO40,Lasix,furosemide,1,true,,30
+WARFAR5,Coumadin,warfarin,2,true,,200
+ASPIR100,Aspirin,aspirin,1,true,,15
+INSUL,Humulin,insulin,1,true,,500
+COTS480,Septrin,cotrimoxazole,1,true,,35
+ARTEML20,Coartem,artemether+lumefantrine,1,true,,200
+TDF300,Viread,tenofovir,1,true,,0
+3TC150,Epivir,lamivudine,1,true,,0
+EFV600,Sustiva,efavirenz,1,true,,0
+# STUB — replace with licensed formulary dataset in production
