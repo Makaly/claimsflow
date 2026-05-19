@@ -34,6 +34,7 @@ import { PolicyModule } from './policy/policy.module';
 import { MockIntegrationsModule } from './mock-integrations/mock-integrations.module';
 import { GdprModule } from './gdpr/gdpr.module';
 import { ScannerModule } from './scanner/scanner.module';
+import { ScanMeteringModule } from './scan-metering/scan-metering.module';
 
 @Module({
   imports: [
@@ -81,6 +82,7 @@ import { ScannerModule } from './scanner/scanner.module';
     MockIntegrationsModule,
     GdprModule,
     ScannerModule,
+    ScanMeteringModule,
   ],
   controllers: [AppController],
   providers: [
