@@ -9,6 +9,20 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **Zero-trust auth/authz design document** —
+  `docs/architecture/AUTH_AUTHZ_DESIGN.md` captures the target identity and
+  access architecture for the platform: an audit of today's NestJS +
+  Passport-JWT + RBAC stack against the financial-grade requirements list, the
+  gap map (Argon2id + pepper + HIBP, WebAuthn, refresh-token rotation with
+  family detection, SAML/OIDC/LDAP federation, Postgres row-level security,
+  Cedar ABAC policies, request signing, ClamAV + qpdf upload sanitizer,
+  hash-chained audit log with WORM export, adaptive risk engine), the database
+  schema additions (sessions, devices, identities, WebAuthn credentials,
+  password history, approval signatures, risk events, step-up challenges), JWT
+  payload spec, middleware pipeline, sequence diagrams for login + high-value
+  approval, OWASP Top 10 mapping, production deployment checklist, and an
+  11-phase implementation roadmap. Linked from the architecture overview.
+
 - **Admin UI for editing the per-scan charge** — administrators can now set the
   amount charged per scan from two places:
   - **Settings → Scan Billing** — a new tab lists every provider with the

@@ -54,6 +54,14 @@ Each module is wired in `backend/src/app.module.ts`:
 PostgreSQL via Prisma. Schema lives in `backend/prisma/schema.prisma`.
 Migrations are in `backend/prisma/migrations/`.
 
+## Security & identity
+
+See [`AUTH_AUTHZ_DESIGN.md`](AUTH_AUTHZ_DESIGN.md) for the zero-trust
+authentication and authorization design — audit of today's stack, RBAC + ABAC
+model, multi-tenant isolation via Postgres row-level security, JWT structure,
+risk engine, document-pipeline hardening, OWASP threat model, and the phased
+roadmap to SOC 2 / ISO 27001 readiness.
+
 ## Background work
 
 BullMQ on Redis. Queues:
