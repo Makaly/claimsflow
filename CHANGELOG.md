@@ -9,6 +9,28 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **`GET /documents/:id/searchable-pdf` endpoint** — serves a fully
+  searchable PDF for any stored document. The response streams a PDF in
+  which each page is the original scan image with an invisible, coordinate-
+  aligned text overlay generated from Tesseract hOCR output, enabling
+  full-text search and copy-paste in any PDF viewer without altering the
+  visual appearance. Accepts an optional `?regenerate=true` query parameter
+  to force a fresh render even when a cached copy already exists. The
+  controller delegates to `DocumentsService.getSearchablePdfStream()`,
+  which internally calls `SearchablePdfService.composePdf()` (added in
+  this release) after resolving document ownership and access rights.
+  Covered by `searchable-pdf.service.spec.ts` — unit tests for
+  `parseHocrWords` (bbox extraction, HTML-entity decoding, invalid-bbox
+  filtering) and `composePdf` (PDF byte structure, `(WORD) Tj` text
+  operators, graceful empty-hOCR path).
+
+- **V2 implementation status snapshot** —
+  `docs/V2_SALVAGE_STATUS.md` records the state of every v2 track after
+  the initial batch run: completed items (`T2.1`, `T1.1`, `T4.1`, `B1`),
+  partial items with their branch locations and outstanding wiring, and
+  the full list of not-started tracks. Serves as the hand-off document for
+  the next implementation batch.
+
 - **System Enhancement Proposal v2** —
   `docs/ClaimsFlow_Enhancement_Proposal_2026-05-19.html` is a rendered
   A4-printable proposal covering the full v2 feature roadmap: M-Pesa B2C /

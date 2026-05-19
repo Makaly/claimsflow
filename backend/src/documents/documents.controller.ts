@@ -92,6 +92,25 @@ export class DocumentsController {
     return this.documentsService.getOcrText(id, req.user);
   }
 
+  @Get(':id/searchable-pdf')
+  async searchablePdf(
+    @Param('id') id: string,
+    @Request() req: any,
+    @Query('regenerate') regenerate: string | undefined,
+    @Res() res: Response,
+  ) {
+    const { stream, mimetype, filename } = await this.documentsService.getSearchablePdfStream(
+      id,
+      req.user,
+      { regenerate: regenerate === 'true' || regenerate === '1' },
+    );
+    res.set({
+      'Content-Type': mimetype,
+      'Content-Disposition': `inline; filename="${filename}"`,
+    });
+    stream.pipe(res);
+  }
+
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.documentsService.remove(id);
