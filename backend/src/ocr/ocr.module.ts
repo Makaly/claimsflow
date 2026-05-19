@@ -9,6 +9,7 @@ import { GeminiVisionService } from './gemini-vision.service';
 import { VisionRouterService } from './vision-router.service';
 import { DocumentClassifierModule } from '../document-classifier/document-classifier.module';
 import { PrismaModule } from '../prisma/prisma.module';
+import { ImagePreprocessService } from './image-preprocess.service';
 import { AnomalyScoringService } from '../claims/anomaly-scoring.service';
 import { LineItemFraudService } from '../claims/line-item-fraud.service';
 
@@ -26,9 +27,10 @@ import { LineItemFraudService } from '../claims/line-item-fraud.service';
     ClaudeVisionService,
     GeminiVisionService,
     VisionRouterService,
+    ImagePreprocessService,
     AnomalyScoringService,
     LineItemFraudService,
   ],
-  exports: [OcrService, OllamaOcrService, VisionRouterService],
+  exports: [OcrService, OllamaOcrService, VisionRouterService, ImagePreprocessService],
 })
 export class OcrModule {}
