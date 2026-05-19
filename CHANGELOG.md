@@ -9,6 +9,29 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **One-step Linux & macOS installer for the scan agent** — new
+  `scan-agent/install.sh` downloads a prebuilt single-file binary (no Node.js
+  runtime required), optionally installs SANE backends via the host's package
+  manager (`apt` / `dnf` / `pacman` / `zypper` / Homebrew), and registers the
+  agent as a **systemd user service** (Linux) or **launchd agent** (macOS) so it
+  auto-starts on login and survives reboots. Supports both interactive and
+  piped (`curl … | bash`) modes, with `CLAIMSFLOW_AUTOSTART` /
+  `CLAIMSFLOW_INSTALL_SANE` / `CLAIMSFLOW_VERSION` / `CLAIMSFLOW_PREFIX`
+  environment-variable overrides for non-interactive installs. Companion
+  `scan-agent/uninstall.sh` removes the binary and unregisters the service.
+
+- **Linux / macOS build script** — new `scan-agent/build-unix.sh` cross-compiles
+  standalone `claimsflow-scan-agent-linux-x64` / `claimsflow-scan-agent-mac-x64`
+  binaries via `@yao-pkg/pkg`, builds for the host platform by default, accepts
+  a `TARGETS="linux mac"` override, and prints a ready-to-paste `gh release
+  upload` command for publishing artifacts to the `scan-agent-latest` release.
+
+- **Per-OS installer commands in the Batch Upload UI** — the "Install scan
+  agent" panel now renders separate cards for Linux and macOS, each with a
+  copy-to-clipboard one-liner that points to the new `install.sh` asset. A new
+  `InstallSnippet` component handles the clipboard interaction with a
+  short-lived "copied" confirmation.
+
 - **`rememberMe` on login** — `POST /auth/login` now accepts an optional
   `rememberMe` boolean. When `true`, the `access_token` HttpOnly cookie is
   issued with a 30-day `maxAge` instead of the default 24-hour window. The

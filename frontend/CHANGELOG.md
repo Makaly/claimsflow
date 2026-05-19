@@ -8,6 +8,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- **Per-OS scan-agent install commands in the Scan Document tab** — the
+  scanner-pairing panel in `BatchUpload` now renders separate cards for Linux
+  and macOS, each with a copy-to-clipboard `curl … | bash` one-liner that
+  points at the new prebuilt installer published with the `scan-agent-latest`
+  GitHub release. Together with the existing Windows `.exe` card, all three
+  desktop install paths are reachable in one click. The clipboard interaction
+  is handled by a new local `InstallSnippet` component with a short-lived
+  "copied" confirmation state.
+
 ### Changed
 
 - **Site-wide migration from `fetch` to Axios (`api` instance)** — all manual
