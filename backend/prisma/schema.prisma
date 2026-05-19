@@ -58,11 +58,18 @@ model User {
   decisionReviews       DecisionReviewRequest[]
   scanEvents            ScanEvent[]             @relation("ScanEventUser")
   scanMeteringUpdates   ScanMeteringSettings[]  @relation("ScanMeteringSettingsUpdatedBy")
+  // T3.2: workflow routing skips users whose activeStatus is not 'active'
+  activeStatus          String                  @default("active")
+  // T3.2: 'junior' | 'mid' | 'senior' — high-complexity claims route to senior tier
+  seniorityTier         String                  @default("mid")
+  notificationPrefs     NotificationPreference?
+  notificationQueue     NotificationQueue[]
 
   @@index([providerId])
   @@index([email])
   @@index([passwordResetToken])
   @@index([deletedAt])
+  @@index([activeStatus])
   @@map("users")
 }
 
@@ -1187,6 +1194,9 @@ model ScanMeteringSettings {
   updatedByUserId String?
   updatedAt       DateTime @default(now()) @updatedAt
   createdAt       DateTime @default(now())
+  // T3.5: null = unlimited; pacing alerts fire at alertThreshold % of quota
+  monthlyQuota    Int?
+  alertThreshold  Int      @default(80)
 
   provider        Provider          @relation(fields: [providerId], references: [id], onDelete: Cascade)
   updatedBy       User?             @relation("ScanMeteringSettingsUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
@@ -1241,4 +1251,91 @@ model ClaimTypeConfig {
 
   @@index([claimType])
   @@map("claim_type_config")
+}
+
+/// T2.2 — Per-provider fraud decision threshold, recomputed monthly from
+/// historical FP/FN rates. Falls back to the global system-config threshold
+/// when no provider-specific row exists.
+model ProviderFraudThreshold {
+  id           String    @id @default(uuid())
+  providerId   String    @unique
+  threshold    Float
+  fpRate       Float
+  fnRate       Float
+  computedAt   DateTime  @default(now())
+  overriddenBy String?
+  overriddenAt DateTime?
+
+  provider     Provider  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId])
+  @@index([computedAt])
+  @@map("provider_fraud_thresholds")
+}
+
+// ── T3.1: Public holidays (seed: Kenya 2026) ─────────────────────────────────
+model PublicHoliday {
+  id        String   @id @default(uuid())
+  date      DateTime @db.Date
+  name      String
+  country   String   @default("KE")
+  createdAt DateTime @default(now())
+
+  @@unique([date, country])
+  @@index([date])
+  @@map("public_holidays")
+}
+
+// ── T3.3: Per-user notification delivery preference ───────────────────────────
+model NotificationPreference {
+  userId     String   @id
+  mode       String   @default("realtime")
+  quietStart Int?
+  quietEnd   Int?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+// ── T3.3: Buffered and digest notification queue ──────────────────────────────
+model NotificationQueue {
+  id           String    @id @default(uuid())
+  recipientId  String
+  type         String
+  category     String    @default("general")
+  subject      String?
+  message      String
+  htmlContent  String?
+  claimId      String?
+  providerId   String?
+  scheduledFor DateTime?
+  flushedAt    DateTime?
+  createdAt    DateTime  @default(now())
+
+  recipient    User      @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId])
+  @@index([scheduledFor])
+  @@index([flushedAt])
+  @@map("notifications_queue")
+}
+
+// ── T3.5: Pacing alerts for scan-metering quota ───────────────────────────────
+model ScanPacingAlert {
+  id           String    @id @default(uuid())
+  providerId   String
+  dayOfMonth   Int
+  usedPct      Decimal   @db.Decimal(5, 2)
+  projectedDay Int?
+  resolvedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  provider     Provider  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId, createdAt(sort: Desc)])
+  @@index([resolvedAt])
+  @@map("scan_pacing_alerts")
 }
