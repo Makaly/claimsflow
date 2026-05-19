@@ -4,11 +4,12 @@
   "description": "Local scan agent for ClaimsFlow — bridges TWAIN / SANE / WIA / ISIS scanners to the web UI over localhost",
   "main": "agent.js",
   "scripts": {
+    "postinstall": "node scripts/patch-deps.js",
     "start": "node agent.js",
     "dev": "node agent.js",
-    "build:win": "npx @yao-pkg/pkg agent.js --target node20-win-x64 --output dist/claimsflow-scan-agent.exe --no-bytecode --public --public-packages \"*\"",
-    "build:linux": "npx @yao-pkg/pkg agent.js --target node20-linux-x64 --output dist/claimsflow-scan-agent-linux --no-bytecode --public",
-    "build:mac": "npx @yao-pkg/pkg agent.js --target node20-macos-x64 --output dist/claimsflow-scan-agent-mac --no-bytecode --public"
+    "build:win":   "node scripts/patch-deps.js && npx @yao-pkg/pkg agent.js --target node20-win-x64   --output dist/claimsflow-scan-agent.exe         --no-bytecode --public --public-packages \"*\"",
+    "build:linux": "node scripts/patch-deps.js && npx @yao-pkg/pkg agent.js --target node20-linux-x64 --output dist/claimsflow-scan-agent-linux-x64  --no-bytecode --public --public-packages \"*\"",
+    "build:mac":   "node scripts/patch-deps.js && npx @yao-pkg/pkg agent.js --target node20-macos-x64 --output dist/claimsflow-scan-agent-mac-x64    --no-bytecode --public --public-packages \"*\""
   },
   "pkg": {
     "scripts": [
