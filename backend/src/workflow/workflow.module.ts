@@ -5,12 +5,13 @@ import { CompletenessValidationService } from './completeness-validation.service
 import { AssignmentService } from './assignment.service';
 import { SlaService } from './sla.service';
 import { WorkflowController } from './workflow.controller';
+import { BulkOperationsController } from './bulk-operations.controller';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
   imports: [NotificationsModule, PrismaModule],
-  controllers: [WorkflowController],
+  controllers: [WorkflowController, BulkOperationsController],
   providers: [
     WorkflowService,
     MakerCheckerService,
