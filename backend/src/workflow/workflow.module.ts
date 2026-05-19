@@ -5,19 +5,22 @@ import { CompletenessValidationService } from './completeness-validation.service
 import { AssignmentService } from './assignment.service';
 import { SlaService } from './sla.service';
 import { WorkflowController } from './workflow.controller';
+import { GreenLaneService } from './green-lane.service';
+import { GreenLaneController } from './green-lane.controller';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
   imports: [NotificationsModule, PrismaModule],
-  controllers: [WorkflowController],
+  controllers: [WorkflowController, GreenLaneController],
   providers: [
     WorkflowService,
     MakerCheckerService,
     CompletenessValidationService,
     AssignmentService,
     SlaService,
+    GreenLaneService,
   ],
-  exports: [WorkflowService, MakerCheckerService, SlaService],
+  exports: [WorkflowService, MakerCheckerService, SlaService, GreenLaneService],
 })
 export class WorkflowModule {}

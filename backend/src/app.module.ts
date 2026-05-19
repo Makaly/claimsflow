@@ -35,6 +35,12 @@ import { MockIntegrationsModule } from './mock-integrations/mock-integrations.mo
 import { GdprModule } from './gdpr/gdpr.module';
 import { ScannerModule } from './scanner/scanner.module';
 import { ScanMeteringModule } from './scan-metering/scan-metering.module';
+import { AssistantModule } from './assistant/assistant.module';
+import { ClinicalNlpModule } from './clinical-nlp/clinical-nlp.module';
+import { HmisModule } from './integrations/hmis/hmis.module';
+import { TelemedicineModule } from './telemedicine/telemedicine.module';
+import { PbmModule } from './pbm/pbm.module';
+import { ChronicDiseaseModule } from './chronic-disease/chronic-disease.module';
 
 @Module({
   imports: [
@@ -83,6 +89,12 @@ import { ScanMeteringModule } from './scan-metering/scan-metering.module';
     GdprModule,
     ScannerModule,
     ScanMeteringModule,
+    AssistantModule,
+    ClinicalNlpModule,
+    HmisModule,
+    TelemedicineModule,
+    PbmModule,
+    ChronicDiseaseModule,
   ],
   controllers: [AppController],
   providers: [
