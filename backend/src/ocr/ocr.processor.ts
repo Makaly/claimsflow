@@ -7,6 +7,7 @@ import { EoxegenIntegrationService } from '../common/services/eoxegen-integratio
 import { DocumentClassifierService } from '../document-classifier/document-classifier.service';
 import { AnomalyScoringService } from '../claims/anomaly-scoring.service';
 import { LineItemFraudService } from '../claims/line-item-fraud.service';
+import { ClaimTypeConfigService } from '../claims/claim-type-config.service';
 import { computeFraudSignals, DuplicateClaimRef, CrossProviderMatch } from '../claims/fraud-signals';
 
 // concurrency: 2 — OCR is CPU-bound via Tesseract; more than 2 saturates the process
@@ -21,6 +22,7 @@ export class OcrProcessor extends WorkerHost {
     private classifierService: DocumentClassifierService,
     private anomalyScoringService: AnomalyScoringService,
     private lineItemFraudService: LineItemFraudService,
+    private claimTypeConfigService: ClaimTypeConfigService,
   ) {
     super();
   }
@@ -237,6 +239,11 @@ export class OcrProcessor extends WorkerHost {
             const sevenDaysAgo = new Date(Date.now() - 7 * 86_400_000);
             const dosDate = freshClaim.dateOfService;
 
+            // T2.4 — configurable cross-provider duplicate-detection window.
+            // Falls back to same-day when no claim-type tagging exists yet.
+            const dupWindowDays = await this.claimTypeConfigService.getDuplicateWindowDays(null);
+            const dupWindowMs = dupWindowDays * 86_400_000;
+
             const [existingInvoiceClaims, batchSiblings, crossProviderRaw, recentMemberClaims] =
               await Promise.all([
                 // Duplicate invoice number within same provider
@@ -251,15 +258,15 @@ export class OcrProcessor extends WorkerHost {
                       select: { memberNumber: true, invoiceAmount: true },
                     })
                   : Promise.resolve([]),
-                // Cross-provider same member + same service date
+                // Cross-provider same member, within ±dupWindowDays of service date
                 dosDate && freshClaim.memberNumber
                   ? this.prisma.claim.findMany({
                       where: {
                         memberNumber: freshClaim.memberNumber,
                         providerId: { not: freshClaim.providerId },
                         dateOfService: {
-                          gte: new Date(dosDate.getFullYear(), dosDate.getMonth(), dosDate.getDate()),
-                          lte: new Date(dosDate.getFullYear(), dosDate.getMonth(), dosDate.getDate(), 23, 59, 59),
+                          gte: new Date(dosDate.getTime() - dupWindowMs),
+                          lte: new Date(dosDate.getTime() + dupWindowMs + 86_399_000),
                         },
                         status: { not: 'rejected' },
                       },

@@ -1188,13 +1188,8 @@ model ScanMeteringSettings {
   updatedAt       DateTime @default(now()) @updatedAt
   createdAt       DateTime @default(now())
 
-<<<<<<< Updated upstream
-  provider        Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  updatedBy       User?    @relation("ScanMeteringSettingsUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
-=======
   provider        Provider          @relation(fields: [providerId], references: [id], onDelete: Cascade)
   updatedBy       User?             @relation("ScanMeteringSettingsUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
->>>>>>> Stashed changes
 
   @@map("scan_metering_settings")
 }
@@ -1229,4 +1224,21 @@ model ScanEvent {
   @@index([userId, createdAt(sort: Desc)])
   @@index([createdAt(sort: Desc)])
   @@map("scan_events")
+}
+
+/// T2.4 — Configurable cross-provider duplicate-detection lookback window per
+/// claim type. pharmacy duplicates surface in days; inpatient duplicates can
+/// surface weeks or months later. claimType is a free-form string ('pharmacy',
+/// 'outpatient', 'inpatient', 'dental', 'optical', ...) and falls back to the
+/// row keyed 'default' when no specific row matches.
+model ClaimTypeConfig {
+  id         String   @id @default(uuid())
+  claimType  String   @unique
+  windowDays Int
+  updatedBy  String?
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+
+  @@index([claimType])
+  @@map("claim_type_config")
 }
