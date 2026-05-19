@@ -108,6 +108,111 @@ export class OcrService {
   }
 
   /**
+   * Render every page of `filePath` to a PNG and run Tesseract with hOCR
+   * output so the caller can build a searchable PDF (image + invisible text
+   * layer). Returns image paths plus per-page hOCR XML; the caller owns the
+   * temp files and is responsible for cleanup.
+   *
+   * This is a second OCR pass dedicated to producing aligned coordinates —
+   * the primary extraction pipeline already ran for structured field
+   * extraction. Decoupling keeps that path untouched.
+   */
+  async extractHocrPages(
+    filePath: string,
+    mimetype: string,
+    dpi = 200,
+  ): Promise<Array<{
+    pageNumber: number;
+    imagePath: string;
+    imageMime: 'image/png';
+    hocrXml: string;
+    widthPx: number;
+    heightPx: number;
+    dpi: number;
+  }>> {
+    const isPdf = mimetype === 'application/pdf' || filePath.toLowerCase().endsWith('.pdf');
+    const tmpDir = path.join(process.cwd(), 'uploads', 'ocr-temp', `hocr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+    fs.mkdirSync(tmpDir, { recursive: true });
+
+    const pageImages: string[] = [];
+
+    if (isPdf) {
+      const { spawnSync } = await import('child_process');
+      const result = spawnSync(
+        'pdftoppm',
+        ['-png', '-r', String(dpi), filePath, path.join(tmpDir, 'page')],
+        { timeout: 300_000, stdio: 'pipe' },
+      );
+      if (result.status !== 0) {
+        this.logger.warn(`pdftoppm failed during hOCR rendering: ${result.stderr?.toString()?.slice(0, 200)}`);
+        try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+        return [];
+      }
+      const files = fs.readdirSync(tmpDir)
+        .filter(f => f.endsWith('.png'))
+        .sort();
+      for (const f of files) pageImages.push(path.join(tmpDir, f));
+    } else {
+      // Image input — copy/symlink into tmp so cleanup logic is uniform.
+      const ext = path.extname(filePath).toLowerCase() || '.png';
+      const dest = path.join(tmpDir, `page-1${ext}`);
+      fs.copyFileSync(filePath, dest);
+      pageImages.push(dest);
+    }
+
+    if (pageImages.length === 0) return [];
+
+    const sharp = (await import('sharp')).default;
+    const worker = await createWorker('eng', OEM.LSTM_ONLY);
+    const out: Array<{
+      pageNumber: number;
+      imagePath: string;
+      imageMime: 'image/png';
+      hocrXml: string;
+      widthPx: number;
+      heightPx: number;
+      dpi: number;
+    }> = [];
+
+    try {
+      for (let i = 0; i < pageImages.length; i++) {
+        const imagePath = pageImages[i];
+        const meta = await sharp(imagePath).metadata();
+        const widthPx = meta.width ?? 0;
+        const heightPx = meta.height ?? 0;
+        if (widthPx === 0 || heightPx === 0) continue;
+
+        const { data } = await worker.recognize(imagePath, {}, { hocr: true } as any);
+        const hocrXml = (data as any).hocr as string | undefined;
+        out.push({
+          pageNumber: i + 1,
+          imagePath,
+          imageMime: 'image/png',
+          hocrXml: hocrXml ?? '',
+          widthPx,
+          heightPx,
+          dpi,
+        });
+      }
+    } finally {
+      await worker.terminate();
+    }
+
+    return out;
+  }
+
+  /** Recursively delete the temp directory holding rendered hOCR page images. */
+  cleanupHocrPages(pages: Array<{ imagePath: string }>): void {
+    const dirs = new Set<string>();
+    for (const p of pages) {
+      if (p.imagePath) dirs.add(path.dirname(p.imagePath));
+    }
+    for (const d of dirs) {
+      try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+  }
+
+  /**
    * Extract text from a PDF by converting pages to images, then OCR.
    * Handles both digital and scanned PDFs.
    */

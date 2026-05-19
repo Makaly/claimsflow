@@ -2,6 +2,7 @@ import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { Logger } from '@nestjs/common';
 import { OcrService } from './ocr.service';
+import { SearchablePdfService } from './searchable-pdf.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { EoxegenIntegrationService } from '../common/services/eoxegen-integration.service';
 import { DocumentClassifierService } from '../document-classifier/document-classifier.service';
@@ -21,8 +22,48 @@ export class OcrProcessor extends WorkerHost {
     private classifierService: DocumentClassifierService,
     private anomalyScoringService: AnomalyScoringService,
     private lineItemFraudService: LineItemFraudService,
+    private searchablePdfService: SearchablePdfService,
   ) {
     super();
+  }
+
+  /**
+   * Build a searchable PDF (image background + invisible OCR text layer)
+   * for the document. Fire-and-forget — must never block OCR completion
+   * because callers depend on `ocrStatus = completed` to advance workflow.
+   */
+  private async buildSearchablePdf(
+    documentId: string,
+    filePath: string,
+    mimetype: string,
+  ): Promise<void> {
+    let pages: Awaited<ReturnType<OcrService['extractHocrPages']>> = [];
+    try {
+      pages = await this.ocrService.extractHocrPages(filePath, mimetype);
+      if (pages.length === 0) {
+        this.logger.warn(`Searchable PDF skipped for ${documentId} — no pages rendered`);
+        return;
+      }
+      const outPath = await this.searchablePdfService.generate(documentId, pages);
+      const current = await this.prisma.document.findUnique({
+        where: { id: documentId },
+        select: { metadata: true },
+      });
+      const merged = {
+        ...((current?.metadata as Record<string, unknown>) ?? {}),
+        searchablePdfPath: outPath,
+        searchablePdfGeneratedAt: new Date().toISOString(),
+      };
+      await this.prisma.document.update({
+        where: { id: documentId },
+        data: { metadata: merged },
+      });
+      this.logger.log(`Searchable PDF generated for ${documentId} at ${outPath}`);
+    } catch (err: any) {
+      this.logger.warn(`Searchable PDF generation failed for ${documentId}: ${err?.message ?? err}`);
+    } finally {
+      this.ocrService.cleanupHocrPages(pages);
+    }
   }
 
   async process(job: Job<any, any, string>): Promise<any> {

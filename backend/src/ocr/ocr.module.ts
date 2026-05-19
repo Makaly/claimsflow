@@ -7,6 +7,7 @@ import { OllamaOcrService } from './ollama-ocr.service';
 import { ClaudeVisionService } from './claude-vision.service';
 import { GeminiVisionService } from './gemini-vision.service';
 import { VisionRouterService } from './vision-router.service';
+import { SearchablePdfService } from './searchable-pdf.service';
 import { DocumentClassifierModule } from '../document-classifier/document-classifier.module';
 import { AnomalyScoringService } from '../claims/anomaly-scoring.service';
 import { LineItemFraudService } from '../claims/line-item-fraud.service';
@@ -24,9 +25,10 @@ import { LineItemFraudService } from '../claims/line-item-fraud.service';
     ClaudeVisionService,
     GeminiVisionService,
     VisionRouterService,
+    SearchablePdfService,
     AnomalyScoringService,
     LineItemFraudService,
   ],
-  exports: [OcrService, OllamaOcrService, VisionRouterService],
+  exports: [OcrService, OllamaOcrService, VisionRouterService, SearchablePdfService],
 })
 export class OcrModule {}
