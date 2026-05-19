@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/store/authStore'
 import { OnboardingPacketReview } from '@/components/OnboardingPacketReview'
+import ScanMeteringEditor from '@/components/ScanMeteringEditor'
 import {
   Search, Plus, Building2, MapPin,
   MoreHorizontal, CheckCircle, Eye, Ban, RefreshCw,
   Upload, FileText, X, ChevronRight, ChevronLeft,
   Briefcase, Users, Building, Trash2, ShieldCheck, ShieldOff,
   Download, Pencil, ScanText, Save, RotateCcw, XCircle, AlertCircle,
+  DollarSign,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -196,7 +198,7 @@ export default function Providers() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null)
-  const [proofDocTab, setProofDocTab] = useState<'info' | 'document' | 'edit'>('info')
+  const [proofDocTab, setProofDocTab] = useState<'info' | 'document' | 'edit' | 'billing'>('info')
   const [actionProvider, setActionProvider] = useState<{ provider: Provider; type: 'approve' | 'decline' | 'suspend' | 'reactivate' } | null>(null)
   const [actionNote, setActionNote] = useState('')
   const [actionSaving, setActionSaving] = useState(false)
@@ -915,7 +917,8 @@ export default function Providers() {
                   { key: 'info', label: 'Provider Details', icon: null },
                   { key: 'document', label: 'Registration Document', icon: <FileText className="h-3 w-3" /> },
                   { key: 'edit', label: 'Edit', icon: <Pencil className="h-3 w-3" /> },
-                ] as { key: 'info' | 'document' | 'edit'; label: string; icon: React.ReactNode }[]).map(({ key, label, icon }) => (
+                  { key: 'billing', label: 'Scan Billing', icon: <DollarSign className="h-3 w-3" /> },
+                ] as { key: 'info' | 'document' | 'edit' | 'billing'; label: string; icon: React.ReactNode }[]).map(({ key, label, icon }) => (
                   <button key={key} onClick={() => { setProofDocTab(key); if (key === 'edit') openEditTab(selectedProvider) }}
                     className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors -mb-px ${
                       proofDocTab === key ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -1374,6 +1377,16 @@ export default function Providers() {
                         )}
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {/* ─ Billing tab ─ */}
+                {proofDocTab === 'billing' && (
+                  <div className="p-6">
+                    <ScanMeteringEditor
+                      providerId={selectedProvider.id}
+                      variant="card"
+                    />
                   </div>
                 )}
               </div>

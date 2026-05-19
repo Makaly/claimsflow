@@ -11,8 +11,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { Save, Mail, RefreshCw, CheckCircle, AlertTriangle, ExternalLink, ScanSearch } from 'lucide-react'
+import { Save, Mail, RefreshCw, CheckCircle, AlertTriangle, ExternalLink, ScanSearch, DollarSign } from 'lucide-react'
 import DocumentClassifiersTab from '@/components/DocumentClassifiersTab'
+import ScanMeteringTab from '@/components/ScanMeteringTab'
 import api from '@/services/api'
 
 export default function Settings() {
@@ -76,6 +77,7 @@ export default function Settings() {
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
           <TabsTrigger value="email-ingestion"><Mail className="mr-1 h-3.5 w-3.5" /> Email Ingestion</TabsTrigger>
           <TabsTrigger value="document-classifiers"><ScanSearch className="mr-1 h-3.5 w-3.5" /> Document Classifiers</TabsTrigger>
+          <TabsTrigger value="scan-billing"><DollarSign className="mr-1 h-3.5 w-3.5" /> Scan Billing</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="space-y-6">
@@ -404,6 +406,11 @@ export default function Settings() {
         {/* ── DOCUMENT CLASSIFIERS ── */}
         <TabsContent value="document-classifiers" className="space-y-6">
           <DocumentClassifiersTab />
+        </TabsContent>
+
+        {/* ── SCAN BILLING ── */}
+        <TabsContent value="scan-billing" className="space-y-6">
+          <ScanMeteringTab />
         </TabsContent>
 
       </Tabs>
