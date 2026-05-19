@@ -5,7 +5,7 @@ const cors = require('cors');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const { writeFile, readFile, unlink } = require('fs/promises');
-const { tmpdir, platform } = require('os');
+const { tmpdir, platform, hostname } = require('os');
 const { join } = require('path');
 const { randomUUID } = require('crypto');
 const PDFDocument = require('pdfkit');
@@ -205,7 +205,15 @@ async function scan(deviceId, resolution, mode) {
 
 // ── Routes ──────────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, version: '1.0.0', os: OS, port: PORT });
+  // hostname + os let the cloud dashboard show which physical machine the
+  // scan came from.
+  res.json({
+    ok: true,
+    version: '1.0.0',
+    os: OS,
+    hostname: hostname(),
+    port: PORT,
+  });
 });
 
 app.get('/scanners', async (_req, res) => {
