@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { io, Socket } from 'socket.io-client'
+import { io, Socket, ManagerOptions, SocketOptions } from 'socket.io-client'
+
+// Exponential backoff sequence (ms): 1s, 2s, 4s, 8s, 16s, then capped at 30s.
+// socket.io implements this via reconnectionDelay + reconnectionDelayMax + randomizationFactor.
+// Starting from 1 s (not 3 s) makes recovery snappy after a brief server restart.
+const RECONNECT_DELAY_MS     = 1_000
+const RECONNECT_DELAY_MAX_MS = 30_000
+const RECONNECT_ATTEMPTS     = 12
 
 export interface Notification {
   id: string
@@ -86,19 +93,17 @@ export function useWebSocket() {
       auth: fallbackToken ? { token: fallbackToken } : undefined,
       withCredentials: true,
       // Start with polling (works through every proxy / free-tier edge) and
-      // upgrade to websocket once the session is established. Reversing the
-      // order means a single WS upgrade failure breaks the entire socket
-      // instead of silently degrading.
+      // upgrade to websocket once the session is established.
       transports: ['polling', 'websocket'],
-      // Render free-tier cold-start takes up to 60 s — use exponential
-      // backoff so a sleeping backend doesn't flood the console with 502s.
-      // Factor 1.5: 3 s → 4.5 s → 6.75 s … capped at 30 s.
-      reconnectionAttempts: 10,
-      reconnectionDelay: 3000,
-      reconnectionDelayMax: 30000,
+      // Exponential backoff: 1s → 2s → 4s → 8s → 16s → 30s (capped).
+      // randomizationFactor 0.3 adds jitter to avoid thundering-herd after
+      // a server restart when many clients reconnect simultaneously.
+      reconnectionAttempts: RECONNECT_ATTEMPTS,
+      reconnectionDelay: RECONNECT_DELAY_MS,
+      reconnectionDelayMax: RECONNECT_DELAY_MAX_MS,
       randomizationFactor: 0.3,
-      timeout: 20000,
-    })
+      timeout: 20_000,
+    } as Partial<ManagerOptions & SocketOptions>)
 
     socketRef.current = socket
 
