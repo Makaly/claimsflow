@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { OcrService } from '../ocr/ocr.service';
 import { SearchablePdfService } from '../ocr/searchable-pdf.service';
 import { ImagePreprocessorService, PreprocessOptions, PreprocessResult } from '../ocr/image-preprocessor.service';
+import { tenantScope } from '../common/tenant-scope';
 import { PdfOperationsService } from '../common/services/pdf-operations.service';
 import { EdmsIntegrationService } from '../common/services/edms-integration.service';
 import * as fs from 'fs';
@@ -310,7 +311,7 @@ export class DocumentsService {
    */
   private async assertProviderCanAccessDocument(
     documentId: string,
-    user?: { role?: string | null; providerId?: string | null; branchId?: string | null },
+    user?: { role?: string | null; providerId?: string | null; branchId?: string | null; tenantId?: string | null },
   ) {
     if (!user?.role) return;
     if (user.role !== 'provider_admin' && user.role !== 'provider_user') return;
@@ -319,7 +320,8 @@ export class DocumentsService {
       where: { id: documentId },
       select: {
         providerId: true,
-        claim: { select: { providerId: true, branchId: true, createdBy: true } },
+        tenantId: true,
+        claim: { select: { providerId: true, branchId: true, tenantId: true, createdBy: true } },
       },
     });
     if (!doc) throw new NotFoundException(`Document ${documentId} not found`);
@@ -335,13 +337,22 @@ export class DocumentsService {
         throw new ForbiddenException('Access denied');
       }
     }
+    // Phase 4 — tenant scoping (additive). When caller has a tenantId, the
+    // document or its parent claim must share it (legacy NULL tenantId rows
+    // are still allowed so single-org behaviour is unchanged).
+    if (user.tenantId) {
+      const docTenant = doc.tenantId ?? doc.claim?.tenantId ?? null;
+      if (docTenant && docTenant !== user.tenantId) {
+        throw new ForbiddenException('Access denied');
+      }
+    }
   }
 
   async findAll(
     claimId?: string,
     limit: number = 50,
     offset: number = 0,
-    user?: { role?: string | null; providerId?: string | null; branchId?: string | null },
+    user?: { role?: string | null; providerId?: string | null; branchId?: string | null; tenantId?: string | null },
   ) {
     const where: any = claimId ? { claimId } : {};
 
@@ -352,6 +363,17 @@ export class DocumentsService {
       if (user.role === 'provider_user' && user.branchId) {
         where.claim = { ...where.claim, OR: [{ branchId: user.branchId }, { branchId: null }] };
       }
+    }
+
+    // Phase 4 — additive tenant scoping. Only applied when the caller has a
+    // tenantId; otherwise the query is unchanged so legacy single-org users
+    // continue to see all rows.
+    const ts = tenantScope(user);
+    if (ts.tenantId) {
+      where.OR = [
+        { tenantId: ts.tenantId },
+        { tenantId: null },              // legacy rows with no tenantId yet
+      ];
     }
 
     const [documents, total] = await Promise.all([
@@ -372,7 +394,7 @@ export class DocumentsService {
 
   async findOne(
     id: string,
-    user?: { role?: string | null; providerId?: string | null; branchId?: string | null },
+    user?: { role?: string | null; providerId?: string | null; branchId?: string | null; tenantId?: string | null },
   ) {
     await this.assertProviderCanAccessDocument(id, user);
     const document = await this.prisma.document.findUnique({
@@ -381,6 +403,17 @@ export class DocumentsService {
     });
 
     if (!document) throw new NotFoundException(`Document ${id} not found`);
+
+    // Phase 4 — tenant scoping. When the caller has a tenantId, the document
+    // (or its parent claim) must match. Documents/claims with NULL tenantId
+    // are legacy data — let them through so single-org behaviour is unchanged.
+    if (user?.tenantId) {
+      const docTenant = document.tenantId ?? document.claim?.tenantId ?? null;
+      if (docTenant && docTenant !== user.tenantId) {
+        throw new ForbiddenException('Access denied');
+      }
+    }
+
     return document;
   }
 

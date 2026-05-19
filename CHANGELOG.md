@@ -9,6 +9,32 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+#### Auth + access control — Phase 4 tenant scoping (runtime)
+
+- **`tenantId` on the JWT payload** — `JwtStrategy.validate()` now
+  selects `tenantId` from the user row and includes it in the request-
+  level user object alongside `providerId` and `branchId`. Legacy users
+  whose `tenantId` is `NULL` get a `null` field on the payload, so every
+  downstream consumer can call `tenantScope(req.user)` and get an empty
+  fragment when the user is single-org — fully backwards compatible.
+
+- **`tenantScope` helper (`backend/src/common/tenant-scope.ts`)** —
+  returns a Prisma `where` fragment that constrains a query to the
+  caller's `tenantId`. When the caller has no `tenantId`, returns `{}`
+  so the query is unchanged. A second variant `tenantScopeOnRelation()`
+  handles entities that don't have a direct `tenantId` column but join
+  to one that does (e.g. `DocumentAnnotation` → `Document`).
+  Designed for spread-into-`where` ergonomics:
+  `where: { ...tenantScope(req.user), claimId }`.
+
+- **`DocumentsService.findAll` / `findOne` apply tenant scoping** —
+  list path uses `where.OR = [{ tenantId: callerTenant }, { tenantId: null }]`
+  so legacy rows (no `tenantId` yet) remain visible during the rollout
+  window. Single-record path performs the same check after the
+  existing provider/branch ACL: a document is reachable when it has no
+  tenant, when its tenant matches the caller, OR when its parent
+  claim's tenant matches. Returns `403 Forbidden` otherwise.
+
 #### Database — Phase 4 multi-tenant scaffolding
 
 - **`Tenant` model + nullable `tenantId` columns** on the six core scoped

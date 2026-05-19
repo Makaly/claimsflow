@@ -35,6 +35,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         role: true,
         providerId: true,
         branchId: true,
+        tenantId: true,
         name: true,
         userRoles: {
           include: { role: { select: { name: true, isActive: true } } },
@@ -62,6 +63,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       permissions,
       providerId: user.providerId,
       branchId: user.branchId,
+      tenantId: user.tenantId,
       name: user.name,
     };
   }
