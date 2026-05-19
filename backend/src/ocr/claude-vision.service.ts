@@ -399,8 +399,12 @@ export class ClaudeVisionService {
     const response = await client.messages.create({
       model,
       max_tokens: 8192,
-      system: SYSTEM_PROMPT,
-      tools: [MULTI_EXTRACT_TOOL],
+      // Cache the system block + tool schema. They are large and identical
+      // across every claim, so caching cuts input tokens ~90% on repeats.
+      system: [
+        { type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
+      ],
+      tools: [{ ...MULTI_EXTRACT_TOOL, cache_control: { type: 'ephemeral' } }],
       tool_choice: { type: 'tool', name: MULTI_EXTRACT_TOOL.name },
       messages: [{ role: 'user', content: [document, { type: 'text', text: fullUserPrompt }] }],
     });
@@ -508,8 +512,12 @@ export class ClaudeVisionService {
     const response = await client.messages.create({
       model,
       max_tokens: 2048,
-      system: SYSTEM_PROMPT,
-      tools: [EXTRACT_TOOL],
+      // Cache the system block + tool schema. They are large and identical
+      // across every claim, so caching cuts input tokens ~90% on repeats.
+      system: [
+        { type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
+      ],
+      tools: [{ ...EXTRACT_TOOL, cache_control: { type: 'ephemeral' } }],
       tool_choice: { type: 'tool', name: EXTRACT_TOOL.name },
       messages: [
         {
