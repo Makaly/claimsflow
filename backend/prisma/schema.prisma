@@ -27,6 +27,7 @@ model User {
   location              String?
   timezone              String?
   language              String?
+  locale                String?  @default("en") // C5: UI + notification locale
   bio                   String?
   avatarUrl             String?
   savedSignatures       Json?                   @default("[]")
@@ -417,6 +418,8 @@ model Claim {
   // Final approval by the claims officer, after maker_checker + (optional) fraud review.
   claimsOfficerApprovedAt  DateTime?
   claimsOfficerApprovedBy  String?
+  // D1: flag set when claim originates from a structured HMIS/FHIR feed
+  structuredSource         Boolean  @default(false)
 
   @@index([claimNumber])
   @@index([barcode])
@@ -1191,6 +1194,152 @@ model ScanMeteringSettings {
 
   @@map("scan_metering_settings")
 }
+
+// ─── C2: Conversational assistant ───────────────────────────────────────────
+
+/// Documents indexed into the assistant's knowledge base.
+/// embedding is stored as vector(1536) once pgvector is enabled via migration.
+model AssistantDocument {
+  id        String   @id @default(uuid())
+  source    String   // e.g. "policy/health-2024.pdf", "circular/MOH-2023-12.md"
+  content   String
+  embedding Unsupported("vector(1536)")?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([source])
+  @@map("assistant_documents")
+}
+
+/// Audit log: every query posed to the assistant and its answer + citations.
+model AssistantInteraction {
+  id           String   @id @default(uuid())
+  userId       String?
+  query        String
+  answer       String
+  citations    Json     @default("[]") // [{source, excerpt}]
+  topSimilarity Float?
+  refused      Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("assistant_interactions")
+}
+
+// ─── C3: Green-lane auto-triage ──────────────────────────────────────────────
+
+/// Policy rule governing automatic approval of low-risk claims.
+model GreenLaneRule {
+  id                     String   @id @default(uuid())
+  name                   String
+  minValue               Float?
+  maxValue               Float?
+  minScorecardQuality    Float?
+  minOcrConfidence       Float?
+  maxFraudScore          Float?
+  requireNoSignals       Boolean  @default(true)
+  isActive               Boolean  @default(true)
+  providerId             String?  // null = applies globally
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([providerId])
+  @@map("green_lane_rules")
+}
+
+// ─── D1: HL7 / FHIR connector ────────────────────────────────────────────────
+
+model HmisProviderConfig {
+  id            String   @id @default(uuid())
+  providerId    String   @unique
+  endpointUrl   String?
+  hl7Version    String   @default("2.5")
+  fhirVersion   String   @default("R4")
+  authType      String   @default("none") // "none" | "basic" | "bearer"
+  authSecret    String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("hmis_provider_configs")
+}
+
+// ─── D2: Telemedicine ────────────────────────────────────────────────────────
+
+model TelemedicineSession {
+  id              String   @id @default(uuid())
+  memberNumber    String
+  providerId      String
+  adapterName     String   // "mock" | "doctolib" | "teladoc"
+  sessionRef      String?  // external booking ref
+  scheduledAt     DateTime
+  status          String   @default("booked") // "booked"|"completed"|"cancelled"
+  consultationNote String?
+  claimId         String?  // auto-created claim
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([memberNumber])
+  @@index([providerId])
+  @@index([status])
+  @@map("telemedicine_sessions")
+}
+
+// ─── D3: Pharmacy Benefit Manager ────────────────────────────────────────────
+
+model FormularyDrug {
+  id              String   @id @default(uuid())
+  drugCode        String   @unique
+  brandName       String
+  genericName     String
+  formularyTier   Int      @default(3) // 1=preferred, 2=non-preferred, 3=specialty
+  covered         Boolean  @default(true)
+  genericAlt      String?
+  copayAmount     Float    @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([drugCode])
+  @@index([covered])
+  @@map("formulary_drugs")
+}
+
+// ─── D4: Chronic-disease cohort tracking ─────────────────────────────────────
+
+model ChronicCondition {
+  id              String   @id @default(uuid())
+  code            String   @unique
+  name            String
+  qualifyingRule  Json     // {icd10Prefixes: string[], minEncounters: int, withinDays: int}
+  createdAt       DateTime @default(now())
+
+  memberStatuses  MemberChronicStatus[]
+
+  @@map("chronic_conditions")
+}
+
+model MemberChronicStatus {
+  id               String   @id @default(uuid())
+  memberNumber     String
+  conditionCode    String
+  confidence       Float    @default(1.0)
+  firstObservedAt  DateTime @default(now())
+  lastObservedAt   DateTime @default(now())
+  status           String   @default("active") // "active"|"resolved"|"suspected"
+  condition        ChronicCondition @relation(fields: [conditionCode], references: [code])
+
+  @@unique([memberNumber, conditionCode])
+  @@index([memberNumber])
+  @@index([conditionCode])
+  @@index([status])
+  @@map("member_chronic_statuses")
+}
+
+// ─── C5: Swahili locale on User ──────────────────────────────────────────────
+
+// locale field added to User below via migration; stored in users.locale (String?)
 
 /// Append-only log of every scan attempted from a logged-in session.
 /// `deviceClass` distinguishes physical-scanner desktops from mobile/camera
