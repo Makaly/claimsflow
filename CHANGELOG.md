@@ -7,6 +7,32 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+
+- **"Unknown Patient" / "Unknown Provider" placeholder no longer
+  poisons the merge step** (`ocr.service.ts:1167-1175`) — when the
+  regex-based fallback in `parseInvoiceFromText` couldn't find a value,
+  it returned the literal strings `'Unknown Patient'` and
+  `'Unknown Provider'` as a "friendly" placeholder. Those placeholders
+  then **won** in the downstream merge:
+  `cmap.patientName || cf.patient_name || primary?.patientName || null`
+  picks the first non-empty source, and `'Unknown Patient'` is
+  non-empty. Even when the classifier or vision model produced a real
+  value, an earlier-emitted placeholder beat it. Both fields now
+  return empty strings on no-match so a better source can win.
+
+- **Multi-page OCR coverage now reaches the back of long inpatient
+  bills** (`ocr.service.ts:289-318`) — the previous strategy OCRed only
+  the first 3 pages at full resolution. On a 9- or 13-page Aga Khan
+  inpatient discharge bill the **grand total lives on the last page**,
+  not the front. With only pages 1–3 read, the amount fell back to a
+  per-day room rate or a tax line (e.g. KES 18.00) because the real
+  total was never seen. The pipeline now runs 300 DPI OCR on the front
+  3 pages AND the last 2 pages, and keeps the cheaper 150 DPI
+  categorisation pass for the middle. Single-page and short
+  (≤ 5 page) documents are unaffected — the back-page pass only
+  activates when `pageCount > 5`.
+
 ### Changed
 
 - **Vision-model prompts now teach the model the Aga Khan inpatient

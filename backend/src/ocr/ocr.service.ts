@@ -286,9 +286,18 @@ export class OcrService {
     const pdfDoc = await PDFDocument.load(dataBuffer);
     const pageCount = pdfDoc.getPageCount();
 
-    // OCR pages - limit to first 3 pages for efficiency (invoice data is on page 1)
-    // Process remaining pages with lighter scan just for categorization
-    const maxOcrPages = Math.min(pageCount, 3);
+    // OCR strategy — first 3 pages at full resolution (headers / patient
+    // block / opening line items) AND the LAST 2 pages at full resolution
+    // (grand totals, sponsor payable, signatures). On a 9- or 13-page
+    // inpatient discharge bill the real total lives on the back pages —
+    // OCRing only the first 3 misses it and the amount falls back to a
+    // small per-day or per-line subtotal. Middle pages still get a lighter
+    // 150 DPI scan for document categorisation.
+    const FRONT_HIGH_RES = Math.min(pageCount, 3);
+    const BACK_HIGH_RES = pageCount > 5 ? 2 : 0;        // last N pages
+    const backStart = pageCount - BACK_HIGH_RES + 1;     // 1-indexed
+    const midStart  = FRONT_HIGH_RES + 1;
+    const midEnd    = BACK_HIGH_RES > 0 ? backStart - 1 : pageCount;
     const pages: string[] = [];
     const worker = await createWorker('eng', OEM.LSTM_ONLY);
 
@@ -298,12 +307,17 @@ export class OcrService {
       fs.mkdirSync(tmpDir, { recursive: true });
 
       try {
-        // Only render pages we need at high res, rest at lower res for categorization
-        spawnSync('pdftoppm', ['-png', '-r', '300', '-f', '1', '-l', String(maxOcrPages), pdfPath, `${tmpDir}/page`], { timeout: 300_000 });
+        // Front pages at 300 DPI.
+        spawnSync('pdftoppm', ['-png', '-r', '300', '-f', '1', '-l', String(FRONT_HIGH_RES), pdfPath, `${tmpDir}/page`], { timeout: 300_000 });
 
-        // If there are more pages, render them at lower res for categorization
-        if (pageCount > maxOcrPages) {
-          spawnSync('pdftoppm', ['-png', '-r', '150', '-f', String(maxOcrPages + 1), '-l', String(pageCount), pdfPath, `${tmpDir}/page`], { timeout: 300_000 });
+        // Back pages at 300 DPI (where the grand total sits on multi-page bills).
+        if (BACK_HIGH_RES > 0) {
+          spawnSync('pdftoppm', ['-png', '-r', '300', '-f', String(backStart), '-l', String(pageCount), pdfPath, `${tmpDir}/page`], { timeout: 300_000 });
+        }
+
+        // Middle pages at lower res just for categorisation.
+        if (midStart <= midEnd) {
+          spawnSync('pdftoppm', ['-png', '-r', '150', '-f', String(midStart), '-l', String(midEnd), pdfPath, `${tmpDir}/page`], { timeout: 300_000 });
         }
 
         const pageFiles = fs.readdirSync(tmpDir).filter(f => f.endsWith('.png')).sort();
@@ -1164,9 +1178,15 @@ export class OcrService {
     const finalDiagnosis = result.diagnosis || (finalDiagnosisCode ? icd10Label(finalDiagnosisCode) : '');
 
     return {
-      patientName: result.patientName || 'Unknown Patient',
+      // Return an empty string when the regex finds nothing — DO NOT
+      // synthesise "Unknown Patient" / "Unknown Provider" here. The merge
+      // step in OcrProcessor uses `||` to pick the first non-empty source,
+      // so a non-empty placeholder string would BEAT a real value from the
+      // classifier or vision model. Leaving these empty lets the better
+      // source win.
+      patientName: result.patientName || '',
       patientId: result.patientId || '',
-      providerName: result.providerName || 'Unknown Provider',
+      providerName: result.providerName || '',
       membershipNumber: result.membershipNumber || '',
       invoiceNumber: result.invoiceNumber || '',
       invoiceDate: result.invoiceDate || '',
