@@ -1154,6 +1154,26 @@ model FraudModelWeights {
   @@map("fraud_model_weights")
 }
 
+/// Tracks every model training run produced by the weekly retrain cron.
+/// status: 'candidate' = trained but not yet promoted; 'active' = currently
+/// serving predictions; 'superseded' = replaced by a newer active run.
+model ModelVersion {
+  id          String   @id @default(uuid())
+  trainedAt   DateTime @default(now())
+  sampleSize  Int
+  fraudCount  Int
+  legitimateCount Int
+  metricsJson Json     // { aucRoc, precisionAtK, psi, ... }
+  status      String   @default("candidate") // "candidate" | "active" | "superseded"
+  promotedAt  DateTime?
+  supersededAt DateTime?
+  notes       String?
+
+  @@index([status])
+  @@index([trainedAt])
+  @@map("model_versions")
+}
+
 /// Per-provider scan-billing config. One row per Provider; created on
 /// demand when an admin first views/edits the provider's scan settings,
 /// or implicitly when the first ScanEvent for that provider arrives.
