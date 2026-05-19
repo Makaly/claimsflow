@@ -5,6 +5,7 @@ FastAPI microservice providing:
   POST /score              — score a single claim feature vector
   POST /score-line-items   — Isolation Forest anomaly detection on invoice line items
   POST /image-quality      — score document image quality and return preprocessing advice
+  POST /score-image        — image tamper / receipt-forgery detection (ELA, EXIF, pHash, font artefacts)
   GET  /health             — readiness + model status
   GET  /weights            — return current feature importances
 """

@@ -38,6 +38,10 @@ model User {
   updatedAt             DateTime                @updatedAt
   createdBy             String?
   updatedBy             String?
+  // T3.2: routing skips users whose activeStatus is not 'active'
+  activeStatus          String                  @default("active")
+  // T3.2: 'junior' | 'mid' | 'senior' — high-complexity claims route to senior tier
+  seniorityTier         String                  @default("mid")
   // GDPR Art. 17 — soft-erasure marker. When set, login is blocked and PII
   // is replaced with anonymised tokens but referential integrity for legally
   // retained claim records (Insurance Act 2017 s.83 — 7 year retention) is
@@ -58,11 +62,14 @@ model User {
   decisionReviews       DecisionReviewRequest[]
   scanEvents            ScanEvent[]             @relation("ScanEventUser")
   scanMeteringUpdates   ScanMeteringSettings[]  @relation("ScanMeteringSettingsUpdatedBy")
+  notificationPrefs     NotificationPreference?
+  notificationQueue     NotificationQueue[]
 
   @@index([providerId])
   @@index([email])
   @@index([passwordResetToken])
   @@index([deletedAt])
+  @@index([activeStatus])
   @@map("users")
 }
 
@@ -1185,9 +1192,13 @@ model ScanMeteringSettings {
   updatedByUserId String?
   updatedAt       DateTime @default(now()) @updatedAt
   createdAt       DateTime @default(now())
+  // T3.5: null = unlimited; when set, pacing alerts fire at alertThreshold %
+  monthlyQuota    Int?
+  alertThreshold  Int      @default(80)
 
-  provider        Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  updatedBy       User?    @relation("ScanMeteringSettingsUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  provider        Provider          @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  updatedBy       User?             @relation("ScanMeteringSettingsUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  pacingAlerts    ScanPacingAlert[]
 
   @@map("scan_metering_settings")
 }
@@ -1222,4 +1233,111 @@ model ScanEvent {
   @@index([userId, createdAt(sort: Desc)])
   @@index([createdAt(sort: Desc)])
   @@map("scan_events")
+}
+
+/// T2.2 — Per-provider fraud decision threshold, recomputed monthly from
+/// historical FP/FN rates. Falls back to the global system-config threshold
+/// ("fraud_threshold_default") when absent.
+model ProviderFraudThreshold {
+  id           String    @id @default(uuid())
+  providerId   String    @unique
+  threshold    Float     // 0-1; claims with fraudProbability >= threshold are flagged
+  fpRate       Float     // false-positive rate used to derive this threshold
+  fnRate       Float     // false-negative rate used to derive this threshold
+  computedAt   DateTime  @default(now())
+  overriddenBy String?   // userId of admin who manually set the value
+  overriddenAt DateTime?
+  provider     Provider  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId])
+  @@index([computedAt])
+  @@map("provider_fraud_thresholds")
+}
+
+/// T2.4 — Configurable duplicate-detection lookback window per claim type.
+/// claimType: 'pharmacy' | 'outpatient' | 'inpatient' | 'dental' | 'optical'
+/// windowDays: lookback in whole days (pharmacy 30, outpatient 90, inpatient 180 default)
+model ClaimTypeConfig {
+  id         String   @id @default(uuid())
+  claimType  String   @unique // 'pharmacy' | 'outpatient' | 'inpatient' | etc.
+  windowDays Int      // cross-provider duplicate detection lookback
+  updatedBy  String?
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+
+  @@index([claimType])
+  @@map("claim_type_config")
+}
+
+// ── T3.1: Public holidays (Kenya 2026 seed in seed.ts) ──────────────────────
+model PublicHoliday {
+  id        String   @id @default(uuid())
+  date      DateTime @db.Date
+  name      String
+  country   String   @default("KE")
+  createdAt DateTime @default(now())
+
+  @@unique([date, country])
+  @@index([date])
+  @@map("public_holidays")
+}
+
+// ── T3.3: Per-user notification delivery preference ──────────────────────────
+model NotificationPreference {
+  userId       String   @id
+  // 'realtime' | 'hourly' | 'daily'
+  mode         String   @default("realtime")
+  // Local hour (0-23) when quiet period starts/ends. null = no quiet hours.
+  quietStart   Int?
+  quietEnd     Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+// ── T3.3: Buffered/digest notification queue ─────────────────────────────────
+/// Holds notifications pending digest flush or delayed realtime send.
+/// Urgent categories (sla_breach, fraud_confirmed) bypass quiet hours.
+model NotificationQueue {
+  id           String    @id @default(uuid())
+  recipientId  String
+  type         String
+  // 'sla_breach' | 'fraud_confirmed' | 'general' — urgent categories bypass quiet hours
+  category     String    @default("general")
+  subject      String?
+  message      String
+  htmlContent  String?
+  claimId      String?
+  providerId   String?
+  scheduledFor DateTime?
+  flushedAt    DateTime?
+  createdAt    DateTime  @default(now())
+
+  recipient    User      @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId])
+  @@index([scheduledFor])
+  @@index([flushedAt])
+  @@map("notifications_queue")
+}
+
+// ── T3.5: Pacing alerts for scan-metering quota ──────────────────────────────
+/// One row per provider per day when the daily worker projects a quota breach.
+model ScanPacingAlert {
+  id           String    @id @default(uuid())
+  providerId   String
+  dayOfMonth   Int
+  usedPct      Decimal   @db.Decimal(5, 2)
+  projectedDay Int?
+  resolvedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  provider     Provider             @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId, createdAt(sort: Desc)])
+  @@index([resolvedAt])
+  @@map("scan_pacing_alerts")
 }
