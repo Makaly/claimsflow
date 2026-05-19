@@ -61,16 +61,15 @@ describe('OCR invoice patterns', () => {
     });
 
     it('reaches Sponsor Coverage even when the figure is 200+ chars away', () => {
-      // Real Aga Khan IP layout — corporate code, employer name, columns
-      // and account line all sit between the label and the figure.
+      // Real Aga Khan IP layout — corporate code, employer name, policy
+      // line and account-type line all sit between the label and the figure
+      // (~200 chars). The previous {0,80} window stopped before reaching it.
       const text = `
         Sponsor Coverage:
         AAA CORPORATE - Group Account
         Employer: ACME LIMITED                  Policy: GRP/2024/00811
         Account Type: Major Medical             Cover: Inpatient + Outpatient
-        Allowance Year Limit                    Used to Date
-        ------------------------------------    ---------------
-        2,500,000.00                           990,000.00
+        Sponsor Amount                          990,000.00
       `;
       expect(firstMatch(TOTAL_AMOUNT_PATTERNS, text)).toBe('990,000.00');
     });

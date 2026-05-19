@@ -40,6 +40,11 @@ export const INVOICE_DATE_PATTERNS = [
 // NOTE: Aga Khan FIRST — their "Sponsor Coverage" is the insurance amount, NOT "Your Amount Due" (patient co-pay)
 // "Grand Total / Amount Due" pattern would otherwise capture the patient's tiny co-pay (e.g. 0.02) instead of 990,000
 export const TOTAL_AMOUNT_PATTERNS = [
+  // Aga Khan IP — explicit "payable to hospital" labels. These win over the
+  // looser Sponsor Coverage hunt below because they unambiguously name the
+  // figure we want and ignore the annual-limit / allowance figures that
+  // share the same section.
+  /(?:Sponsor\s+Amount\s+Payable|Net\s+Amount\s+Payable\s+to\s+Hospital|Net\s+Payable\s+to\s+Hospital|Sponsor\s+Settlement|Amount\s+Payable\s+by\s+Sponsor)\s*[:\-]?\s*(?:KES|Ksh|Kshs?)?\s*[:\-]?\s*([\d,]{3,}(?:\.\d{1,2})?)/i,
   // Aga Khan University Hospital: "Sponsor Coverage:\nAAA Corporate   990,000.00"
   // Window widened to 400 chars — IP consolidated bills push the figure
   // behind the corporate code + employer name + columns.

@@ -19,6 +19,62 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **Aga Khan inpatient extraction — three pattern fixes that close the
+  "Unknown Patient · Ksh 1.00 · Discharge Diagnosis" failure mode.**
+  - **Diagnosis label trap** (`invoice-patterns.ts:108-119`,
+    `ocr.service.ts:1082-1097`) — Aga Khan IP discharge cover pages
+    render `Diagnosis:` as a header on one line, `Discharge Diagnosis`
+    (or `Final Diagnosis`, `Provisional Diagnosis`, etc.) as a sub-header
+    on the next, and the real value below. The regex `(?:Diagnosis|Dx)
+    \s*[:\-]?\s*\n+\s*(.{3,120}?)(?:\n|$)` was capturing the sub-header
+    string itself. Fix: a `DIAGNOSIS_SUBHEADER_SKIP` optional non-capturing
+    group is now woven into patterns 2 and 3 to burn past any known
+    label variant and grab the next line. Belt-and-braces guard in the
+    consumer rejects any captured value that *is* one of those labels,
+    so the loop falls through to the next pattern.
+  - **Bare `Total:` floor at KES 100** (`invoice-patterns.ts:46`) — the
+    fallback `(?:Total)\s*[:\-]?…([\d,]+(?:\.\d{1,2})?)` happily matched
+    `Total: 1.00` (a rounding line, change-due footer, per-page sub-total)
+    and won `Math.max(allAmounts)` against legitimate but missed real
+    totals. The integer portion of the capture now requires at least 3
+    digit/comma characters (`[\d,]{3,}`) so anything below 100 simply
+    doesn't match.
+  - **Sponsor Coverage search window widened 80 → 400 chars**
+    (`invoice-patterns.ts:44`) — corporate code + employer name + policy
+    line + account-type line routinely sit ~200 characters between
+    `Sponsor Coverage:` and the figure on IP consolidated bills. The
+    previous `{0,80}` cap was missing the match entirely, which left the
+    other (less specific) patterns to win and produce the wrong total.
+  - **Explicit "payable to hospital" amount pattern**
+    (`invoice-patterns.ts:43`) — even with the widened Sponsor Coverage
+    window, IP layouts that list the annual limit before the actual
+    payable amount could fool the lazy regex into capturing the cap.
+    A new higher-priority pattern explicitly anchors on
+    `Sponsor Amount Payable`, `Net Amount Payable to Hospital`,
+    `Net Payable to Hospital`, `Sponsor Settlement`, or
+    `Amount Payable by Sponsor`, so the right figure wins whenever the
+    document uses an unambiguous label.
+  - **Inpatient column-header patient-name pattern**
+    (`invoice-patterns.ts:71-77`) — Aga Khan / MP Shah / Nairobi Hospital
+    IP cover sheets show `Patient` on its own line with the name on the
+    immediately following line in ALL CAPS (often `SURNAME, GIVEN`).
+    None of the colon-based patterns caught this layout, so
+    `patientName` stayed empty and the router accepted "Unknown Patient
+    + Ksh X" extractions. New pattern matches the column-header form
+    and stops at the trailing DOB / Age / Sex / Account label.
+  - **ICD-10 labels for the codes that surface on these documents**
+    (`invoice-patterns.ts:184-200`) — `H25` (age-related cataract),
+    `H26` (other cataract), `H28` (cataract in diseases classified
+    elsewhere), and `B30` (viral conjunctivitis) are now in
+    `ICD10_COMMON_LABELS`, so the review UI renders a human-readable
+    label instead of the bare code.
+  - Test coverage in `invoice-patterns.spec.ts`: new cases for the
+    diagnosis sub-header skip (Discharge / Final / no-subheader), the
+    bare-Total floor (`Total: 1.00` must not win), the widened Sponsor
+    Coverage window (figure 200+ chars after the label), the IP
+    column-header patient-name layout (label on its own line,
+    `Patient Name` form), and the new ICD-10 labels.
+
 - **OCR pipeline — post-extraction validation, 300 DPI rasterisation, and
   stricter fallback gating** — three quality-related fixes that together
   cut the silent-fail rate on phone-scanned and inpatient invoices.
