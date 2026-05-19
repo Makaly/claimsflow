@@ -3,6 +3,7 @@ import {
   FileText, CheckCircle, XCircle, Clock, Building2,
   AlertTriangle, RefreshCw, RotateCcw, MapPin, Upload,
   TrendingUp, ChevronRight, ShieldCheck, FileUp, Loader2,
+  Search, Download, FileSpreadsheet,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -13,6 +14,10 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
 import { formatCurrency, formatDate, getStatusColor } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
 import { useNavigate } from 'react-router-dom'
@@ -116,6 +121,16 @@ export default function ProviderDashboard() {
   const [uploadingDoc, setUploadingDoc] = useState(false)
   const [uploadDocError, setUploadDocError] = useState<string | null>(null)
 
+  // A3: claim search
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchStatus, setSearchStatus] = useState('all')
+  const [searchDateFrom, setSearchDateFrom] = useState('')
+  const [searchDateTo, setSearchDateTo] = useState('')
+
+  // A3: statement download
+  const [statementMonth, setStatementMonth] = useState(new Date().toISOString().slice(0, 7))
+  const [statementLoading, setStatementLoading] = useState(false)
+
   const isApproved = providerInfo?.approvalStatus === 'approved' && providerInfo?.canSubmitClaims
   const isRejected = providerInfo?.approvalStatus === 'rejected'
   const isPendingApproval = providerInfo && !isApproved && !isRejected
@@ -208,6 +223,47 @@ export default function ProviderDashboard() {
       setResubmitting(false)
     }
   }
+
+  const downloadStatement = async (format: 'json' | 'csv') => {
+    if (!user?.providerId) return
+    setStatementLoading(true)
+    try {
+      const url = `/providers/${user.providerId}/statement?month=${statementMonth}&format=${format}`
+      if (format === 'csv') {
+        const { data } = await api.get(url, { responseType: 'blob' })
+        const blob = new Blob([data], { type: 'text/csv' })
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = `statement-${statementMonth}.csv`
+        a.click()
+      } else {
+        const { data } = await api.get(url)
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = `statement-${statementMonth}.json`
+        a.click()
+      }
+    } finally {
+      setStatementLoading(false)
+    }
+  }
+
+  const filteredClaims = claims.filter(c => {
+    if (searchStatus !== 'all' && c.status !== searchStatus) return false
+    if (searchDateFrom && new Date(c.submittedAt) < new Date(searchDateFrom)) return false
+    if (searchDateTo && new Date(c.submittedAt) > new Date(searchDateTo)) return false
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase()
+      return (
+        c.claimNumber.toLowerCase().includes(q) ||
+        (c.memberNumber ?? '').toLowerCase().includes(q) ||
+        (c.patientName ?? '').toLowerCase().includes(q) ||
+        (c.invoiceNumber ?? '').toLowerCase().includes(q)
+      )
+    }
+    return true
+  })
 
   // ── Derived stats ─────────────────────────────────────────────────────────
 
@@ -401,6 +457,8 @@ export default function ProviderDashboard() {
             )}
           </TabsTrigger>
           <TabsTrigger value="all">All Claims</TabsTrigger>
+          <TabsTrigger value="search">Search</TabsTrigger>
+          <TabsTrigger value="statement">Statement</TabsTrigger>
         </TabsList>
 
         {/* Overview tab */}
@@ -572,6 +630,77 @@ export default function ProviderDashboard() {
                   ))}
                 </div>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* A3: Claim search tab */}
+        <TabsContent value="search" className="mt-4 space-y-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Search Claims</CardTitle>
+              <CardDescription>Filter by status, date range, member, or invoice</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <div className="relative flex-1 min-w-[180px]">
+                  <Search className="absolute left-2 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    className="pl-7 h-8 text-xs"
+                    placeholder="Claim #, member, patient, invoice…"
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                  />
+                </div>
+                <Select value={searchStatus} onValueChange={setSearchStatus}>
+                  <SelectTrigger className="w-36 h-8 text-xs">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All statuses</SelectItem>
+                    <SelectItem value="submitted">Submitted</SelectItem>
+                    <SelectItem value="under_review">Under review</SelectItem>
+                    <SelectItem value="approved">Approved</SelectItem>
+                    <SelectItem value="paid">Paid</SelectItem>
+                    <SelectItem value="rejected">Rejected</SelectItem>
+                    <SelectItem value="incomplete">Incomplete</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input type="date" value={searchDateFrom} onChange={e => setSearchDateFrom(e.target.value)} className="w-36 h-8 text-xs" />
+                <Input type="date" value={searchDateTo} onChange={e => setSearchDateTo(e.target.value)} className="w-36 h-8 text-xs" />
+              </div>
+              <ClaimsTable claims={filteredClaims} showBranch={isProviderAdmin} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* A3: Statement download tab */}
+        <TabsContent value="statement" className="mt-4 space-y-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Monthly Statement</CardTitle>
+              <CardDescription>Download approved/paid claims for a given month</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-3 flex-wrap">
+                <Input
+                  type="month"
+                  value={statementMonth}
+                  onChange={e => setStatementMonth(e.target.value)}
+                  className="w-40 h-8 text-xs"
+                />
+                <Button size="sm" variant="outline" disabled={statementLoading} onClick={() => downloadStatement('csv')}>
+                  {statementLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <FileSpreadsheet className="h-3.5 w-3.5 mr-1" />}
+                  Download CSV
+                </Button>
+                <Button size="sm" variant="outline" disabled={statementLoading} onClick={() => downloadStatement('json')}>
+                  {statementLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Download className="h-3.5 w-3.5 mr-1" />}
+                  Download JSON
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Includes all claims with status "approved" or "paid" in the selected month, based on approval date.
+              </p>
             </CardContent>
           </Card>
         </TabsContent>

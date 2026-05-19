@@ -527,4 +527,46 @@ export class ProvidersController {
   ) {
     return this.providersService.removeDocument(id, docId);
   }
+
+  /** Monthly statement for a provider — returns aggregated paid/approved claims for a given month.
+   *  ?month=YYYY-MM  (defaults to current month)
+   *  ?format=csv     returns CSV; default is JSON
+   */
+  @Get(':id/statement')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'finance', 'claims_officer', 'provider_admin')
+  async getStatement(
+    @Param('id') id: string,
+    @Query('month') month: string,
+    @Query('format') format: string,
+    @Request() req: any,
+    @Res() res: Response,
+  ) {
+    // Scope: provider_admin may only access their own provider.
+    if (req.user.role === 'provider_admin' && req.user.providerId !== id) {
+      throw new ForbiddenException('Access denied');
+    }
+
+    const targetMonth = month ?? new Date().toISOString().slice(0, 7);
+    const [year, mon] = targetMonth.split('-').map(Number);
+    const from = new Date(year, mon - 1, 1);
+    const to = new Date(year, mon, 1);
+
+    const claims = await this.providersService.getStatementClaims(id, from, to);
+
+    if (format === 'csv') {
+      const header = 'ClaimNumber,PatientName,MemberNumber,InvoiceAmount,Status,ApprovedAt\n';
+      const rows = claims
+        .map((c: any) =>
+          [c.claimNumber, c.patientName ?? '', c.memberNumber ?? '', c.invoiceAmount ?? 0, c.status, c.approvedAt ?? ''].join(','),
+        )
+        .join('\n');
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="statement-${targetMonth}.csv"`);
+      return res.send(header + rows);
+    }
+
+    const total = claims.reduce((s: number, c: any) => s + (c.invoiceAmount ?? 0), 0);
+    res.json({ month: targetMonth, providerId: id, totalAmount: total, claimCount: claims.length, claims });
+  }
 }
