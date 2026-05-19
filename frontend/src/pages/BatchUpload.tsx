@@ -2024,6 +2024,30 @@ function ProcessingInsightCard({
   )
 }
 
+function InstallSnippet({ command }: { command: string }) {
+  const [copied, setCopied] = useState(false)
+  const handleCopy = () => {
+    navigator.clipboard.writeText(command).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+  return (
+    <div className="relative group">
+      <code className="block bg-muted pr-9 pl-2 py-1.5 rounded text-[11px] font-mono whitespace-pre-wrap break-all">
+        {command}
+      </code>
+      <button
+        onClick={handleCopy}
+        title="Copy command"
+        className="absolute top-1 right-1 p-1 rounded hover:bg-background/80 transition-colors text-muted-foreground hover:text-violet-600"
+      >
+        {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+      </button>
+    </div>
+  )
+}
+
 export default function BatchUpload() {
   const { addClaims } = useClaimsStore()
   const { user } = useAuthStore()
@@ -3613,16 +3637,29 @@ export default function BatchUpload() {
                                     Windows SmartScreen may show <strong>&quot;Windows protected your PC&quot;</strong> because this installer is not code-signed. Click <strong>More info → Run anyway</strong> — the agent is a small open-source Node.js service published from this repository.
                                   </span>
                                 </div>
+                                <div className="pt-1.5 space-y-1.5">
+                                  <p className="text-[10px] text-muted-foreground">Or run from an <strong>Administrator</strong> PowerShell:</p>
+                                  <InstallSnippet command={'irm https://github.com/Makaly/claimsflow/releases/download/scan-agent-latest/install.ps1 | iex'} />
+                                </div>
                               </div>
-                              {/* Linux/Mac */}
-                              <div className="rounded-md border bg-background p-3 space-y-1.5">
-                                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Linux / macOS</p>
-                                <code className="block bg-muted px-2 py-1.5 rounded text-[11px] font-mono">
-                                  cd scan-agent &amp;&amp; npm install &amp;&amp; npm start
-                                </code>
+                              {/* Linux */}
+                              <div className="rounded-md border bg-background p-3 space-y-2">
+                                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Linux</p>
+                                <InstallSnippet command={'curl -fsSL https://github.com/Makaly/claimsflow/releases/download/scan-agent-latest/install.sh -o claimsflow-install.sh && bash claimsflow-install.sh'} />
+                                <p className="text-[10px] text-muted-foreground">
+                                  Installs a prebuilt binary to <code className="font-mono">~/.local/bin</code> and registers a systemd user service. Optionally installs SANE via apt / dnf / pacman.
+                                </p>
                               </div>
-                              <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
-                                <li>Install the agent using one of the options above</li>
+                              {/* macOS */}
+                              <div className="rounded-md border bg-background p-3 space-y-2">
+                                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">macOS</p>
+                                <InstallSnippet command={'curl -fsSL https://github.com/Makaly/claimsflow/releases/download/scan-agent-latest/install.sh -o claimsflow-install.sh && bash claimsflow-install.sh'} />
+                                <p className="text-[10px] text-muted-foreground">
+                                  Installs a prebuilt binary and registers a launchd agent so the service auto-starts on login. Optionally <code className="font-mono">brew install sane-backends</code>.
+                                </p>
+                              </div>
+                              <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside pt-1">
+                                <li>Install the agent using the option above for your OS</li>
                                 <li>Click <strong>Refresh</strong> — your scanner will appear in the list</li>
                               </ol>
                             </div>
