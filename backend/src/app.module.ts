@@ -35,6 +35,11 @@ import { MockIntegrationsModule } from './mock-integrations/mock-integrations.mo
 import { GdprModule } from './gdpr/gdpr.module';
 import { ScannerModule } from './scanner/scanner.module';
 import { ScanMeteringModule } from './scan-metering/scan-metering.module';
+import { WhatsAppModule } from './whatsapp/whatsapp.module';
+import { NpsModule } from './nps/nps.module';
+import { ErpModule } from './erp/erp.module';
+import { BankReconModule } from './bank-recon/bank-recon.module';
+import { CoverageCalculatorModule } from './coverage-calculator/coverage-calculator.module';
 
 @Module({
   imports: [
@@ -83,6 +88,11 @@ import { ScanMeteringModule } from './scan-metering/scan-metering.module';
     GdprModule,
     ScannerModule,
     ScanMeteringModule,
+    WhatsAppModule,
+    NpsModule,
+    ErpModule,
+    BankReconModule,
+    CoverageCalculatorModule,
   ],
   controllers: [AppController],
   providers: [
