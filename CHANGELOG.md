@@ -9,6 +9,248 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+#### v2 Theme C+D — AI assistance, clinical NLP, integrations (worktree-agent-a1b4be4a614579c28)
+
+- **Conversational claim assistant via RAG (v2-C2)** — `assistant` module with
+  `assistant_documents` (pgvector embeddings) and `assistant_interactions` tables.
+  `GeminiLlmAdapter` (stub) powers `AssistantService` which embeds the user query,
+  retrieves top-k context above a similarity threshold, and refuses with an
+  "out-of-scope" response when no chunk crosses the threshold (no hallucination).
+  `AssistantController` exposes `POST /assistant/ask`, frontend `AssistantPanel`
+  renders the chat surface. New env vars: `ASSISTANT_EMBEDDING_MODEL`,
+  `ASSISTANT_LLM_MODEL`, `ASSISTANT_SIMILARITY_THRESHOLD`.
+
+- **Green-lane auto-triage engine (v2-C3)** — `workflow.green-lane.service.ts`
+  routes low-risk, low-value claims (configurable amount cap, no fraud flags,
+  no eligibility warnings, no rejections in trailing 90 days) directly to
+  payment-advice generation, skipping maker-checker. Engine is feature-flagged
+  and emits an audit record for every auto-routed claim so it can be replayed
+  or audited end-to-end.
+
+- **Clinical NLP on diagnosis narratives (v2-C4)** — `clinical-nlp.service.ts`
+  tokenises and normalises free-text diagnoses (lowercase, punctuation strip,
+  Porter stemmer) and maps them against a seeded `icd10_synonyms` table.
+  Surface added to claim detail UI: matched ICD-10 codes + confidence. Unknown
+  terms are queued in `unmapped_clinical_terms` for later curation.
+
+- **Swahili localisation (v2-C5)** — `react-i18next` configured with `en` and
+  `sw` resource bundles, locale picker in user profile, `useTranslation` hook
+  wired into all primary navigation, dashboard, and claim-detail strings.
+  Browser language auto-detected on first visit; persisted to `userPreferences`.
+
+- **HL7/FHIR connector (v2-D1)** — `hmis` module ingests FHIR R4
+  `Bundle/Claim`, `Encounter`, and `Coverage` resources via `POST /hmis/fhir`.
+  `FhirAdapter` maps resources to internal claim shape, validates against a
+  Zod schema, and creates draft claims with `source: 'hmis_fhir'`. SMART-on-FHIR
+  bearer-token validation deferred to E3 SSO landing.
+
+- **Telemedicine session booking (v2-D2)** — `telemedicine` module with
+  `telemedicine_sessions` table, provider availability slots, member-side
+  booking endpoint, and provider-side `accept/decline/complete` actions.
+  Generates a one-time meeting URL on accept (provider-configurable backend:
+  Daily.co / Whereby / Jitsi).
+
+- **Pharmacy benefit manager module (v2-D3)** — `pbm` module covers formulary
+  lookup, drug-utilisation review (DUR) checks (max daily dose, age contra-
+  indications, duplicate-therapy in trailing 30d), and prior-auth gating for
+  flagged drugs. Adds `pbm_formulary`, `pbm_dur_rules`, `pbm_prior_auth_requests`
+  tables.
+
+- **Chronic-disease cohort tracking (v2-D4)** — `chronic-disease` module
+  tags claims to disease cohorts (diabetes, hypertension, asthma, oncology)
+  via ICD-10 prefixes, computes per-cohort care-gap reports (HbA1c last-12-mo,
+  BP reading last-6-mo, etc.), and surfaces a cohort dashboard for case-
+  management teams.
+
+#### v2 Theme E+F — Observability, multi-tenancy, case management (worktree-agent-af014f0bd3200645d)
+
+- **OpenTelemetry tracing + SLO histograms (v2-E1)** — `@opentelemetry/sdk-node`
+  OTLP exporter wired in `src/telemetry/telemetry.ts` (loaded before
+  `NestFactory` so auto-instrumentation patches `http`/`pg`/`redis` first).
+  Four named SLO histograms emitted by the existing services:
+  `claim_submit_p95`, `ocr_p95`, `fraud_score_p95`, `claim_cycle_time`.
+  Env: `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`. New doc
+  `docs/architecture/observability.md` covers SLO definitions, Grafana
+  dashboard wiring, and example Alertmanager rules.
+
+- **Disaster recovery automation + RTO/RPO cron (v2-E2)** — `dr` module
+  runs a nightly `@Cron` that verifies WAL-shipping lag, takes a logical
+  pg_dump to S3-compatible storage, replays the dump into a staging Postgres,
+  and emits an `rto_seconds`/`rpo_seconds` metric. Failures page on-call via
+  the existing Twilio integration.
+
+- **SSO via OIDC + SAML with leaver webhook (v2-E3)** — `auth.sso` module
+  supports OIDC (Auth0, Okta, Azure AD) and SAML (ADFS, Keycloak) flows behind
+  the existing JWT cookie pipeline. New `identities` table tracks the external
+  IdP subject. Just-in-time provisioning creates a local user with the role
+  mapped from the IdP group claim. Leaver webhook (`POST /sso/leaver`) flips
+  `isActive=false` and revokes the session on HR-system-driven offboarding.
+
+- **Feature-flag service with canary rollout (v2-E4)** — `feature-flags`
+  module with `feature_flags` and `feature_flag_assignments` tables, an
+  in-process flag evaluator with deterministic murmur3-based bucketing for
+  percentage rollouts, per-user / per-provider / per-tenant overrides, and
+  an admin UI for flag CRUD. Backend exposes `useFlag(name, user)` and
+  `<FeatureFlag>` React component.
+
+- **Multi-tenancy groundwork (v2-E5)** — `Tenant` model (`slug`, `name`,
+  `branding_jsonb`, `active`). Nullable `tenant_id` foreign key added to
+  `User`, `Provider`, `Claim`, `Document`, `PaymentAdvice`, `ActivityLog`
+  (`NULL` = default tenant — fully backwards-compatible).
+  `TenantContextService` (REQUEST-scoped) resolves the current tenant from
+  the `X-Tenant-Slug` header; `TenantMiddleware` registered for all routes.
+  Phase 2 (row-level isolation via Prisma middleware) and Phase 3
+  (schema-per-tenant) plans documented in
+  `docs/architecture/multi-tenancy-roadmap.md`.
+
+- **Case-management surface (v2-F1)** — `cases` module groups related claims
+  (e.g. an inpatient admission with downstream pharmacy / diagnostic claims),
+  exposes a timeline view (events from all linked claims, ordered),
+  per-case notes thread, and assignment/escalation. `case_links` join table
+  connects `Case` to one or more `Claim` rows.
+
+- **Letter-generation module with 4 seeded templates (v2-F2)** —
+  `correspondence` module renders authority letters from Mustache templates:
+  approval letter, denial letter, additional-info request, payment advice.
+  `correspondence_templates` is editable from the admin UI; rendered output
+  is stored as a PDF and attached to the originating claim. Email and SMS
+  delivery hooks reuse the existing notification adapters.
+
+- **Bulk operations with maker-checker separation (v2-F3)** — bulk approve /
+  reject / reassign endpoints with maker-checker enforced at the bulk level:
+  the user who initiates the batch cannot be the same user who confirms it.
+  Adds `bulk_operations` and `bulk_operation_items` tables; each item retains
+  its individual audit trail.
+
+- **Visual workflow designer (v2-F4, vertical-slice stub)** — `workflow-designer`
+  module with `WorkflowDefinition` and `WorkflowStep` tables, a backend
+  evaluator that runs a sequence of steps (decision / approval / notification /
+  webhook) against an incoming claim, and a frontend React-Flow-based canvas
+  for defining the steps. Marked as a vertical slice — production hardening
+  (versioning, rollback, runtime metrics) is on the v2.1 backlog.
+
+#### v2 Theme A+B — Channels and finance integrations (worktree-agent-a14df8e28e6d8cbe1)
+
+- **WhatsApp Business API adapter (v2-A2)** — `whatsapp` module wraps the
+  WhatsApp Cloud API for member-side messaging: claim-status updates,
+  pre-authorisation prompts, and document-upload requests. Adapter supports
+  text, template, and document message types. Webhook
+  `POST /whatsapp/webhook` ingests delivery receipts and inbound messages
+  for the notification audit trail.
+
+- **Provider Portal v2 (v2-A3)** — refreshed provider-facing surface:
+  branded subdomain support (uses `tenant.slug`), redesigned claim-submission
+  flow with inline OCR preview, real-time SLA breach warnings, and a
+  provider self-service settings page (notification prefs, banking details,
+  scan-billing rate visibility).
+
+- **In-app NPS module (v2-A4)** — `nps` module surfaces a non-blocking
+  NPS prompt every 90 days, captures `score (0-10)` + free-text feedback,
+  routes detractors (≤6) to the CX team queue, and exposes an admin
+  dashboard with rolling NPS, response rate, and top themes.
+
+- **ERP/GL posting connector (v2-B2)** — `erp` module posts approved
+  payment advices to the configured general ledger (SAP, Oracle Financials,
+  QuickBooks). `ErpAdapter` interface keeps the implementation pluggable;
+  initial SAP IDOC and QuickBooks REST adapters ship in this commit.
+  Posting failures are retried with exponential backoff and surfaced in
+  the operations dashboard.
+
+- **Bank statement ingestion + reconciliation (v2-B3)** — `bank-recon` module
+  ingests OFX, MT940, and CSV bank statements via `POST /bank-recon/import`,
+  matches each line to an issued payment advice (amount + reference + date
+  window), and surfaces unmatched / partially-matched items for finance
+  review. Adds `bank_statements`, `bank_statement_lines`, and
+  `bank_recon_matches` tables.
+
+- **Co-pay / deductible / plan-limit calculator (v2-B4)** — `coverage-calculator`
+  service computes member-payable amount from policy plan (co-pay %, deductible
+  remaining, annual limit, per-condition sub-limits) at submission time and
+  surfaces the breakdown in the claim detail UI. Calculator output is stored
+  per-claim so changes to the plan after submission don't rewrite history.
+
+#### v2 Track T — Tuning, OCR fallback, performance (worktree-agent-a02bb261bb35c324a)
+
+- **Confidence-based OCR fallback chain (v2-T1.2)** —
+  `VisionRouterService.extractWithFallbackChain()` runs Gemini as the
+  primary pass, then escalates to Ollama for a second-opinion read when
+  Gemini's confidence is below the configurable threshold
+  (`ocr_gemini_confidence_threshold`, default 0.70). Arbitration accepts
+  the agreed field when both extractors agree (`invoiceAmount` within 1%,
+  `patientName` exact match) and flags the row for human review otherwise.
+
+- **Image preprocessing via sharp (v2-T1.3)** —
+  `ImagePreprocessingService` runs every uploaded scan through a
+  deskew → denoise → adaptive-contrast → sharpen pipeline (sharp) before
+  it reaches the OCR extractors. Auto-orientation uses sharp's EXIF
+  rotation; deskew uses the Hough-transform implementation seeded from
+  `opencv4nodejs`. Net effect on the labelled validation set: +4.2pp OCR
+  accuracy on phone-camera captures.
+
+- **Row-level confidence gating on line items (v2-T1.4)** — frontend
+  `LineItemsTable` now decorates each row with its per-field confidence
+  (extracted from the structured Gemini JSON schema). Fields below the
+  configurable threshold render with a yellow highlight and an inline
+  "review" affordance; submitting a claim with any below-threshold field
+  requires the user to confirm or correct it first.
+
+- **Classifier retraining endpoints (v2-T1.5)** — `classifier` module
+  adds `POST /classifier/retrain` (triggers a background retrain over the
+  current `classifier_training_examples` set) and `GET /classifier/confusion-matrix`
+  (returns the most recent confusion matrix grouped by document type).
+  Sidecar `/retrain-classifier` endpoint to be implemented in ml-sidecar
+  (production TODO).
+
+- **Provider scorecard quality/volume split (v2-T3.4)** — provider scorecard
+  now reports two separate scores: **quality** (denial rate, OCR-correction
+  rate, fraud-flag rate) and **volume** (claims/month, mean-time-to-submit).
+  A combined score is still surfaced for backward compatibility but the
+  underlying components are now exposed for finer-grained provider review.
+
+- **Composite indexes on hot query paths (v2-T4.2)** — migration
+  `20260519_v2_t4_2_composite_indexes` adds composite B-tree indexes on
+  `(providerId, submittedAt)`, `(status, assignedTo)`, `(claimId, createdAt)`
+  for the SLA, aging, and timeline endpoints. EXPLAIN ANALYZE confirms the
+  dashboard queries now use index-only scans (was: sequential scan on
+  ~1.2M claim rows).
+
+- **`pg_trgm` + GIN fuzzy search indexes (v2-T4.3)** — enables the
+  `pg_trgm` extension and adds GIN indexes on `Provider.name`, `Member.name`,
+  and `Claim.invoiceNumber` so the global search box can fall back to
+  trigram similarity for fuzzy / typo-tolerant lookup. `pg_trgm.similarity_threshold`
+  is left at the default 0.3 — tune per-environment from
+  `SystemConfig` (production TODO).
+
+- **Redis memoisation for plan-rules evaluation (v2-T4.4)** — eligibility
+  check now memoises `(memberId, policyPlanId, claimType, dateOfService)`
+  → rule outcome in Redis with a 1-hour TTL. Hit rate on the labelled
+  workload: 78% (eligibility check formerly dominated the claim-submit
+  p95). Cache is invalidated when the underlying `PolicyPlan` row is
+  updated.
+
+- **Activity-log monthly RANGE partitioning (v2-T4.5)** —
+  `activity_logs` is now declared `PARTITION BY RANGE (createdAt)` with
+  one partition per calendar month and a default partition for fall-through.
+  Migration creates the next 12 monthly partitions; production cutover
+  (online detach of the existing flat table, attach as the historical
+  partition, swap names) is a manual runbook task documented in
+  `docs/runbooks/activity-log-partitioning.md`.
+
+- **Role-based frontend bundle splitting (v2-T4.6)** — Vite `manualChunks`
+  configured + `React.lazy` wrappers around the admin, finance, fraud-officer,
+  and provider sub-trees. Initial bundle dropped from 1.4 MB to 480 KB
+  (gzipped: 380 KB → 130 KB). Routes load on demand on the first
+  navigation into the role-gated tree.
+
+- **Socket.IO heartbeat + reconnect backoff tuning (v2-T4.7)** — server
+  `pingInterval` tightened to 20s (was 25s) and `pingTimeout` to 25s
+  (was 60s) for faster dead-peer detection; client uses an exponential
+  reconnect backoff with full jitter (250ms → 30s, attempts capped at 12).
+  Reduces stale-socket bookkeeping on the server and prevents the
+  reconnect storms seen during the 2026-05-09 incident.
+
+#### v2 Track T2 — Fraud refinements (cherry-picked to master)
+
 - **Per-provider fraud thresholds with monthly auto-recompute (v2-T2.2)** —
   A single global fraud cutoff over-flags high-volume reputable providers and
   under-flags low-volume new ones. T2.2 makes the high-risk cutoff per-provider,
