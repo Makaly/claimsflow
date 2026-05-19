@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException, BadRequestException,
 import { PrismaService } from '../prisma/prisma.service';
 import { OcrService } from '../ocr/ocr.service';
 import { SearchablePdfService } from '../ocr/searchable-pdf.service';
+import { ImagePreprocessorService, PreprocessOptions, PreprocessResult } from '../ocr/image-preprocessor.service';
 import { PdfOperationsService } from '../common/services/pdf-operations.service';
 import { EdmsIntegrationService } from '../common/services/edms-integration.service';
 import * as fs from 'fs';
@@ -22,7 +23,75 @@ export class DocumentsService {
     private pdfOperationsService: PdfOperationsService,
     private edmsService: EdmsIntegrationService,
     private searchablePdfService: SearchablePdfService,
+    private imagePreprocessorService: ImagePreprocessorService,
   ) {}
+
+  /**
+   * Run the ml-sidecar OpenCV preprocessing pipeline (deskew, page-crop,
+   * shadow removal, CLAHE, denoise, 300 DPI) on the document. Image inputs
+   * only — PDFs return 400 because callers should render to images first.
+   * Persists step metadata onto Document.metadata.preprocessing and returns
+   * the result. Lazy / opt-in — does NOT auto-run from the OCR queue.
+   */
+  async preprocessDocumentImage(
+    id: string,
+    user?: { role?: string | null; providerId?: string | null; branchId?: string | null },
+    opts: PreprocessOptions = {},
+  ): Promise<PreprocessResult> {
+    const document = await this.findOne(id, user);
+    if (!fs.existsSync(document.path)) {
+      throw new NotFoundException('Source file not found on disk');
+    }
+    const result = await this.imagePreprocessorService.preprocess(
+      document.id,
+      document.path,
+      document.mimetype,
+      { ...opts, force: true },
+    );
+    if (!result) {
+      throw new BadRequestException(
+        'Preprocessing unavailable — ml-sidecar is disabled or unreachable',
+      );
+    }
+
+    const merged = {
+      ...((document.metadata as Record<string, unknown>) ?? {}),
+      preprocessing: {
+        path: result.outputPath,
+        stepsApplied: result.stepsApplied,
+        deskewAngleDegrees: result.deskewAngleDegrees,
+        wasCroppedToPage: result.wasCroppedToPage,
+        dpiScaleRatio: result.dpiScaleRatio,
+        targetDpi: result.targetDpi,
+        finalWidth: result.finalWidth,
+        finalHeight: result.finalHeight,
+        processedAt: new Date().toISOString(),
+      },
+    };
+    await this.prisma.document.update({
+      where: { id: document.id },
+      data: { metadata: merged },
+    });
+
+    return result;
+  }
+
+  /** Stream the preprocessed PNG. 404 if it hasn't been generated yet. */
+  async getPreprocessedStream(
+    id: string,
+    user?: { role?: string | null; providerId?: string | null; branchId?: string | null },
+  ) {
+    const document = await this.findOne(id, user);
+    const out = this.imagePreprocessorService.outputPath(document.id);
+    if (!fs.existsSync(out)) {
+      throw new NotFoundException('Preprocessed image not available — call POST /preprocess first');
+    }
+    return {
+      stream: fs.createReadStream(out),
+      mimetype: 'image/png',
+      filename: `${document.originalName.replace(/\.[^.]+$/, '')}.preprocessed.png`,
+    };
+  }
 
   /**
    * Stream a searchable PDF for the document. Generates lazily on first

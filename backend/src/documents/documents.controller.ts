@@ -111,6 +111,34 @@ export class DocumentsController {
     stream.pipe(res);
   }
 
+  @Post(':id/preprocess')
+  preprocess(
+    @Param('id') id: string,
+    @Body() body: {
+      deskew?: boolean;
+      cropToPage?: boolean;
+      removeShadow?: boolean;
+      clahe?: boolean;
+      denoise?: boolean;
+      grayscale?: boolean;
+      targetDpi?: number;
+      paperLongEdgeInches?: number;
+    } | undefined,
+    @Request() req: any,
+  ) {
+    return this.documentsService.preprocessDocumentImage(id, req.user, body ?? {});
+  }
+
+  @Get(':id/preprocessed')
+  async preprocessedImage(@Param('id') id: string, @Request() req: any, @Res() res: Response) {
+    const { stream, mimetype, filename } = await this.documentsService.getPreprocessedStream(id, req.user);
+    res.set({
+      'Content-Type': mimetype,
+      'Content-Disposition': `inline; filename="${filename}"`,
+    });
+    stream.pipe(res);
+  }
+
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.documentsService.remove(id);

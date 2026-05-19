@@ -9,6 +9,31 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+#### OCR — OpenCV image preprocessing pipeline (sidecar)
+
+- **`POST /preprocess-image` on the ML sidecar** — runs a single image
+  through an OpenCV pipeline before it reaches the OCR extractors:
+  deskew (minimum-area-rect skew estimate), page-crop (largest external
+  contour), shadow removal (illumination flattening), CLAHE adaptive
+  contrast, non-local-means denoise, grayscale conversion, and DPI
+  normalisation to 300 DPI (paper long-edge configurable for A4 / Letter).
+  Every step is individually toggleable via the request body so callers
+  can compose a custom pipeline per document class. `cv2` is loaded
+  lazily and surfaced as `cv2Available` on `GET /health`; the endpoint
+  responds 503 when OpenCV is unavailable rather than crashing the
+  process. Adds `opencv-python-headless==4.10.0.84` to
+  `ml-sidecar/requirements.txt`.
+
+- **`ImagePreprocessorService` in the backend OCR module** — thin
+  TypeScript client that base64-encodes the source image, calls the
+  sidecar's `/preprocess-image` endpoint, writes the preprocessed PNG to
+  the temp directory, and returns a `PreprocessResult` with the applied
+  steps, deskew angle, final dimensions, and DPI scale ratio. Returns
+  `null` (not throw) when the sidecar is unreachable so the OCR pipeline
+  degrades gracefully to the raw image. Only image MIME types are
+  accepted — PDFs are explicitly rejected and must be page-rasterised by
+  the caller via the existing `pdftoppm` path in `ocr.service.ts`.
+
 #### v2 Theme C+D — AI assistance, clinical NLP, integrations (worktree-agent-a1b4be4a614579c28)
 
 - **Conversational claim assistant via RAG (v2-C2)** — `assistant` module with
