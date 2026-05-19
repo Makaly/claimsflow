@@ -20,36 +20,132 @@ The agent runs entirely on your machine and only listens on `127.0.0.1` (localho
 
 ---
 
-## Quick start
+## Install — one step per platform
 
-### Prerequisites
+### Windows
 
-| Platform | Scanner driver needed |
-|---|---|
-| Windows | WIA driver for your scanner (installed automatically by Windows Update or your scanner's setup disc). Covers all TWAIN and ISIS devices that ship a WIA driver (Epson, HP, Canon, Fujitsu, Kodak Alaris, etc.). |
-| Linux | `sudo apt install sane-utils` (Debian/Ubuntu) or `sudo dnf install sane-backends` (Fedora) |
-| macOS | SANE via Homebrew: `brew install sane-backends` |
+Download and run **[ClaimsFlow-Scan-Agent-Setup.exe](https://github.com/Makaly/claimsflow/releases/download/scan-agent-latest/ClaimsFlow-Scan-Agent-Setup.exe)**.
 
-Node.js 18 or later must be installed: <https://nodejs.org>
+Installs as a Windows service, supports TWAIN / WIA / ISIS, auto-starts on boot.
 
-### Install and run
+### Linux
 
 ```bash
-# From the repo root
-cd scan-agent
-npm install
-npm start
+curl -fsSL https://github.com/Makaly/claimsflow/releases/download/scan-agent-latest/install.sh -o claimsflow-install.sh
+bash claimsflow-install.sh
 ```
 
-The agent starts on `http://127.0.0.1:7420`. Leave this terminal open while scanning.
+The installer:
+
+- Downloads a prebuilt single-file binary (no Node.js install required) to `~/.local/bin/claimsflow-scan-agent`
+- Optionally installs SANE backends via `apt` / `dnf` / `pacman` / `zypper`
+- Optionally registers a **systemd user service** so the agent auto-starts on login and survives reboots
+
+### macOS
+
+```bash
+curl -fsSL https://github.com/Makaly/claimsflow/releases/download/scan-agent-latest/install.sh -o claimsflow-install.sh
+bash claimsflow-install.sh
+```
+
+Same installer — registers a **launchd agent** at `~/Library/LaunchAgents/com.claimsflow.scan-agent.plist`, optionally `brew install sane-backends`.
+
+### Quick one-liner (non-interactive)
+
+If you don't want prompts, pipe directly — the installer auto-starts the service and skips SANE install by default in piped mode:
+
+```bash
+curl -fsSL https://github.com/Makaly/claimsflow/releases/download/scan-agent-latest/install.sh | bash
+```
+
+Override via env vars:
+
+| Variable | Effect |
+|---|---|
+| `CLAIMSFLOW_AUTOSTART=1` / `0` | Register service / install binary only |
+| `CLAIMSFLOW_INSTALL_SANE=1` / `0` | Install SANE backends / skip |
+| `CLAIMSFLOW_VERSION=tag` | Release tag (default `scan-agent-latest`) |
+| `CLAIMSFLOW_PREFIX=path` | Install prefix (default `~/.local`) |
+
+---
+
+## After install
+
+1. Open ClaimsFlow in your browser.
+2. Go to the **Scan Document** tab.
+3. Click **Refresh** — your scanner appears in the list.
+
+The agent listens on `http://127.0.0.1:7420` (localhost only).
+
+---
+
+## Manage the service
+
+### Linux (systemd)
+
+```bash
+systemctl --user status  claimsflow-scan-agent
+systemctl --user restart claimsflow-scan-agent
+systemctl --user stop    claimsflow-scan-agent
+journalctl --user -u     claimsflow-scan-agent -f
+```
+
+### macOS (launchd)
+
+```bash
+launchctl list | grep claimsflow
+launchctl unload ~/Library/LaunchAgents/com.claimsflow.scan-agent.plist
+launchctl load   ~/Library/LaunchAgents/com.claimsflow.scan-agent.plist
+tail -f ~/Library/Logs/claimsflow-scan-agent.log
+```
+
+### Windows
+
+```
+services.msc → ClaimsFlow Scan Agent
+```
+
+---
+
+## Uninstall
+
+### Linux / macOS
+
+```bash
+curl -fsSL https://github.com/Makaly/claimsflow/releases/download/scan-agent-latest/uninstall.sh | bash
+```
+
+### Windows
+
+Use **Apps & features** → *ClaimsFlow Scan Agent* → **Uninstall**.
+
+---
+
+## Run from source (developers)
+
+```bash
+cd scan-agent
+npm install
+npm start          # http://127.0.0.1:7420
+```
+
+Build standalone binaries:
+
+```bash
+./build-unix.sh                    # current host platform
+TARGETS="linux mac" ./build-unix.sh
+.\build-windows.ps1                # on Windows, in PowerShell
+```
 
 ---
 
 ## Custom port
 
 ```bash
-SCAN_AGENT_PORT=7421 npm start
+SCAN_AGENT_PORT=7421 claimsflow-scan-agent
 ```
+
+Or edit the systemd unit / launchd plist / Windows service config and restart the service.
 
 ---
 
@@ -72,9 +168,4 @@ SCAN_AGENT_PORT=7421 npm start
 - Binds to `127.0.0.1` only — unreachable from other machines on the network.
 - CORS is restricted to `claimsflow-frontend.onrender.com` and localhost origins.
 - Device IDs are validated against the live discovered device list before any scan is executed — no shell injection possible.
-
----
-
-## Stopping the agent
-
-Press `Ctrl+C` in the terminal where it is running.
+- The Linux/macOS installer downloads from `https://github.com/Makaly/claimsflow/releases/...` over TLS. Inspect the script before running by saving it to disk first (`curl -o`) rather than piping straight to `bash`.
