@@ -1080,12 +1080,19 @@ export class OcrService {
     }
 
     // DIAGNOSIS
+    // Reject captures that are themselves diagnosis sub-headers ("Discharge
+    // Diagnosis", "Final Diagnosis", etc.). The regex sub-header skip in
+    // invoice-patterns.ts handles most cases, but when the IP layout has a
+    // blank line after the sub-header the regex still falls back to
+    // capturing the header itself. This guard makes that capture lose so
+    // the next pattern (or the ICD-only fallback) wins.
+    const LABEL_ONLY = /^(?:Discharge|Final|Provisional|Working|Admission|Primary|Secondary|Clinical|Differential)\s+Diagnosis\s*[:\-]?\s*$/i;
     for (const pat of DIAGNOSIS_PATTERNS) {
       const m = t.match(pat);
       if (m) {
         let d = (m[1] || m[0] || '').trim().replace(/\s+/g, ' ').replace(/^[\s\-:]+/, '');
         d = d.replace(/ICD\s*Code.*$/i, '').replace(/Detailed\s*Invoice.*$/i, '').trim();
-        if (d.length > 2 && !/^ICD\s/i.test(d)) { result.diagnosis = d; break; }
+        if (d.length > 2 && !/^ICD\s/i.test(d) && !LABEL_ONLY.test(d)) { result.diagnosis = d; break; }
       }
     }
 

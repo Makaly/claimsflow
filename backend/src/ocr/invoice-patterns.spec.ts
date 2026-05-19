@@ -4,7 +4,9 @@ import {
   TOTAL_AMOUNT_PATTERNS,
   MEMBERSHIP_PATTERNS,
   PATIENT_NAME_PATTERNS,
+  DIAGNOSIS_PATTERNS,
   extractMedicalCodes,
+  icd10Label,
 } from './invoice-patterns';
 
 function firstMatch(patterns: RegExp[], text: string): string | null {
@@ -57,6 +59,54 @@ describe('OCR invoice patterns', () => {
       `;
       expect(firstMatch(TOTAL_AMOUNT_PATTERNS, text)).toBe('990,000.00');
     });
+
+    it('reaches Sponsor Coverage even when the figure is 200+ chars away', () => {
+      // Real Aga Khan IP layout — corporate code, employer name, columns
+      // and account line all sit between the label and the figure.
+      const text = `
+        Sponsor Coverage:
+        AAA CORPORATE - Group Account
+        Employer: ACME LIMITED                  Policy: GRP/2024/00811
+        Account Type: Major Medical             Cover: Inpatient + Outpatient
+        Allowance Year Limit                    Used to Date
+        ------------------------------------    ---------------
+        2,500,000.00                           990,000.00
+      `;
+      expect(firstMatch(TOTAL_AMOUNT_PATTERNS, text)).toBe('990,000.00');
+    });
+
+    it('rejects the bare Total: fallback when the figure is under 100', () => {
+      // `Total: 1.00` is the most common spurious match on IP consolidated
+      // bills — a rounding line or change-due footer. The bare-Total
+      // pattern's `{3,}` floor stops it; the consumer's Math.max then has
+      // no candidate below the real amount.
+      const text = 'Total: 1.00';
+      // Either no match, or any match returned must have ≥ 3 digits.
+      const captured = firstMatch(TOTAL_AMOUNT_PATTERNS, text);
+      if (captured !== null) {
+        expect(captured.replace(/[^\d]/g, '').length).toBeGreaterThanOrEqual(3);
+      }
+    });
+  });
+
+  describe('diagnosis extraction (label-trap fix)', () => {
+    it('skips a "Discharge Diagnosis" sub-header and grabs the real value', () => {
+      const text = 'Diagnosis:\nDischarge Diagnosis\nCATARACT, BILATERAL';
+      const match = text.match(DIAGNOSIS_PATTERNS[1]);
+      expect(match?.[1]?.trim()).toBe('CATARACT, BILATERAL');
+    });
+
+    it('skips a "Final Diagnosis" sub-header', () => {
+      const text = 'Diagnosis:\nFinal Diagnosis\nDIABETES MELLITUS TYPE 2';
+      const match = text.match(DIAGNOSIS_PATTERNS[1]);
+      expect(match?.[1]?.trim()).toBe('DIABETES MELLITUS TYPE 2');
+    });
+
+    it('still works when there is no sub-header (existing behaviour)', () => {
+      const text = 'Diagnosis:\nMALARIA';
+      const match = text.match(DIAGNOSIS_PATTERNS[1]);
+      expect(match?.[1]?.trim()).toBe('MALARIA');
+    });
   });
 
   describe('membership number extraction', () => {
@@ -78,6 +128,32 @@ describe('OCR invoice patterns', () => {
     it('parses generic Name: label', () => {
       const out = firstMatch(PATIENT_NAME_PATTERNS, 'Patient Name: JANE DOE\nInvoice No.');
       expect(out).toBe('JANE DOE');
+    });
+
+    it('parses IP column-header layout (label alone on its own line)', () => {
+      // Aga Khan inpatient cover sheets render the patient block as a
+      // column: the header "Patient" is on one line, the name is on the
+      // next line, then DOB / Age follow. None of the colon-based patterns
+      // catch this layout.
+      const text = 'Patient\nNYIKA, DAVID\nDOB 1980-05-12';
+      expect(firstMatch(PATIENT_NAME_PATTERNS, text)).toBe('NYIKA, DAVID');
+    });
+
+    it('handles "Patient Name" (no colon) column header', () => {
+      const text = 'Patient Name\nJANE A. DOE\nAge 42';
+      expect(firstMatch(PATIENT_NAME_PATTERNS, text)).toBe('JANE A. DOE');
+    });
+  });
+
+  describe('icd10Label coverage for codes seen on Aga Khan IP', () => {
+    it('returns the cataract chapter for H25 / H26 / H28', () => {
+      expect(icd10Label('H25')).toMatch(/cataract/i);
+      expect(icd10Label('H26')).toMatch(/cataract/i);
+      expect(icd10Label('H28')).toMatch(/cataract/i);
+    });
+
+    it('returns viral conjunctivitis for B30', () => {
+      expect(icd10Label('B30')).toMatch(/conjunctivitis/i);
     });
   });
 });

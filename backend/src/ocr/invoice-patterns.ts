@@ -41,9 +41,15 @@ export const INVOICE_DATE_PATTERNS = [
 // "Grand Total / Amount Due" pattern would otherwise capture the patient's tiny co-pay (e.g. 0.02) instead of 990,000
 export const TOTAL_AMOUNT_PATTERNS = [
   // Aga Khan University Hospital: "Sponsor Coverage:\nAAA Corporate   990,000.00"
-  /Sponsor\s*Coverage[\s\S]{0,80}?([\d,]{3,}\.\d{2})/i,
+  // Window widened to 400 chars — IP consolidated bills push the figure
+  // behind the corporate code + employer name + columns.
+  /Sponsor\s*Coverage[\s\S]{0,400}?([\d,]{3,}\.\d{2})/i,
   /(?:Grand\s*Total|Total\s*Amount|Balance\s*Due|Net\s*(?:Amount|Total|Payable)|Amount\s*(?:Due|Payable)|Total\s*(?:Due|Payable|Bill))\s*[:\-]?\s*(?:KES|Ksh|Kshs?)?\s*[:\-]?\s*([\d,]+(?:\.\d{1,2})?)/i,
-  /(?:Total)\s*[:\-]?\s*(?:KES|Ksh|Kshs?)?\s*[:\-]?\s*([\d,]+(?:\.\d{1,2})?)/i,
+  // Bare "Total:" fallback — require at least 3 digit/comma chars before the
+  // optional decimal so the integer portion is ≥ 100. Stops the bare label
+  // from matching `Total: 1.00` (a rounding line, change due, or per-page
+  // sub-total) and winning Math.max against the missing real total.
+  /(?:Total)\s*[:\-]?\s*(?:KES|Ksh|Kshs?)?\s*[:\-]?\s*([\d,]{3,}(?:\.\d{1,2})?)/i,
 ];
 
 // Line item amount patterns (for summing when no total found)
@@ -70,6 +76,13 @@ export const PATIENT_NAME_PATTERNS = [
   /Member\s*Name\s*[:\-]\s*([A-Z][a-zA-Z\s.'-]{2,40})/i,
   // Aga Khan: name directly after "To:" on a receipt (no extra label)
   /^To\s*:\s*([A-Z][A-Za-z\s.'-]{3,40})/m,
+  // Inpatient column-header layout — "Patient" alone on its own line, value
+  // on the immediately following line in ALL CAPS, often comma-separated as
+  // "SURNAME, GIVEN" (Aga Khan IP cover, MP Shah, Nairobi Hospital discharge
+  // headers). Distinct from "Patient: X" (handled above) and "Patient Name:".
+  // The `[A-Z]{2,}` lookahead on the first two chars stops single-letter or
+  // mixed-case noise from matching.
+  /(?:^|\n)\s*Patient\s*(?:Name|Full\s*Name)?\s*\n+\s*([A-Z]{2,}[A-Z,'.\s\-]{2,40}?)(?=\s*(?:\n|DOB|Age|Sex|M\/F|Gender|Reg|Account))/,
 ];
 
 // Patient ID / registration number patterns
@@ -103,11 +116,22 @@ export const PROVIDER_PATTERNS = [
 ];
 
 // Diagnosis patterns
+// Sub-header trap — Aga Khan inpatient discharge summaries render as:
+//   Diagnosis:
+//   Discharge Diagnosis
+//   H28 Cataract in other diseases…
+// The literal value we want is on line 3, but a naive `Diagnosis: \n value`
+// regex captures line 2 ("Discharge Diagnosis") because that's just another
+// header. The `(?:…Diagnosis)?` sub-header skip below burns past any of the
+// known label variants and grabs the real value on the next line.
+const DIAGNOSIS_SUBHEADER_SKIP =
+  '(?:(?:Discharge|Final|Provisional|Working|Admission|Primary|Secondary|Clinical|Differential)\\s+Diagnosis\\s*[:\\-]?\\s*\\n+\\s*)?';
+
 export const DIAGNOSIS_PATTERNS = [
   /(?:Final\s*Diagnosis|Impression|Clinical\s*(?:Diagnosis|Notes?))\s*[:\-]?\s*\n?\s*(.{3,150}?)(?:\n\s*\n|Detailed|Bill|Treatment|$)/is,
-  // "Diagnosis:" or "Dx:" label — with a line-break between label and value (common on Aga Khan forms)
-  /(?:Diagnosis|Dx)\s*[:\-]?\s*\n+\s*(.{3,120}?)(?:\n|$)/is,
-  /(?:Diagnosis)\s*[:\-]?\s*\n?\s*(.{3,150}?)(?:\n\s*\n|Invoice|Bill|$)/is,
+  // "Diagnosis:" or "Dx:" label — line-break between label and value (Aga Khan forms).
+  new RegExp(`(?:Diagnosis|Dx)\\s*[:\\-]?\\s*\\n+\\s*${DIAGNOSIS_SUBHEADER_SKIP}(.{3,120}?)(?:\\n|$)`, 'is'),
+  new RegExp(`(?:Diagnosis)\\s*[:\\-]?\\s*\\n?\\s*${DIAGNOSIS_SUBHEADER_SKIP}(.{3,150}?)(?:\\n\\s*\\n|Invoice|Bill|$)`, 'is'),
   // "Reason for Visit / Complaint / Presenting Complaint"
   /(?:Reason\s+for\s+(?:Visit|Consultation)|Chief\s+Complaint|Presenting\s+Complaint|Complaint)\s*[:\-]\s*(.{3,120}?)(?:\n|$)/i,
   // "Assessment:" or "Clinical Impression:" (discharge summaries)
@@ -181,7 +205,8 @@ export const HCPCS_CODE_PATTERNS = [
 export const ICD10_COMMON_LABELS: Record<string, string> = {
   // Chapter I — Infectious / Parasitic
   'A09': 'Gastroenteritis', 'A15': 'Tuberculosis', 'B54': 'Malaria',
-  'B05': 'Measles', 'B06': 'Rubella', 'B34': 'Viral infection',
+  'B05': 'Measles', 'B06': 'Rubella', 'B30': 'Viral conjunctivitis',
+  'B34': 'Viral infection',
   // Chapter II — Neoplasms
   'C00': 'Malignant neoplasm of lip', 'C50': 'Breast cancer', 'C67': 'Bladder cancer',
   // Chapter III — Blood
@@ -194,7 +219,10 @@ export const ICD10_COMMON_LABELS: Record<string, string> = {
   // Chapter VI — Nervous
   'G43': 'Migraine', 'G44': 'Headache',
   // Chapter VII — Eye
-  'H00': 'Hordeolum / chalazion', 'H10': 'Conjunctivitis', 'H52': 'Refractive error',
+  'H00': 'Hordeolum / chalazion', 'H10': 'Conjunctivitis',
+  'H25': 'Age-related cataract', 'H26': 'Other cataract',
+  'H28': 'Cataract in diseases classified elsewhere',
+  'H52': 'Refractive error',
   // Chapter VIII — Ear
   'H66': 'Otitis media', 'H71': 'Cholesteatoma',
   // Chapter IX — Circulatory
