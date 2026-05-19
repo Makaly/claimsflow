@@ -38,6 +38,8 @@ import { cacheFile, cacheFiles, restoreFiles, restoreAsFiles, clearCachedFiles }
 import { stampBarcodeOnPdf, stampBarcodeOnImage, splitAndStampPdf } from '@/lib/pdfBarcode'
 import { extractInvoicesFromPdf, type ExtractedInvoiceData } from '@/lib/pdfTextExtract'
 import api from '@/services/api'
+import { useScanMetering } from '@/hooks/useScanMetering'
+import { getDeviceInfo as getDeviceInfoForScan } from '@/lib/deviceInfo'
 
 // Worker configured globally in main.tsx
 
@@ -2097,11 +2099,16 @@ export default function BatchUpload() {
   // ── Local scan agent (localhost:7420) ──────────────────────────────────────
   const AGENT_URL = 'http://127.0.0.1:7420'
   const [agentAvailable, setAgentAvailable] = useState<boolean | null>(null) // null = checking
+  const [agentHostname, setAgentHostname] = useState<string | null>(null)
+  const [agentOs,       setAgentOs]       = useState<string | null>(null)
 
   const [scanDpi, setScanDpi] = useState('300')
   const [scanMode, setScanMode] = useState('Color')
   const [scanning, setScanning] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
+
+  // ── Scan metering (per-org enable/disable + billing) ──────────────────────
+  const meter = useScanMetering()
 
   // Animated progress during extraction — ticks every 500 ms from 0→92 % over
   // EXPECTED_MS, then jumps to the real percentage once files finish.
@@ -2481,6 +2488,9 @@ export default function BatchUpload() {
           const r = await fetch(`${AGENT_URL}/health`, { signal: AbortSignal.timeout(1500) })
           if (r.ok) {
             setAgentAvailable(true)
+            const health = await r.json().catch(() => ({}))
+            if (health?.hostname) setAgentHostname(String(health.hostname))
+            if (health?.os) setAgentOs(String(health.os))
             const sr = await fetch(`${AGENT_URL}/scanners`)
             return await sr.json()
           }
@@ -2511,11 +2521,18 @@ export default function BatchUpload() {
 
   const handleScan = useCallback(async () => {
     if (!selectedScanner || scanning) return
+    // Metering gate — admin can flip scanning off for an organization
+    if (!meter.enabled) {
+      setScanError('Scanning is disabled for your organization. Contact your administrator.')
+      return
+    }
     setScanning(true)
     setScanError(null)
     try {
       const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
       let blob: Blob
+
+      const scannerName = scanners.find(s => s.id === selectedScanner)?.name ?? selectedScanner
 
       if (agentAvailable) {
         // Route through local agent — scanner is on the user's machine
@@ -2526,14 +2543,42 @@ export default function BatchUpload() {
         })
         if (!resp.ok) {
           const err = await resp.json().catch(() => ({}))
+          // Record the failed scan so dashboards reflect real-world reliability
+          meter.recordScan({
+            deviceClass: 'desktop',
+            machineHostname: agentHostname ?? undefined,
+            os: agentOs ?? undefined,
+            scannerName,
+            resolution: parseInt(scanDpi, 10),
+            mode: scanMode,
+            success: false,
+            errorMessage: err.error ?? 'Scan failed',
+          })
           throw new Error(err.error ?? 'Scan failed')
         }
         blob = await resp.blob()
+        // The agent path bypasses our backend, so record the billable event from the browser.
+        meter.recordScan({
+          deviceClass: 'desktop',
+          machineHostname: agentHostname ?? undefined,
+          os: agentOs ?? undefined,
+          scannerName,
+          resolution: parseInt(scanDpi, 10),
+          mode: scanMode,
+          success: true,
+        })
       } else {
-        // On-premises: scanner is on the server
+        // On-premises: scanner is on the server. Backend records metering itself —
+        // we only forward machine context for the audit log.
         const resp = await api.post(
           '/scanner/scan',
-          { deviceId: selectedScanner, resolution: parseInt(scanDpi, 10), mode: scanMode },
+          {
+            deviceId: selectedScanner,
+            resolution: parseInt(scanDpi, 10),
+            mode: scanMode,
+            machineHostname: agentHostname ?? undefined,
+            os: agentOs ?? undefined,
+          },
           { responseType: 'blob' },
         )
         blob = resp.data
@@ -2550,7 +2595,7 @@ export default function BatchUpload() {
     } finally {
       setScanning(false)
     }
-  }, [agentAvailable, selectedScanner, scanning, scanDpi, scanMode, session, upsertSession])
+  }, [agentAvailable, agentHostname, agentOs, scanners, selectedScanner, scanning, scanDpi, scanMode, session, upsertSession, meter])
 
   // ── Camera helpers ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -2620,15 +2665,26 @@ export default function BatchUpload() {
   const useCapture = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
+    if (!meter.enabled) {
+      setCameraError('Scanning is disabled for your organization. Contact your administrator.')
+      return
+    }
     canvas.toBlob((blob) => {
       if (!blob) return
       const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
       const file = new File([blob], `camera-scan-${ts}.jpg`, { type: 'image/jpeg' })
+      // Camera path bypasses both scan-agent and /scanner/scan — record from the browser.
+      // 'mobile' for phones/tablets, 'camera' for laptop webcams etc.
+      const { deviceClass } = getDeviceInfoForScan()
+      meter.recordScan({
+        deviceClass: deviceClass === 'mobile' ? 'mobile' : 'camera',
+        success: true,
+      })
       onDrop([file])
       stopCamera()
       setInputTab('upload')
     }, 'image/jpeg', 0.92)
-  }, [onDrop, stopCamera])
+  }, [onDrop, stopCamera, meter])
 
   // Step 2: AI extracts data from each uploaded PDF (handles multi-invoice splitting)
   const startAiExtraction = async () => {
@@ -3501,6 +3557,29 @@ export default function BatchUpload() {
                     </button>
                   ))}
                 </div>
+
+                {/* ── Scan metering status: disabled banner or price chip ── */}
+                {inputTab === 'scanner' && !meter.loading && !meter.enabled && (
+                  <div className="rounded-xl border-2 border-red-200 dark:border-red-900/60 bg-red-50/70 dark:bg-red-950/20 p-4 flex items-start gap-3">
+                    <XCircle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-red-700 dark:text-red-300">
+                        Scanning is disabled for your organization
+                      </p>
+                      <p className="text-xs text-red-700/80 dark:text-red-300/80">
+                        Contact your ClaimsFlow administrator to enable scan capture and billing for your branch.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {inputTab === 'scanner' && !meter.loading && meter.enabled && meter.costPerScan > 0 && (
+                  <div className="rounded-md border bg-muted/40 px-3 py-1.5 flex items-center gap-2 text-[11px]">
+                    <Receipt className="h-3.5 w-3.5 text-violet-600 shrink-0" />
+                    <span className="text-muted-foreground">
+                      Each scan is billed at <strong className="text-foreground">{meter.currency} {meter.costPerScan.toFixed(2)}</strong> to your organization.
+                    </span>
+                  </div>
+                )}
 
                 {/* ── Scanner panel ── */}
                 {inputTab === 'scanner' && (
