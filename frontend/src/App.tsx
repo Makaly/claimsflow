@@ -43,6 +43,9 @@ import PolicyPlans from '@/pages/PolicyPlans'
 import MLLabelling from '@/pages/MLLabelling'
 import ZoneAnalytics from '@/pages/ZoneAnalytics'
 import ScanMeteringDashboard from '@/pages/ScanMeteringDashboard'
+import TelemedicineBooking from '@/pages/TelemedicineBooking'
+import PBMLookup from '@/pages/PBMLookup'
+import ChronicCohorts from '@/pages/ChronicCohorts'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -163,6 +166,9 @@ function AppRoutes() {
         <Route path="/ml-labelling" element={<ProtectedRoute allowedRoles={['admin','claims_officer','fraud_officer']}><MLLabelling /></ProtectedRoute>} />
         <Route path="/zone-analytics" element={<ProtectedRoute allowedRoles={['admin','claims_officer','fraud_officer','maker_checker']}><ZoneAnalytics /></ProtectedRoute>} />
         <Route path="/scan-metering" element={<ProtectedRoute allowedRoles={['admin','finance','provider_admin','claims_officer','maker_checker','fraud_officer']}><ScanMeteringDashboard /></ProtectedRoute>} />
+        <Route path="/telemedicine" element={<ProtectedRoute><TelemedicineBooking /></ProtectedRoute>} />
+        <Route path="/pbm" element={<ProtectedRoute allowedRoles={['admin','claims_officer','fraud_officer']}><PBMLookup /></ProtectedRoute>} />
+        <Route path="/reports/chronic-cohorts" element={<ProtectedRoute allowedRoles={['admin','claims_officer','fraud_officer']}><ChronicCohorts /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
