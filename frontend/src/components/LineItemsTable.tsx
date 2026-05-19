@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   AlertTriangle, CheckCircle2, XCircle, HelpCircle,
-  ChevronDown, ChevronUp, Calculator, TrendingUp, ShieldAlert,
+  ChevronDown, ChevronUp, Calculator, TrendingUp, ShieldAlert, Eye,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
@@ -44,6 +44,10 @@ interface LineItemsResponse {
 interface Props {
   claimId: string
   invoiceTotal?: number
+  // Rows with overallConfidence below this are flagged for manual review.
+  // Defaults to 0.60 if not supplied; matches system-config key
+  // ocr_line_item_confidence_threshold.
+  confidenceThreshold?: number
 }
 
 const RISK_CONFIG = {
@@ -87,7 +91,11 @@ function ArithmeticBadge({ valid, qty, unit, total }: {
   )
 }
 
-export default function LineItemsTable({ claimId, invoiceTotal }: Props) {
+// Rows below this confidence are highlighted as needing manual review.
+const LOW_CONF_DEFAULT = 0.60
+
+export default function LineItemsTable({ claimId, invoiceTotal, confidenceThreshold }: Props) {
+  const threshold = confidenceThreshold ?? LOW_CONF_DEFAULT
   const [data, setData]         = useState<LineItemsResponse | null>(null)
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState<string | null>(null)
@@ -127,6 +135,10 @@ export default function LineItemsTable({ claimId, invoiceTotal }: Props) {
   const highCount    = items.filter(i => i.fraudRisk === 'high').length
   const mediumCount  = items.filter(i => i.fraudRisk === 'medium').length
   const arithmeticOk = items.every(i => i.arithmeticValid !== false)
+  const lowConfCount = items.filter(i => {
+    const conf = i.overallConfidence ?? i.ocrConfidence
+    return conf !== null && conf !== undefined && conf < threshold
+  }).length
 
   const toggleExpand = (id: string) => {
     setExpanded(prev => {
@@ -163,6 +175,12 @@ export default function LineItemsTable({ claimId, invoiceTotal }: Props) {
           <Badge variant="destructive" className="gap-1">
             <TrendingUp className="h-3 w-3" />
             Total discrepancy: {formatCurrency(Math.abs((invoiceTotal ?? data.invoice_total) - data.calculated_total))}
+          </Badge>
+        )}
+        {lowConfCount > 0 && (
+          <Badge className="gap-1 bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-300">
+            <Eye className="h-3 w-3" />
+            {lowConfCount} row{lowConfCount !== 1 ? 's' : ''} need review
           </Badge>
         )}
       </div>
@@ -210,12 +228,14 @@ export default function LineItemsTable({ claimId, invoiceTotal }: Props) {
                 const cfg    = RISK_CONFIG[risk]
                 const isOpen = expanded.has(item.id)
                 const RiskIcon = cfg.icon
+                const itemConf = item.overallConfidence ?? item.ocrConfidence
+                const isLowConf = itemConf !== null && itemConf !== undefined && itemConf < threshold
 
                 return (
                   <>
                     <TableRow
                       key={item.id}
-                      className={`${cfg.bg} cursor-pointer hover:opacity-90`}
+                      className={`${cfg.bg} cursor-pointer hover:opacity-90 ${isLowConf ? 'ring-1 ring-inset ring-amber-400' : ''}`}
                       onClick={() => toggleExpand(item.id)}
                     >
                       <TableCell className="pl-3 text-muted-foreground text-xs">
@@ -248,7 +268,12 @@ export default function LineItemsTable({ claimId, invoiceTotal }: Props) {
                         />
                       </TableCell>
                       <TableCell className="text-center">
-                        <ConfidenceDot score={item.overallConfidence ?? item.ocrConfidence} />
+                        <span className={isLowConf ? 'inline-flex items-center gap-1' : ''}>
+                          <ConfidenceDot score={itemConf} />
+                          {isLowConf && (
+                            <Eye className="h-3 w-3 text-amber-500 shrink-0" aria-label="Needs review" />
+                          )}
+                        </span>
                       </TableCell>
                       <TableCell className="text-center">
                         <span className={`inline-flex items-center gap-1 text-xs font-medium
