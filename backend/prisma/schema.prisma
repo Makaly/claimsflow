@@ -235,6 +235,8 @@ model Provider {
   aliases                ProviderAlias[]
   scanMeteringSettings   ScanMeteringSettings?
   scanEvents             ScanEvent[]                  @relation("ScanEventProvider")
+  fraudThreshold         ProviderFraudThreshold?
+  scanPacingAlerts       ScanPacingAlert[]
 
   @@index([status])
   @@index([type])
@@ -1186,8 +1188,13 @@ model ScanMeteringSettings {
   updatedAt       DateTime @default(now()) @updatedAt
   createdAt       DateTime @default(now())
 
+<<<<<<< Updated upstream
   provider        Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
   updatedBy       User?    @relation("ScanMeteringSettingsUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+=======
+  provider        Provider          @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  updatedBy       User?             @relation("ScanMeteringSettingsUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+>>>>>>> Stashed changes
 
   @@map("scan_metering_settings")
 }
