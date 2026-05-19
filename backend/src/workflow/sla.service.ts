@@ -25,57 +25,72 @@ export class SlaService {
     const slaHours = await this.loadSlaConfig();
     const now = new Date();
 
+    // Fetch only the columns needed for breach evaluation — avoids pulling the
+    // full claim row for every active claim on every cron tick.
     const activeClaims = await this.prisma.claim.findMany({
       where: {
         status: { notIn: ['approved', 'paid', 'rejected'] },
         slaBreached: false,
       },
-      include: {
+      select: {
+        id: true,
+        claimNumber: true,
+        workflowStage: true,
+        submittedAt: true,
         assignedUser: { select: { id: true, name: true, email: true } },
       },
     });
 
-    let breached = 0;
+    // Fetch escalation recipients once — not once per breached claim (N+1 fix).
+    const escalationRecipients = await this.prisma.user.findMany({
+      where: { role: { in: ['admin', 'claims_officer'] }, isActive: true },
+      select: { email: true, name: true },
+      take: 5,
+    });
+
+    const breachedIds: string[] = [];
+    const breachedClaims: typeof activeClaims = [];
     for (const claim of activeClaims) {
       const threshold = slaHours[claim.workflowStage] ?? DEFAULT_SLA[claim.workflowStage] ?? 48;
       const elapsed = (now.getTime() - new Date(claim.submittedAt).getTime()) / 3_600_000;
-
       if (elapsed > threshold) {
-        await this.prisma.claim.update({
-          where: { id: claim.id },
-          data: { slaBreached: true, slaBreachedAt: now },
-        });
-        breached++;
-
-        if (claim.assignedUser?.email) {
-          this.emailService.sendSlaBreachAlert({
-            email: claim.assignedUser.email,
-            name: claim.assignedUser.name,
-            claimNumber: claim.claimNumber,
-            stage: claim.workflowStage,
-            hoursElapsed: Math.round(elapsed),
-          }).catch(() => {});
-        }
-
-        // Also notify claims officers — they own SLA visibility under the
-        // new role layout (supervisor role removed in the maker-checker refactor).
-        const escalation = await this.prisma.user.findMany({
-          where: { role: { in: ['admin', 'claims_officer'] }, isActive: true },
-          select: { email: true, name: true },
-          take: 5,
-        });
-        for (const e of escalation) {
-          this.emailService.sendSlaBreachAlert({
-            email: e.email,
-            name: e.name,
-            claimNumber: claim.claimNumber,
-            stage: claim.workflowStage,
-            hoursElapsed: Math.round(elapsed),
-          }).catch(() => {});
-        }
+        breachedIds.push(claim.id);
+        breachedClaims.push(claim);
       }
     }
 
+    // Single UPDATE for all newly-breached claims rather than one per row.
+    if (breachedIds.length > 0) {
+      await this.prisma.claim.updateMany({
+        where: { id: { in: breachedIds } },
+        data: { slaBreached: true, slaBreachedAt: now },
+      });
+    }
+
+    // Fire notification emails outside the DB write loop.
+    for (const claim of breachedClaims) {
+      const elapsed = (now.getTime() - new Date(claim.submittedAt).getTime()) / 3_600_000;
+      if (claim.assignedUser?.email) {
+        this.emailService.sendSlaBreachAlert({
+          email: claim.assignedUser.email,
+          name: claim.assignedUser.name,
+          claimNumber: claim.claimNumber,
+          stage: claim.workflowStage,
+          hoursElapsed: Math.round(elapsed),
+        }).catch(() => {});
+      }
+      for (const e of escalationRecipients) {
+        this.emailService.sendSlaBreachAlert({
+          email: e.email,
+          name: e.name,
+          claimNumber: claim.claimNumber,
+          stage: claim.workflowStage,
+          hoursElapsed: Math.round(elapsed),
+        }).catch(() => {});
+      }
+    }
+
+    const breached = breachedIds.length;
     if (breached > 0) this.logger.warn(`SLA breach detected on ${breached} claim(s)`);
   }
 
@@ -100,9 +115,20 @@ export class SlaService {
 
   async getAgingReport() {
     const now = new Date();
+    // Single query with explicit select — avoids over-fetching the full claim
+    // row plus provider/user join (N+1 pattern when provider/user were loaded
+    // separately in an earlier iteration).
     const claims = await this.prisma.claim.findMany({
       where: { status: { notIn: ['approved', 'paid', 'rejected'] } },
-      include: { provider: { select: { name: true } }, assignedUser: { select: { name: true } } },
+      select: {
+        id: true,
+        claimNumber: true,
+        workflowStage: true,
+        slaBreached: true,
+        submittedAt: true,
+        provider: { select: { name: true } },
+        assignedUser: { select: { name: true } },
+      },
       orderBy: { submittedAt: 'asc' },
     });
 
