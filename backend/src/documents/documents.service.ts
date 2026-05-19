@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { OcrService } from '../ocr/ocr.service';
+import { SearchablePdfService } from '../ocr/searchable-pdf.service';
 import { PdfOperationsService } from '../common/services/pdf-operations.service';
 import { EdmsIntegrationService } from '../common/services/edms-integration.service';
 import * as fs from 'fs';
@@ -20,7 +21,44 @@ export class DocumentsService {
     private ocrService: OcrService,
     private pdfOperationsService: PdfOperationsService,
     private edmsService: EdmsIntegrationService,
+    private searchablePdfService: SearchablePdfService,
   ) {}
+
+  /**
+   * Stream a searchable PDF for the document. Generates lazily on first
+   * request (image background + invisible Tesseract hOCR text layer), then
+   * caches the output to disk so subsequent calls are instant.
+   *
+   * Inherits provider/branch access control from findOne.
+   */
+  async getSearchablePdfStream(
+    id: string,
+    user?: { role?: string | null; providerId?: string | null; branchId?: string | null },
+    opts: { regenerate?: boolean } = {},
+  ) {
+    const document = await this.findOne(id, user);
+    if (!fs.existsSync(document.path)) {
+      throw new NotFoundException('Source file not found on disk');
+    }
+
+    const outPath = await this.searchablePdfService.generateFromFile(
+      document.id,
+      document.path,
+      document.mimetype,
+      { force: opts.regenerate === true },
+    );
+
+    return {
+      stream: fs.createReadStream(outPath),
+      mimetype: 'application/pdf',
+      filename: this.searchablePdfFilename(document.originalName),
+    };
+  }
+
+  private searchablePdfFilename(originalName: string): string {
+    const base = originalName.replace(/\.[^.]+$/, '');
+    return `${base}.searchable.pdf`;
+  }
 
   // ─────────────────────────────────────────────────────────────
   // CRUD
