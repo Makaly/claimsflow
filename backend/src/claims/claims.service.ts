@@ -12,6 +12,7 @@ import { EligibilityService } from './eligibility.service';
 import { AnomalyScoringService } from './anomaly-scoring.service';
 import { ClaimLabelsService } from './claim-labels.service';
 import { MlScoringService } from './ml-scoring.service';
+import { ClaimTypeConfigService } from './claim-type-config.service';
 
 @Injectable()
 export class ClaimsService {
@@ -25,6 +26,7 @@ export class ClaimsService {
     private anomalyScoringService: AnomalyScoringService,
     private claimLabelsService: ClaimLabelsService,
     private mlScoringService: MlScoringService,
+    private claimTypeConfigService: ClaimTypeConfigService,
   ) {}
 
   /** Normalise a provider name for alias matching: lowercase, strip punctuation, collapse spaces. */
@@ -194,6 +196,12 @@ export class ClaimsService {
     const dosDate = data.dateOfService ? new Date(data.dateOfService) : null;
     const sevenDaysAgo = new Date(Date.now() - 7 * 86_400_000);
 
+    // T2.4 — cross-provider duplicate lookback window is configurable per claim
+    // type. Claim type is not yet tagged on the Claim model, so we fall back to
+    // the 'default' row (windowDays=0 → same-day match, preserving prior behaviour).
+    const dupWindowDays = await this.claimTypeConfigService.getDuplicateWindowDays(null);
+    const dupWindowMs = dupWindowDays * 86_400_000;
+
     const [existingInvoiceClaims, batchSiblings, crossProviderRaw, recentMemberClaims] = await Promise.all([
       this.prisma.claim.findMany({
         where: { providerId: resolvedProviderId, invoiceNumber: { not: null } },
@@ -206,15 +214,15 @@ export class ClaimsService {
             select: { memberNumber: true, invoiceAmount: true },
           })
         : Promise.resolve([]),
-      // Cross-provider duplicate: same member, same service date, different provider
+      // Cross-provider duplicate: same member, within ±dupWindowDays of service date, different provider
       dosDate && data.memberNumber
         ? this.prisma.claim.findMany({
             where: {
               memberNumber: data.memberNumber,
               providerId: { not: resolvedProviderId },
               dateOfService: {
-                gte: new Date(dosDate.getFullYear(), dosDate.getMonth(), dosDate.getDate()),
-                lte: new Date(dosDate.getFullYear(), dosDate.getMonth(), dosDate.getDate(), 23, 59, 59),
+                gte: new Date(dosDate.getTime() - dupWindowMs),
+                lte: new Date(dosDate.getTime() + dupWindowMs + 86_399_000),
               },
               status: { not: 'rejected' },
             },

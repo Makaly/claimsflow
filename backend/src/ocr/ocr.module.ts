@@ -10,6 +10,7 @@ import { VisionRouterService } from './vision-router.service';
 import { DocumentClassifierModule } from '../document-classifier/document-classifier.module';
 import { AnomalyScoringService } from '../claims/anomaly-scoring.service';
 import { LineItemFraudService } from '../claims/line-item-fraud.service';
+import { ClaimTypeConfigService } from '../claims/claim-type-config.service';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { LineItemFraudService } from '../claims/line-item-fraud.service';
     VisionRouterService,
     AnomalyScoringService,
     LineItemFraudService,
+    ClaimTypeConfigService,
   ],
   exports: [OcrService, OllamaOcrService, VisionRouterService],
 })

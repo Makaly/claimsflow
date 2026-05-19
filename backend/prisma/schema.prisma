@@ -1223,3 +1223,20 @@ model ScanEvent {
   @@index([createdAt(sort: Desc)])
   @@map("scan_events")
 }
+
+/// T2.4 — Configurable cross-provider duplicate-detection lookback window per
+/// claim type. pharmacy duplicates surface in days; inpatient duplicates can
+/// surface weeks or months later. claimType is a free-form string ('pharmacy',
+/// 'outpatient', 'inpatient', 'dental', 'optical', ...) and falls back to the
+/// row keyed 'default' when no specific row matches.
+model ClaimTypeConfig {
+  id         String   @id @default(uuid())
+  claimType  String   @unique
+  windowDays Int
+  updatedBy  String?
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+
+  @@index([claimType])
+  @@map("claim_type_config")
+}
