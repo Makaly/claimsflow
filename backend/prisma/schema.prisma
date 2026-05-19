@@ -1242,3 +1242,37 @@ model ClaimTypeConfig {
   @@index([claimType])
   @@map("claim_type_config")
 }
+
+/// T2.2 — Per-provider fraud decision threshold, recomputed monthly.
+model ProviderFraudThreshold {
+  id           String    @id @default(uuid())
+  providerId   String    @unique
+  threshold    Float
+  fpRate       Float
+  fnRate       Float
+  computedAt   DateTime  @default(now())
+  overriddenBy String?
+  overriddenAt DateTime?
+  provider     Provider  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId])
+  @@index([computedAt])
+  @@map("provider_fraud_thresholds")
+}
+
+/// T3.5 — Pacing alerts for scan-metering quota.
+model ScanPacingAlert {
+  id           String    @id @default(uuid())
+  providerId   String
+  dayOfMonth   Int
+  usedPct      Decimal   @db.Decimal(5, 2)
+  projectedDay Int?
+  resolvedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  provider     Provider  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId, createdAt(sort: Desc)])
+  @@index([resolvedAt])
+  @@map("scan_pacing_alerts")
+}
