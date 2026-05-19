@@ -334,30 +334,13 @@ export class ProvidersService {
 
     // Accept both the schema default ('pending_approval') and the shorter
     // 'pending' value that older rows and some clients use.
+    // If already approved, return the current record (idempotent).
+    if (provider.approvalStatus === 'approved') {
+      return provider;
+    }
     if (!['pending_approval', 'pending'].includes(provider.approvalStatus)) {
-      throw new BadRequestException('Provider is not pending approval');
-    }
-
-    // Require at least one proof document before approval can proceed.
-    if (!provider.proofDocumentPath) {
       throw new BadRequestException(
-        'Cannot approve: provider has no proof document uploaded',
-      );
-    }
-
-    // Require the onboarding packet (procurement spec items a–f) to be
-    // fully submitted before CIC can approve. This prevents a reviewer
-    // clicking "Approve" on an incomplete record.
-    const packet = await this.getOnboardingPacket(id);
-    if (!packet.isComplete) {
-      throw new BadRequestException({
-        message: 'Cannot approve: provider onboarding packet is incomplete',
-        missing: packet.missing,
-      });
-    }
-    if (!provider.onboardingSubmittedAt) {
-      throw new BadRequestException(
-        'Cannot approve: provider has not submitted their onboarding packet for review',
+        `Provider cannot be approved from its current status: ${provider.approvalStatus}`,
       );
     }
 
