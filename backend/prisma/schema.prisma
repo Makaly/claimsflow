@@ -58,11 +58,16 @@ model User {
   decisionReviews       DecisionReviewRequest[]
   scanEvents            ScanEvent[]             @relation("ScanEventUser")
   scanMeteringUpdates   ScanMeteringSettings[]  @relation("ScanMeteringSettingsUpdatedBy")
+  activeStatus          String                  @default("active")
+  seniorityTier         String                  @default("mid")
+  notificationPrefs     NotificationPreference?
+  notificationQueue     NotificationQueue[]
 
   @@index([providerId])
   @@index([email])
   @@index([passwordResetToken])
   @@index([deletedAt])
+  @@index([activeStatus])
   @@map("users")
 }
 
@@ -1187,6 +1192,8 @@ model ScanMeteringSettings {
   updatedByUserId String?
   updatedAt       DateTime @default(now()) @updatedAt
   createdAt       DateTime @default(now())
+  monthlyQuota    Int?
+  alertThreshold  Int      @default(80)
 
   provider        Provider          @relation(fields: [providerId], references: [id], onDelete: Cascade)
   updatedBy       User?             @relation("ScanMeteringSettingsUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
@@ -1275,4 +1282,54 @@ model ScanPacingAlert {
   @@index([providerId, createdAt(sort: Desc)])
   @@index([resolvedAt])
   @@map("scan_pacing_alerts")
+}
+
+// ── T3.1: Public holidays (KE 2026 seeded separately) ────────────────────────
+model PublicHoliday {
+  id        String   @id @default(uuid())
+  date      DateTime @db.Date
+  name      String
+  country   String   @default("KE")
+  createdAt DateTime @default(now())
+
+  @@unique([date, country])
+  @@index([date])
+  @@map("public_holidays")
+}
+
+// ── T3.3: Per-user notification delivery preference ───────────────────────────
+model NotificationPreference {
+  userId     String   @id
+  mode       String   @default("realtime")
+  quietStart Int?
+  quietEnd   Int?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+// ── T3.3: Buffered and digest notification queue ──────────────────────────────
+model NotificationQueue {
+  id           String    @id @default(uuid())
+  recipientId  String
+  type         String
+  category     String    @default("general")
+  subject      String?
+  message      String
+  htmlContent  String?
+  claimId      String?
+  providerId   String?
+  scheduledFor DateTime?
+  flushedAt    DateTime?
+  createdAt    DateTime  @default(now())
+
+  recipient    User      @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId])
+  @@index([scheduledFor])
+  @@index([flushedAt])
+  @@map("notifications_queue")
 }
