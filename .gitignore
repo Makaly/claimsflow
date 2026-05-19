@@ -50,3 +50,7 @@ site/
 # Generated audit and compliance reports (binary/HTML artifacts — store in secure drive)
 *.pdf
 audit_report.html
+
+# Downloaded installer artifacts from testing the curl|bash one-liner
+/claimsflow-install.sh
+claimsflow-install.sh
