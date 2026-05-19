@@ -43,6 +43,8 @@ import PolicyPlans from '@/pages/PolicyPlans'
 import MLLabelling from '@/pages/MLLabelling'
 import ZoneAnalytics from '@/pages/ZoneAnalytics'
 import ScanMeteringDashboard from '@/pages/ScanMeteringDashboard'
+import NPSDashboard from '@/pages/NPSDashboard'
+import BankReconciliation from '@/pages/BankReconciliation'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -163,6 +165,8 @@ function AppRoutes() {
         <Route path="/ml-labelling" element={<ProtectedRoute allowedRoles={['admin','claims_officer','fraud_officer']}><MLLabelling /></ProtectedRoute>} />
         <Route path="/zone-analytics" element={<ProtectedRoute allowedRoles={['admin','claims_officer','fraud_officer','maker_checker']}><ZoneAnalytics /></ProtectedRoute>} />
         <Route path="/scan-metering" element={<ProtectedRoute allowedRoles={['admin','finance','provider_admin','claims_officer','maker_checker','fraud_officer']}><ScanMeteringDashboard /></ProtectedRoute>} />
+        <Route path="/nps" element={<ProtectedRoute allowedRoles={['admin','finance','claims_officer']}><NPSDashboard /></ProtectedRoute>} />
+        <Route path="/bank-reconciliation" element={<ProtectedRoute allowedRoles={['admin','finance']}><BankReconciliation /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
