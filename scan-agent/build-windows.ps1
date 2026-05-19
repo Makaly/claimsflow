@@ -80,5 +80,10 @@ Write-Host "  Output  : $PSScriptRoot\ClaimsFlow-Scan-Agent-Setup.exe" -Foregrou
 Write-Host "  Size    : $setupMb MB" -ForegroundColor White
 Write-Host ""
 Write-Host "  To publish to GitHub Releases:" -ForegroundColor White
-Write-Host "    gh release upload scan-agent-latest ClaimsFlow-Scan-Agent-Setup.exe --clobber" -ForegroundColor Gray
+Write-Host "    gh release upload scan-agent-latest ``" -ForegroundColor Gray
+Write-Host "      ClaimsFlow-Scan-Agent-Setup.exe ``" -ForegroundColor Gray
+Write-Host "      dist\claimsflow-scan-agent.exe ``" -ForegroundColor Gray
+Write-Host "      install.ps1 --clobber" -ForegroundColor Gray
+Write-Host ""
+Write-Host "  (The raw .exe and install.ps1 are needed for the irm | iex one-liner.)" -ForegroundColor DarkGray
 Write-Host ""

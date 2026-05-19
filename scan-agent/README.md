@@ -24,9 +24,24 @@ The agent runs entirely on your machine and only listens on `127.0.0.1` (localho
 
 ### Windows
 
-Download and run **[ClaimsFlow-Scan-Agent-Setup.exe](https://github.com/Makaly/claimsflow/releases/download/scan-agent-latest/ClaimsFlow-Scan-Agent-Setup.exe)**.
+**Option A — graphical installer.** Download and run **[ClaimsFlow-Scan-Agent-Setup.exe](https://github.com/Makaly/claimsflow/releases/download/scan-agent-latest/ClaimsFlow-Scan-Agent-Setup.exe)**.
 
-Installs as a Windows service, supports TWAIN / WIA / ISIS, auto-starts on boot.
+**Option B — PowerShell one-liner** (run an *Administrator* PowerShell):
+
+```powershell
+irm https://github.com/Makaly/claimsflow/releases/download/scan-agent-latest/install.ps1 | iex
+```
+
+Both install identically: the agent binary lands in `C:\Program Files\ClaimsFlow Scan Agent\`, a Windows service named `ClaimsFlowScanAgent` is registered and started, and an entry is added to **Apps & features** so users can uninstall normally. Supports TWAIN / WIA / ISIS / Epson / HP / Canon / Kodak Alaris and network scanners. Auto-starts on boot.
+
+PowerShell flags:
+
+| Flag / env var | Effect |
+|---|---|
+| `-AutoStart` / `-NoAutoStart` | Force service register on/off (skip the prompt) |
+| `-Silent` | Don't prompt; use defaults (service on) |
+| `-Version <tag>` or `$env:CLAIMSFLOW_VERSION` | Release tag (default `scan-agent-latest`) |
+| `-InstallDir <path>` or `$env:CLAIMSFLOW_INSTALL_DIR` | Install path |
 
 ### Linux
 
@@ -117,7 +132,11 @@ curl -fsSL https://github.com/Makaly/claimsflow/releases/download/scan-agent-lat
 
 ### Windows
 
-Use **Apps & features** → *ClaimsFlow Scan Agent* → **Uninstall**.
+Use **Apps & features** → *ClaimsFlow Scan Agent* → **Uninstall**, or run the bundled script:
+
+```powershell
+& "$env:ProgramFiles\ClaimsFlow Scan Agent\uninstall.ps1"
+```
 
 ---
 
