@@ -5,6 +5,7 @@ FastAPI microservice providing:
   POST /score              — score a single claim feature vector
   POST /score-line-items   — Isolation Forest anomaly detection on invoice line items
   POST /image-quality      — score document image quality and return preprocessing advice
+  POST /preprocess-image   — OpenCV preprocessing: deskew, crop, shadow removal, CLAHE, denoise, 300 DPI
   GET  /health             — readiness + model status
   GET  /weights            — return current feature importances
 """
@@ -45,6 +46,12 @@ try:
     SCIPY_AVAILABLE = True
 except ImportError:
     SCIPY_AVAILABLE = False
+
+try:
+    import cv2
+    CV2_AVAILABLE = True
+except ImportError:
+    CV2_AVAILABLE = False
 
 app = FastAPI(title="ClaimsFlow ML Sidecar", version="2.0.0")
 
@@ -170,6 +177,20 @@ class LineItemsRequest(BaseModel):
 class ImageQualityRequest(BaseModel):
     imageBase64: str            # base64-encoded PNG/JPEG/PDF page image
     filename:    Optional[str]  = None
+
+
+class PreprocessRequest(BaseModel):
+    imageBase64: str            # base64-encoded PNG/JPEG
+    filename:    Optional[str]  = None
+    # Override any step; default = run the full pipeline
+    deskew:             bool = True
+    cropToPage:         bool = True
+    removeShadow:       bool = True
+    clahe:              bool = True
+    denoise:            bool = True
+    grayscale:          bool = True
+    targetDpi:          int  = 300
+    paperLongEdgeInches: float = 11.0   # A4 = 11.69, US Letter = 11.0
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -326,6 +347,7 @@ def health():
         "sklearnAvailable": SKLEARN_AVAILABLE,
         "pilAvailable":     PIL_AVAILABLE,
         "scipyAvailable":   SCIPY_AVAILABLE,
+        "cv2Available":     CV2_AVAILABLE,
         "modelLoaded":      _model is not None,
         "iforestLoaded":    _iforest is not None,
         "modelMeta":        _model_meta,
@@ -608,6 +630,198 @@ def image_quality(req: ImageQualityRequest):
 
     quality["recommendedPipeline"] = pipeline
     return quality
+
+
+# ── Image preprocessing pipeline (OpenCV) ─────────────────────────────────────
+
+def _decode_image_cv(b64: str):
+    """Decode a base64 string into an OpenCV BGR image."""
+    raw = base64.b64decode(b64)
+    arr = np.frombuffer(raw, dtype=np.uint8)
+    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if img is None:
+        raise HTTPException(400, "Could not decode image (cv2.imdecode returned None)")
+    return img
+
+
+def _deskew(gray):
+    """
+    Estimate skew via the minimum-area rectangle around non-background pixels.
+    Returns (deskewed_gray, angle_degrees). Angle is the correction applied
+    (positive = rotated CCW).
+    """
+    # Invert + threshold so text becomes the foreground (white) on black.
+    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
+    coords = cv2.findNonZero(binary)
+    if coords is None or len(coords) < 50:
+        return gray, 0.0
+    angle = cv2.minAreaRect(coords)[-1]
+    # minAreaRect returns angle in [-90, 0). Normalise to [-45, 45].
+    if angle < -45:
+        angle = -(90 + angle)
+    else:
+        angle = -angle
+    if abs(angle) < 0.2:
+        return gray, 0.0
+    h, w = gray.shape
+    matrix = cv2.getRotationMatrix2D((w // 2, h // 2), angle, 1.0)
+    rotated = cv2.warpAffine(
+        gray, matrix, (w, h),
+        flags=cv2.INTER_CUBIC,
+        borderMode=cv2.BORDER_REPLICATE,
+    )
+    return rotated, float(angle)
+
+
+def _crop_to_page(gray):
+    """
+    Find the largest near-rectangular contour and crop to it. Returns
+    (cropped_gray, was_cropped). Falls back to the input on failure.
+    """
+    h, w = gray.shape
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    edges = cv2.Canny(blurred, 50, 150)
+    edges = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=1)
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return gray, False
+    largest = max(contours, key=cv2.contourArea)
+    page_area = h * w
+    if cv2.contourArea(largest) < 0.4 * page_area:
+        # No dominant page contour — skip cropping to avoid chopping text.
+        return gray, False
+    x, y, cw, ch = cv2.boundingRect(largest)
+    pad = 4
+    x0 = max(0, x - pad)
+    y0 = max(0, y - pad)
+    x1 = min(w, x + cw + pad)
+    y1 = min(h, y + ch + pad)
+    return gray[y0:y1, x0:x1], True
+
+
+def _remove_shadow(gray):
+    """
+    Estimate the page background by dilating + median-blurring, then divide
+    the original by the background to flatten lighting. Returns uint8.
+    """
+    kernel = np.ones((7, 7), np.uint8)
+    dilated = cv2.dilate(gray, kernel)
+    bg = cv2.medianBlur(dilated, 21)
+    # Guard against div-by-zero
+    bg_safe = np.where(bg == 0, 1, bg).astype(np.float32)
+    diff = 255.0 - cv2.absdiff(gray.astype(np.float32), bg_safe)
+    norm = cv2.normalize(diff, None, 0, 255, cv2.NORM_MINMAX)
+    return norm.astype(np.uint8)
+
+
+def _clahe(gray):
+    """Contrast-Limited Adaptive Histogram Equalisation."""
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    return clahe.apply(gray)
+
+
+def _denoise(gray):
+    """Fast non-local-means denoising tuned for grayscale documents."""
+    return cv2.fastNlMeansDenoising(gray, None, h=10, templateWindowSize=7, searchWindowSize=21)
+
+
+def _normalize_dpi(img, target_dpi: int, paper_long_edge_in: float):
+    """
+    Rescale so the image's longer dimension equals target_dpi * paper_long_edge.
+    Skips rescaling if the source is already within ±10% of the target.
+    """
+    h, w = img.shape[:2]
+    long_edge = max(h, w)
+    target_long_edge = int(round(target_dpi * paper_long_edge_in))
+    ratio = target_long_edge / long_edge
+    if 0.9 <= ratio <= 1.1:
+        return img, 1.0
+    interp = cv2.INTER_AREA if ratio < 1.0 else cv2.INTER_CUBIC
+    new_w = int(round(w * ratio))
+    new_h = int(round(h * ratio))
+    return cv2.resize(img, (new_w, new_h), interpolation=interp), ratio
+
+
+def _encode_png_b64(img) -> str:
+    ok, buf = cv2.imencode(".png", img)
+    if not ok:
+        raise HTTPException(500, "cv2.imencode failed")
+    return base64.b64encode(buf.tobytes()).decode("ascii")
+
+
+@app.post("/preprocess-image")
+def preprocess_image(req: PreprocessRequest):
+    """
+    Run the OCR preprocessing pipeline on a base64-encoded image. Returns the
+    preprocessed image (also base64) plus per-step metadata so callers can log
+    what was applied.
+    """
+    if not CV2_AVAILABLE:
+        raise HTTPException(503, "opencv-python-headless not installed — run: pip install opencv-python-headless")
+
+    bgr = _decode_image_cv(req.imageBase64)
+    orig_h, orig_w = bgr.shape[:2]
+    steps: list[str] = []
+    deskew_angle = 0.0
+    was_cropped = False
+    dpi_ratio = 1.0
+
+    # Step 1: grayscale (most downstream OCR engines want grayscale anyway)
+    if req.grayscale:
+        gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+        steps.append("grayscale")
+    else:
+        gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)  # still needed for deskew/crop
+
+    # Step 2: deskew — fix small rotation introduced by scanning
+    if req.deskew:
+        gray, deskew_angle = _deskew(gray)
+        if deskew_angle != 0.0:
+            steps.append(f"deskew:{deskew_angle:.2f}deg")
+
+    # Step 3: crop to detected page boundary
+    if req.cropToPage:
+        gray, was_cropped = _crop_to_page(gray)
+        if was_cropped:
+            steps.append("cropToPage")
+
+    # Step 4: shadow removal (background flattening)
+    if req.removeShadow:
+        gray = _remove_shadow(gray)
+        steps.append("removeShadow")
+
+    # Step 5: CLAHE
+    if req.clahe:
+        gray = _clahe(gray)
+        steps.append("clahe")
+
+    # Step 6: denoise (after CLAHE so we don't amplify noise we just denoised)
+    if req.denoise:
+        gray = _denoise(gray)
+        steps.append("denoise")
+
+    # Step 7: DPI normalization
+    final = gray
+    if req.targetDpi and req.targetDpi > 0:
+        final, dpi_ratio = _normalize_dpi(gray, req.targetDpi, req.paperLongEdgeInches)
+        if dpi_ratio != 1.0:
+            steps.append(f"normalizeDpi:{req.targetDpi}@x{dpi_ratio:.2f}")
+
+    final_h, final_w = final.shape[:2]
+
+    return {
+        "imageBase64":          _encode_png_b64(final),
+        "filename":             req.filename,
+        "originalWidth":        int(orig_w),
+        "originalHeight":       int(orig_h),
+        "finalWidth":           int(final_w),
+        "finalHeight":          int(final_h),
+        "deskewAngleDegrees":   round(deskew_angle, 3),
+        "wasCroppedToPage":     bool(was_cropped),
+        "dpiScaleRatio":        round(dpi_ratio, 3),
+        "targetDpi":            int(req.targetDpi),
+        "stepsApplied":         steps,
+    }
 
 
 @app.get("/weights")
