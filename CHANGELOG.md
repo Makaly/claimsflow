@@ -7,6 +7,16 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Documentation
+
+- **`ML_SIDECAR_URL` documented in `backend/.env.example`** — the
+  OpenCV preprocessing sidecar URL was previously a magic env var with
+  no documentation. The example now explains the toggle (sidecar off
+  by default, set to `http://localhost:8000` for a local Python
+  service) and lists the pipeline it enables: deskew, crop-to-page,
+  shadow removal, CLAHE adaptive contrast, 300 DPI normalisation, with
+  a 10–20% accuracy gain on phone-scanned or skewed invoices.
+
 ### Fixed
 
 - **AI Extraction overlay now honours dark mode** — the `BatchUpload`
