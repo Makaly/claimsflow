@@ -125,10 +125,11 @@ describe('SearchablePdfService.composePdf', () => {
     const buf = fs.readFileSync(outPath);
     const streamText = decompressAllStreams(buf);
 
-    // pdf-lib emits each word as a separate Tj operator: `(WORD) Tj`.
-    expect(streamText).toContain('(INVOICE) Tj');
-    expect(streamText).toContain('(12345) Tj');
-    expect(streamText).toContain('(CIC) Tj');
+    // pdf-lib encodes Tj operands as hex strings: `<HEX> Tj`.
+    const hex = (s: string) => Buffer.from(s, 'utf8').toString('hex').toUpperCase();
+    expect(streamText).toContain(`<${hex('INVOICE')}> Tj`);
+    expect(streamText).toContain(`<${hex('12345')}> Tj`);
+    expect(streamText).toContain(`<${hex('CIC')}> Tj`);
 
     try { fs.unlinkSync(outPath); } catch { /* ignore */ }
   });

@@ -9,6 +9,35 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **Per-provider fraud thresholds with monthly auto-recompute (v2-T2.2)** —
+  A single global fraud cutoff over-flags high-volume reputable providers and
+  under-flags low-volume new ones. T2.2 makes the high-risk cutoff per-provider,
+  calibrated monthly against historical false-positive and false-negative rates.
+  New `provider_fraud_thresholds` table (migration `20260519300000`), a
+  `ProviderFraudThresholdsService` with 5-minute in-process cache and
+  global-default fallback (0.6), and a monthly `@Cron` that sweeps providers
+  with ≥30 labelled claims in the trailing 180 days to find the FP+1.5×FN
+  minimum within the [0.3, 0.9] band. Manual overrides (`overriddenAt` set)
+  are preserved across recomputes. `AnomalyScoringService` now reads the
+  per-provider cutoff at score time; the medium-risk band scales at 50% of the
+  high cutoff so both tiers move together. REST surface added:
+  `GET /fraud-thresholds` — admin list of all provider thresholds;
+  `PUT /fraud-thresholds/:providerId` — manual override with audit trail;
+  `GET /fraud-thresholds/signal-lift` — returns lift-by-feature-signal table
+  built from the trailing 90-day labelled window.
+
+- **Configurable duplicate-detection window per claim type (v2-T2.4)** —
+  Cross-provider duplicate detection previously used a hard-coded same-day
+  match, over-detecting on pharmacy (same-day refills are common) and
+  under-detecting on inpatient (duplicate billing can surface weeks later).
+  New `ClaimTypeConfig` Prisma model + migration with seeded per-type defaults:
+  pharmacy 7 days · outpatient 30 · inpatient 120 · dental 14 · optical 180.
+  `ClaimTypeConfigService` exposes `getWindowDays(claimType)` with a 5-minute
+  in-process cache and a `'default'` fallback (0 days = same-day, preserving
+  prior behaviour for un-typed claims). `ClaimsService` and `OcrProcessor`
+  now widen the `dateOfService` range to ±windowDays before the
+  cross-provider duplicate query.
+
 - **`GET /documents/:id/searchable-pdf` endpoint** — serves a fully
   searchable PDF for any stored document. The response streams a PDF in
   which each page is the original scan image with an invisible, coordinate-
