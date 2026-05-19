@@ -9,6 +9,20 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+#### Database — Phase 4 multi-tenant scaffolding
+
+- **`Tenant` model + nullable `tenantId` columns** on the six core scoped
+  entities: `User`, `Provider`, `Claim`, `Document`, `BatchSubmission`,
+  `OcrExtraction`. Every new column is nullable with no default — the
+  existing single-organisation deployment keeps working unchanged, and a
+  future SaaS rollout can populate the rows in three controlled steps:
+  insert a default `Tenant`, update existing entities, flip the columns
+  to `NOT NULL` in a follow-up migration. Migration
+  `20260519210000_add_multi_tenant_scaffolding` adds the `tenants` table
+  (uuid PK, unique `slug`, `isActive` flag, timestamps), the six
+  `tenantId` columns with `ON DELETE SET NULL` foreign keys, and six
+  matching b-tree indexes for tenant-scoped query paths.
+
 #### Fraud — Near-duplicate invoice and amount+date detection
 
 - **Near-duplicate invoice number signal** — exact invoice-number

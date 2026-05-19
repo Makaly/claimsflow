@@ -62,12 +62,16 @@ model User {
   seniorityTier         String                  @default("mid")
   notificationPrefs     NotificationPreference?
   notificationQueue     NotificationQueue[]
+  // Phase 4 — nullable tenant scaffolding (see Tenant model at end of file).
+  tenantId              String?
+  tenant                Tenant?                 @relation(fields: [tenantId], references: [id])
 
   @@index([providerId])
   @@index([email])
   @@index([passwordResetToken])
   @@index([deletedAt])
   @@index([activeStatus])
+  @@index([tenantId])
   @@map("users")
 }
 
@@ -242,10 +246,13 @@ model Provider {
   scanEvents             ScanEvent[]                  @relation("ScanEventProvider")
   fraudThreshold         ProviderFraudThreshold?
   scanPacingAlerts       ScanPacingAlert[]
+  tenantId               String?
+  tenant                 Tenant?                      @relation(fields: [tenantId], references: [id])
 
   @@index([status])
   @@index([type])
   @@index([licenseNumber])
+  @@index([tenantId])
   @@map("providers")
 }
 
@@ -334,7 +341,9 @@ model BatchSubmission {
   updatedAt        DateTime  @updatedAt
   completedAt      DateTime?
   branchId         String?
+  tenantId         String?
   provider         Provider  @relation(fields: [providerId], references: [id])
+  tenant           Tenant?   @relation(fields: [tenantId], references: [id])
   claims           Claim[]
 
   @@index([batchNumber])
@@ -342,6 +351,7 @@ model BatchSubmission {
   @@index([branchId])
   @@index([status])
   @@index([createdAt])
+  @@index([tenantId])
   @@map("batch_submissions")
 }
 
@@ -424,6 +434,9 @@ model Claim {
   // Final approval by the claims officer, after maker_checker + (optional) fraud review.
   claimsOfficerApprovedAt  DateTime?
   claimsOfficerApprovedBy  String?
+  // Phase 4 — nullable tenant scaffolding.
+  tenantId                 String?
+  tenant                   Tenant?              @relation(fields: [tenantId], references: [id])
 
   @@index([claimNumber])
   @@index([barcode])
@@ -436,6 +449,7 @@ model Claim {
   @@index([memberNumber])
   @@index([slaBreached])
   @@index([fraudVerdict])
+  @@index([tenantId])
   @@map("claims")
 }
 
@@ -502,16 +516,19 @@ model Document {
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
   uploadedBy       String?
+  tenantId         String?
   annotations      DocumentAnnotation[]
   versions         DocumentVersion[]
   claim            Claim?               @relation(fields: [claimId], references: [id])
   provider         Provider?            @relation("ProviderDocuments", fields: [providerId], references: [id])
+  tenant           Tenant?              @relation(fields: [tenantId], references: [id])
 
   @@index([claimId])
   @@index([batchNumber])
   @@index([documentType])
   @@index([ocrStatus])
   @@index([providerId])
+  @@index([tenantId])
   @@map("documents")
 }
 
@@ -586,11 +603,14 @@ model OcrExtraction {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   processedAt       DateTime?
+  tenantId          String?
   claim             Claim     @relation(fields: [claimId], references: [id])
+  tenant            Tenant?   @relation(fields: [tenantId], references: [id])
 
   @@index([claimId])
   @@index([status])
   @@index([requiresReview])
+  @@index([tenantId])
   @@map("ocr_extractions")
 }
 
@@ -1332,4 +1352,28 @@ model NotificationQueue {
   @@index([scheduledFor])
   @@index([flushedAt])
   @@map("notifications_queue")
+}
+
+/// Phase 4 — multi-tenant scaffolding. Nullable `tenantId` columns on the
+/// core scoped entities (User, Provider, Claim, Document, OcrExtraction,
+/// BatchSubmission) so a future SaaS rollout can populate them without
+/// breaking today's single-organisation deployment.
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users             User[]
+  providers         Provider[]
+  claims            Claim[]
+  documents         Document[]
+  ocrExtractions    OcrExtraction[]
+  batchSubmissions  BatchSubmission[]
+
+  @@index([slug])
+  @@index([isActive])
+  @@map("tenants")
 }
