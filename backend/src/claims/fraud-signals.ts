@@ -48,6 +48,42 @@ export interface DuplicateClaimRef {
 }
 
 /**
+ * A claim belonging to the same provider, used for duplicate detection that
+ * goes beyond an exact invoice-number match: fuzzy invoice-number variants
+ * and (amount, date-of-service) tuple collisions when the invoice number
+ * differs or is missing.
+ */
+export interface SiblingProviderClaim {
+  claimNumber: string
+  invoiceNumber: string | null
+  invoiceAmount: number | null
+  dateOfService: Date | string | null
+}
+
+/**
+ * Normalise an invoice number for fuzzy matching. Removes whitespace,
+ * dashes, underscores, and slashes and upper-cases the rest, so
+ * "INV-12345", "INV 12345", "inv_12_345" and "INV/12345" all collapse to
+ * "INV12345".
+ */
+export function normalizeInvoiceNumber(raw: string | null | undefined): string {
+  if (!raw) return ''
+  return raw.replace(/[\s\-_/.]/g, '').toUpperCase()
+}
+
+/**
+ * Returns true when two service dates fall within `windowDays` of each
+ * other. Falsy inputs return false so the comparison is never spurious.
+ */
+function withinDateWindow(a: Date | string | null | undefined, b: Date | string | null | undefined, windowDays: number): boolean {
+  if (!a || !b) return false
+  const da = new Date(a).getTime()
+  const db = new Date(b).getTime()
+  if (!Number.isFinite(da) || !Number.isFinite(db)) return false
+  return Math.abs(da - db) <= windowDays * 86_400_000
+}
+
+/**
  * Compute fraud signals for a single claim.
  * `allInvoiceNumbers` is a Set of invoice numbers from other claims for this provider.
  * `batchSiblings` is the list of other claims already saved under the same batch number.
@@ -61,6 +97,7 @@ export function computeFraudSignals(
   duplicateClaimRefs: DuplicateClaimRef[] = [],
   crossProviderMatches: CrossProviderMatch[] = [],
   recentMemberProcedureCodes: string[] = [],
+  siblingProviderClaims: SiblingProviderClaim[] = [],
 ): FraudSignal[] {
   const signals: FraudSignal[] = []
   const now = new Date().toISOString()
@@ -98,8 +135,10 @@ export function computeFraudSignals(
     })
   }
 
-  // 4. Duplicate invoice number
-  if (claim.invoiceNumber && allInvoiceNumbers.has(claim.invoiceNumber.trim())) {
+  // 4. Duplicate invoice number (exact)
+  const trimmedInv = claim.invoiceNumber?.trim() ?? ''
+  const hasExactDuplicate = !!trimmedInv && allInvoiceNumbers.has(trimmedInv)
+  if (hasExactDuplicate) {
     const refs = duplicateClaimRefs.filter(r => r.claimNumber)
     const refList = refs.map(r => r.claimNumber).join(', ') || 'another claim'
     signals.push({
@@ -113,6 +152,56 @@ export function computeFraudSignals(
         uploadedAt: refs[0]?.submittedAt ?? undefined,
       },
     })
+  }
+
+  // 4b. Near-duplicate invoice number — same digits/letters after stripping
+  //     punctuation and whitespace. Catches "INV-12345" vs "INV12345" vs "inv 12345".
+  //     Only fires when the exact-match signal did NOT already fire.
+  if (!hasExactDuplicate && trimmedInv) {
+    const normalizedSelf = normalizeInvoiceNumber(trimmedInv)
+    if (normalizedSelf.length >= 4) {
+      const nearMatches = siblingProviderClaims.filter(c => {
+        const other = normalizeInvoiceNumber(c.invoiceNumber)
+        return other && other === normalizedSelf && c.invoiceNumber?.trim() !== trimmedInv
+      })
+      if (nearMatches.length > 0) {
+        const refList = nearMatches.map(m => `${m.claimNumber} (invoice "${m.invoiceNumber}")`).join(', ')
+        signals.push({
+          level: 'critical',
+          title: 'Near-Duplicate Invoice Number',
+          detail: `Invoice number "${claim.invoiceNumber}" matches ${nearMatches.length} other claim(s) after normalising punctuation and spacing: ${refList}. Submitting the same invoice under variant formats (INV-12345 vs INV12345 vs INV 12345) is a known double-billing tactic designed to evade exact-match deduplication.`,
+          detectedAt: now,
+          meta: { duplicateClaimNumbers: nearMatches.map(m => m.claimNumber) },
+        })
+      }
+    }
+  }
+
+  // 4c. Same provider, same amount, same date-of-service — within ±2 days.
+  //     Fires when the invoice numbers DIFFER (or one is missing). This is
+  //     how the same bill gets resubmitted with a fabricated invoice number
+  //     to dodge the exact / near-duplicate checks above.
+  if (claim.invoiceAmount && claim.invoiceAmount > 0 && claim.dateOfService && siblingProviderClaims.length > 0) {
+    const tupleMatches = siblingProviderClaims.filter(c => {
+      if (c.invoiceAmount == null || Math.abs(c.invoiceAmount - claim.invoiceAmount!) > 0.5) return false
+      if (!withinDateWindow(c.dateOfService, claim.dateOfService, 2)) return false
+      // If invoice numbers exist on both and they match exactly OR normalize-equal,
+      // those will have already been flagged by 4 / 4b — don't double-report.
+      const a = normalizeInvoiceNumber(claim.invoiceNumber)
+      const b = normalizeInvoiceNumber(c.invoiceNumber)
+      if (a && b && a === b) return false
+      return true
+    })
+    if (tupleMatches.length > 0) {
+      const refList = tupleMatches.map(m => m.claimNumber).join(', ')
+      signals.push({
+        level: 'critical',
+        title: 'Same-Amount-Same-Date Duplicate',
+        detail: `${tupleMatches.length} other claim(s) for this provider have the identical amount (KES ${amt.toLocaleString()}) and service date within ±2 days: ${refList}. The invoice numbers differ, but the amount-and-date fingerprint suggests the same underlying bill is being resubmitted with a fabricated or altered invoice number to slip past deduplication.`,
+        detectedAt: now,
+        meta: { duplicateClaimNumbers: tupleMatches.map(m => m.claimNumber) },
+      })
+    }
   }
 
   // 5. Low OCR confidence

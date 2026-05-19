@@ -9,6 +9,48 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+#### Fraud — Near-duplicate invoice and amount+date detection
+
+- **Near-duplicate invoice number signal** — exact invoice-number
+  deduplication is trivially defeated by submitting the same bill under
+  cosmetic variations (`INV-12345` → `INV 12345` → `inv_12345` → `INV.12345`).
+  `normalizeInvoiceNumber()` strips whitespace, dashes, underscores,
+  slashes, and dots and upper-cases the rest so all of those collapse
+  to `INV12345`. `computeFraudSignals` now compares the normalised form
+  across the trailing 90 days of same-provider claims and emits a
+  `critical` "Near-Duplicate Invoice Number" signal when it finds a
+  sibling whose raw invoice number differs but whose normalised form
+  matches. Only fires when the exact-match signal didn't already; the
+  detail body lists every offending claim number + raw invoice string
+  so a reviewer can see at a glance which variants were used.
+
+- **Same-amount-same-date duplicate signal** — fabricated invoice numbers
+  defeat both the exact and near-duplicate checks. A second new signal
+  fires when another same-provider claim has identical amount (within
+  KES 0.50) and a service date within ±2 days, **and** the normalised
+  invoice numbers do NOT match. Catches resubmission with a wholly
+  fabricated invoice number — the amount-and-date fingerprint is much
+  harder to vary than the invoice string. Emitted at `critical` level
+  with the matching claim numbers in `meta`.
+
+- **`SiblingProviderClaim` query in `OcrProcessor`** — the OCR job now
+  pulls a wider sibling window (90 days, all same-provider claims with
+  amount + dateOfService + invoiceNumber selected) and passes the
+  resulting `SiblingProviderClaim[]` into `computeFraudSignals`. The
+  previous query was filtered to `invoiceNumber: { not: null }` which
+  hid the amount+date fingerprint matches entirely. Set construction
+  for the exact-match check now trims and null-filters defensively so
+  empty strings never poison the lookup.
+
+- **Unit tests for the new signals** — `fraud-signals.spec.ts` adds
+  coverage for `normalizeInvoiceNumber` (every punctuation variant
+  collapses correctly, nullish input is empty-string), the
+  near-duplicate detector (fires on cosmetic variants, stays silent
+  when the exact-match signal already fired), and the same-amount-
+  same-date detector (fires within ±2 days; ignored when invoice numbers
+  match after normalisation; ignored when amounts differ by more than
+  KES 0.50).
+
 #### OCR — OpenCV image preprocessing pipeline (sidecar)
 
 - **`POST /preprocess-image` on the ML sidecar** — runs a single image

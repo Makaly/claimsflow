@@ -8,7 +8,7 @@ import { DocumentClassifierService } from '../document-classifier/document-class
 import { AnomalyScoringService } from '../claims/anomaly-scoring.service';
 import { LineItemFraudService } from '../claims/line-item-fraud.service';
 import { ClaimTypeConfigService } from '../claims/claim-type-config.service';
-import { computeFraudSignals, DuplicateClaimRef, CrossProviderMatch } from '../claims/fraud-signals';
+import { computeFraudSignals, DuplicateClaimRef, CrossProviderMatch, SiblingProviderClaim } from '../claims/fraud-signals';
 
 // concurrency: 2 — OCR is CPU-bound via Tesseract; more than 2 saturates the process
 @Processor({ name: 'ocr' }, { concurrency: 2 })
@@ -244,12 +244,30 @@ export class OcrProcessor extends WorkerHost {
             const dupWindowDays = await this.claimTypeConfigService.getDuplicateWindowDays(null);
             const dupWindowMs = dupWindowDays * 86_400_000;
 
+            // Same-provider sibling window — wide enough to catch resubmitted
+            // bills with fabricated invoice numbers, narrow enough that the
+            // query stays bounded for high-volume providers.
+            const siblingWindowStart = new Date(Date.now() - 90 * 86_400_000);
             const [existingInvoiceClaims, batchSiblings, crossProviderRaw, recentMemberClaims] =
               await Promise.all([
-                // Duplicate invoice number within same provider
+                // Same-provider siblings (exact + near-duplicate invoice number +
+                // amount-and-date tuple). No `invoiceNumber: { not: null }`
+                // filter — we also want amount/date matches on claims whose
+                // invoice number is missing.
                 this.prisma.claim.findMany({
-                  where: { providerId: freshClaim.providerId, invoiceNumber: { not: null }, id: { not: claimId } },
-                  select: { invoiceNumber: true, claimNumber: true, uploadedBy: true, submittedAt: true },
+                  where: {
+                    providerId: freshClaim.providerId,
+                    id: { not: claimId },
+                    submittedAt: { gte: siblingWindowStart },
+                  },
+                  select: {
+                    invoiceNumber: true,
+                    claimNumber: true,
+                    uploadedBy: true,
+                    submittedAt: true,
+                    invoiceAmount: true,
+                    dateOfService: true,
+                  },
                 }),
                 // Same-batch siblings for velocity check
                 freshClaim.batchNumber
@@ -287,7 +305,12 @@ export class OcrProcessor extends WorkerHost {
                   : Promise.resolve([]),
               ]);
 
-            const invoiceNumSet = new Set(existingInvoiceClaims.map((c: any) => c.invoiceNumber!));
+            const invoiceNumSet = new Set(
+              existingInvoiceClaims
+                .map((c: any) => c.invoiceNumber)
+                .filter((n: string | null): n is string => !!n)
+                .map((n: string) => n.trim()),
+            );
             const duplicateClaimRefs: DuplicateClaimRef[] = freshClaim.invoiceNumber
               ? existingInvoiceClaims
                   .filter((c: any) => c.invoiceNumber?.trim() === freshClaim.invoiceNumber?.trim())
@@ -297,6 +320,12 @@ export class OcrProcessor extends WorkerHost {
                     submittedAt: c.submittedAt?.toISOString() ?? null,
                   }))
               : [];
+            const siblingProviderClaims: SiblingProviderClaim[] = (existingInvoiceClaims as any[]).map(c => ({
+              claimNumber: c.claimNumber,
+              invoiceNumber: c.invoiceNumber ?? null,
+              invoiceAmount: c.invoiceAmount ?? null,
+              dateOfService: c.dateOfService ?? null,
+            }));
             const crossProviderMatches: CrossProviderMatch[] = (crossProviderRaw as any[]).map(c => ({
               claimNumber: c.claimNumber,
               providerName: c.provider?.name ?? 'Unknown Provider',
@@ -327,6 +356,7 @@ export class OcrProcessor extends WorkerHost {
               duplicateClaimRefs,
               crossProviderMatches,
               recentMemberProcedureCodes,
+              siblingProviderClaims,
             );
 
             // Merge: avoid duplicating signal titles already present
