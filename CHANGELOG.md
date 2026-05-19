@@ -34,6 +34,17 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   accepted — PDFs are explicitly rejected and must be page-rasterised by
   the caller via the existing `pdftoppm` path in `ocr.service.ts`.
 
+- **`ImagePreprocessorService` unit tests** —
+  `image-preprocessor.service.spec.ts` covers all five degradation /
+  happy paths without ever touching the network: sidecar disabled (no
+  `ML_SIDECAR_URL`) returns `null`; PDF input throws a typed error;
+  unreachable sidecar (`fetch` rejects) returns `null` silently; non-2xx
+  response returns `null`; a successful response writes the decoded PNG
+  to disk and returns the parsed `PreprocessResult`. Cache-hit path
+  asserts that `fetch` is **not** called when an output already exists
+  and `force=false`. All five tests use a stubbed `globalThis.fetch` and
+  a tmp working directory.
+
 #### v2 Theme C+D — AI assistance, clinical NLP, integrations (worktree-agent-a1b4be4a614579c28)
 
 - **Conversational claim assistant via RAG (v2-C2)** — `assistant` module with
