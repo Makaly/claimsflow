@@ -118,7 +118,15 @@ export class OllamaOcrService implements OnModuleInit {
   /** Extract invoice fields from a single image (base64 PNG) */
   private async extractFromImage(imageBase64: string, modelOverride?: string): Promise<Partial<ParsedInvoice>> {
     const model = modelOverride || this.activeModel || VISION_MODEL;
-    const prompt = `You are reading a Kenyan medical insurance invoice. Extract every visible field. For Aga Khan invoices look for "Patient Name:", "Bill To:", "AK Number:", "HMN NO.", "Account Number:", "Sponsor Coverage", "Diagnosis:".
+    const prompt = `You are reading a Kenyan medical insurance invoice. Extract every visible field.
+
+For Aga Khan invoices look for "Patient Name:", "Bill To:", "AK Number:", "HMN NO.", "Account Number:", "Sponsor Coverage", "Diagnosis:".
+
+Aga Khan inpatient bills (UH-prefix invoice number, 5+ pages) have structural traps:
+- PATIENT NAME is the ALL-CAPS line directly UNDER a "Patient" column header (no colon). Never return "Unknown Patient".
+- DIAGNOSIS — "Discharge Diagnosis", "Final Diagnosis", "Provisional Diagnosis", and "Admission Diagnosis" are SUB-HEADERS, not values. The real diagnosis is the next free-text line below them.
+- AMOUNT — never return KES 0–100 (those are co-pays). Prefer "Sponsor Amount Payable" / "Net Payable to Hospital" / "Sponsor Settlement". The Sponsor Coverage section often lists the annual limit BEFORE the actual payable figure — pick the payable one. The grand total is on the LAST page, not the first.
+
 Return ONLY valid JSON with no extra text:
 {"patientName":"","patientId":"","membershipNumber":"","providerName":"","invoiceNumber":"","invoiceDate":"","invoiceAmount":0,"serviceDate":"","diagnosis":"","treatment":"","insuranceCompany":"","accountName":"","confidence":0.9}`;
 

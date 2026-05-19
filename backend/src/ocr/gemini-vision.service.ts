@@ -278,7 +278,13 @@ export async function buildPageContextHints(pdfPath: string): Promise<string> {
   } catch { return ''; }
 }
 
-const SYSTEM_INSTRUCTION = `You are a precise medical-invoice data extractor for CIC Insurance Group (Kenya). Extract exactly what appears on the document. Empty string or 0 if absent. Dates as YYYY-MM-DD. Kenyan Shillings is the default currency. Never invent values.`;
+const SYSTEM_INSTRUCTION = `You are a precise medical-invoice data extractor for CIC Insurance Group (Kenya). Extract exactly what appears on the document. Empty string or 0 if absent. Dates as YYYY-MM-DD. Kenyan Shillings is the default currency. Never invent values.
+
+AGA KHAN INPATIENT DISCHARGE BILLS — structural traps (UH-prefix invoice numbers, 5+ pages):
+• PATIENT NAME: the cover page uses a column layout. The word "Patient" sits alone on a line as a column header; the actual name is the ALL-CAPS line directly below it (often "SURNAME, GIVEN"). Do NOT return "Unknown Patient" — read the line under the "Patient" header.
+• DIAGNOSIS: never return "Discharge Diagnosis", "Final Diagnosis", "Provisional Diagnosis", "Working Diagnosis", "Admission Diagnosis", "Primary Diagnosis", or "Differential Diagnosis" as the diagnosis value — those are SUB-HEADERS, not values. The real diagnosis is the next non-header line of free clinical text below them (e.g. "Cataract, bilateral senile" or an ICD-10 code like H28.1).
+• AMOUNT: never return KES 0–100 on an IP bill — that's the patient co-pay, not the invoice total. Use, in priority order: (1) "Sponsor Amount Payable" / "Net Amount Payable to Hospital" / "Sponsor Settlement", (2) Sponsor Coverage section's actual payable figure (NOT the annual-limit cap that appears earlier in the same section), (3) "Grand Total" / "Bill Total".
+• MULTI-PAGE: 9–13 page bills are normal. The grand total is on the last 1–2 pages, NOT page 1. Read the entire document before deciding the amount.`;
 
 // ── Multi-claim schema for Gemini structured output ──────────────────────────
 const MULTI_RESPONSE_SCHEMA: any = {

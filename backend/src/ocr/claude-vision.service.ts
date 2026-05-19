@@ -22,7 +22,48 @@ EXTRACTION RULES:
 3. Patient ID (National ID / patient registration number): search for labels "National ID:", "National ID No.:", "ID No.:", "ID Number:", "Patient ID:", "Pat. ID:", "Reg. No.:", "Registration No.:", "File No.:", "Patient No.", "Passport No." — on Aga Khan forms look near "Patient Address" block or top-right header area. Return ONLY the number, not the label. If the document only shows an AK-number or policy number, leave patientId empty — do NOT duplicate the membership number here.
 4. If a field is genuinely absent, return empty string or 0 — NEVER invent or approximate a value
 5. Invoice amount: use the TOTAL / GRAND TOTAL / AMOUNT DUE line, not line-item subtotals
-6. Diagnosis: look for ICD-10 codes (e.g. E39, J06.9, A09), "Diagnosis:", "Presenting Complaint:", "Assessment:", "Clinical Notes:" — including handwritten entries`;
+6. Diagnosis: look for ICD-10 codes (e.g. E39, J06.9, A09), "Diagnosis:", "Presenting Complaint:", "Assessment:", "Clinical Notes:" — including handwritten entries
+
+AGA KHAN INPATIENT DISCHARGE BILLS — common structural traps (UH-prefix invoice numbers, 5+ pages):
+
+  A. PATIENT NAME is NOT after a colon. The cover page renders a column block:
+        Patient                Account Number
+        NYIKA, DAVID          UH283003051
+     The word "Patient" is a column header on its own line; the name is the
+     ALL-CAPS line immediately below (often "SURNAME, GIVEN"). Treat the
+     line under any header that says "Patient" or "Patient Name" alone as
+     the patient name. Do NOT return "Unknown Patient" for these documents.
+
+  B. DIAGNOSIS section is a multi-line block where the LABEL appears
+     repeatedly. The layout is:
+        Diagnosis:
+        Discharge Diagnosis            <- THIS IS A SUB-HEADER, NOT A VALUE
+        Cataract, bilateral senile     <- THIS IS THE REAL DIAGNOSIS
+        H28.1                          <- ICD-10 code
+     Never return "Discharge Diagnosis", "Final Diagnosis", "Provisional
+     Diagnosis", "Working Diagnosis", "Admission Diagnosis", "Primary
+     Diagnosis", or "Differential Diagnosis" as the diagnosis value — those
+     are all section headers. The real diagnosis is the next non-header
+     line of free clinical text.
+
+  C. AMOUNT on inpatient bills is NOT the small "Total:", "Amount Due:",
+     or "Patient Co-pay:" figure (often KES 0–100 — that's the patient
+     contribution after insurance, not the bill total). Use, in priority
+     order:
+        1. "Sponsor Amount Payable" / "Net Amount Payable to Hospital" /
+           "Sponsor Settlement" / "Net Payable to Hospital" — these are
+           the actual amounts the insurer pays.
+        2. "Sponsor Coverage" section — figure that follows the corporate
+           code / employer name (NOT the annual-limit figure earlier in
+           the same section).
+        3. "Grand Total" / "Bill Total" — the full hospital bill before
+           sponsor/patient split.
+     Never return a value below KES 100 on an inpatient document — that is
+     definitionally a sub-total or co-pay, not the invoice total.
+
+  D. MULTI-PAGE: these bills are typically 9–13 pages. The grand total
+     usually sits on the LAST one or two pages, NOT page 1. Read the full
+     document before deciding the amount.`;
 
 const EXTRACT_TOOL: Anthropic.Tool = {
   name: 'record_invoice_fields',

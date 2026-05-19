@@ -7,6 +7,41 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- **Vision-model prompts now teach the model the Aga Khan inpatient
+  layout** — instead of fixing extraction symptoms after the fact with
+  regex, the three vision adapters (Anthropic / Gemini / Ollama) now
+  carry an explicit "Aga Khan inpatient discharge bills — structural
+  traps" section in their system prompt / instructions. Each spells out
+  the four ways these documents trick a naive extractor:
+  1. **Patient name** is in a column under the word `Patient` (no
+     colon, ALL-CAPS line below the header). The prompt now tells the
+     model to read the line under the header and never return
+     `Unknown Patient`.
+  2. **Diagnosis** — `Discharge Diagnosis`, `Final Diagnosis`,
+     `Provisional Diagnosis`, `Working Diagnosis`, `Admission Diagnosis`,
+     `Primary Diagnosis`, and `Differential Diagnosis` are explicitly
+     called out as sub-headers, not values. The real diagnosis is the
+     next non-header line.
+  3. **Amount** — anything below KES 100 on an IP bill is a patient
+     co-pay, not the invoice total. The prompt now lists the right
+     labels in priority order: `Sponsor Amount Payable` →
+     `Net Amount Payable to Hospital` → `Sponsor Settlement` →
+     Sponsor-Coverage-section payable figure (NOT the annual limit cap
+     earlier in the same section) → `Grand Total` / `Bill Total`.
+  4. **Multi-page** — bills are routinely 9–13 pages; the grand total
+     lives on the last 1–2 pages. The prompt instructs the model to
+     read the full document before deciding the amount.
+
+  Files touched: `backend/src/ocr/claude-vision.service.ts` (SYSTEM_PROMPT),
+  `backend/src/ocr/gemini-vision.service.ts` (SYSTEM_INSTRUCTION),
+  `backend/src/ocr/ollama-ocr.service.ts` (extractFromImage prompt).
+  The regex patterns shipped earlier (`db9aa48`, `8500f15`) stay in
+  place as a fallback for the Tesseract-only path; this change pushes
+  the same understanding up into the vision layer so the model gets it
+  right at the source instead of relying on post-hoc pattern matching.
+
 ### Build & Tooling
 
 - **ml-sidecar requirements re-pinned for Python 3.14 compatibility** —
