@@ -283,10 +283,18 @@ export class VisionRouterService {
 
   private isUsable(r: ParsedInvoice): boolean {
     const PLACEHOLDER = /^(Unknown Patient|Unknown Provider|OCR Processing Required|Upload to backend for extraction)$/i;
-    const realName = r.patientName && !PLACEHOLDER.test(r.patientName);
+    const realName = !!(r.patientName && !PLACEHOLDER.test(r.patientName));
+    const realProvider = !!(r.providerName && !PLACEHOLDER.test(r.providerName));
+
+    // If a billable amount is present, the patient name MUST be real — otherwise
+    // we have no idea who to bill against. "Unknown Patient · Ksh X" is the most
+    // common low-quality extraction we see; treat it as a fail so the router
+    // tries the next provider in the fallback chain.
+    if (r.invoiceAmount > 0 && !realName) return false;
+
     const populated = [
       realName ? r.patientName : '',
-      !PLACEHOLDER.test(r.providerName || '') ? r.providerName : '',
+      realProvider ? r.providerName : '',
       r.invoiceNumber,
       r.invoiceAmount > 0 ? 'x' : '',
     ].filter(Boolean).length;

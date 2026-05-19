@@ -73,6 +73,13 @@ export interface ParsedInvoice {
   pageRange: string;
   documentPages: DocumentPage[];
   lineItems?: ExtractedLineItem[];
+  /**
+   * Structural warnings raised during post-extraction validation
+   * (line-item sum mismatch, future-dated invoice, missing fields, etc.).
+   * Populated by validateExtraction(); empty/undefined when the result
+   * passes all structural checks. Surface these in the review UI.
+   */
+  validationWarnings?: string[];
 }
 
 @Injectable()
@@ -115,7 +122,7 @@ export class OcrService {
   async extractHocrPages(
     filePath: string,
     mimetype: string,
-    dpi = 200,
+    dpi = 300,
   ): Promise<Array<{
     pageNumber: number;
     imagePath: string;
@@ -244,7 +251,7 @@ export class OcrService {
           try {
             spawnSync(
               'pdftoppm',
-              ['-png', '-r', '250', '-f', String(pageNum), '-l', String(pageNum), pdfPath, tmpPrefix],
+              ['-png', '-r', '300', '-f', String(pageNum), '-l', String(pageNum), pdfPath, tmpPrefix],
               { timeout: 300_000, stdio: 'pipe' },
             );
             const files = fs.readdirSync(tmpDir).filter(f => f.startsWith(path.basename(tmpPrefix)));
@@ -292,7 +299,7 @@ export class OcrService {
 
       try {
         // Only render pages we need at high res, rest at lower res for categorization
-        spawnSync('pdftoppm', ['-png', '-r', '250', '-f', '1', '-l', String(maxOcrPages), pdfPath, `${tmpDir}/page`], { timeout: 300_000 });
+        spawnSync('pdftoppm', ['-png', '-r', '300', '-f', '1', '-l', String(maxOcrPages), pdfPath, `${tmpDir}/page`], { timeout: 300_000 });
 
         // If there are more pages, render them at lower res for categorization
         if (pageCount > maxOcrPages) {
@@ -362,7 +369,65 @@ export class OcrService {
     } catch (err: any) {
       this.logger.warn(`Classifier enrichment skipped: ${err?.message}`);
     }
+
+    // Structural post-validation: catches arithmetic, date and completeness
+    // issues that confidence scores miss. Flagged invoices still pass through
+    // but the warnings are surfaced for human review.
+    result.invoices = result.invoices.map(inv => this.validateExtraction(inv));
+
     return result;
+  }
+
+  /**
+   * Run deterministic structural checks against an extracted invoice.
+   * Does NOT mutate amounts/fields — only attaches `validationWarnings`.
+   * Self-reported model confidence is unreliable on bad scans; these
+   * checks catch the failure modes confidence misses.
+   */
+  validateExtraction(inv: ParsedInvoice): ParsedInvoice {
+    const warnings: string[] = [];
+
+    // 1) Line items must sum to the invoice total (±1 KES, or 2% for invoices
+    //    over 10k where VAT rounding / sponsor-cover splits push the gap up).
+    if (inv.lineItems && inv.lineItems.length > 0 && inv.invoiceAmount > 0) {
+      const sum = inv.lineItems.reduce((s, li) => s + (li.totalPrice ?? 0), 0);
+      const tolerance = Math.max(1, inv.invoiceAmount * 0.02);
+      if (Math.abs(sum - inv.invoiceAmount) > tolerance) {
+        warnings.push(
+          `Line items sum to KES ${sum.toFixed(2)} but invoice total is KES ${inv.invoiceAmount.toFixed(2)} — possible missing rows or wrong total`,
+        );
+      }
+    }
+
+    // 2) Invoice date should not be in the future and should be a real date.
+    if (inv.invoiceDate) {
+      const d = new Date(inv.invoiceDate);
+      if (Number.isNaN(d.getTime())) {
+        warnings.push(`Invoice date "${inv.invoiceDate}" is not parseable as YYYY-MM-DD`);
+      } else if (d.getTime() > Date.now() + 24 * 60 * 60 * 1000) {
+        warnings.push(`Invoice date ${inv.invoiceDate} is in the future`);
+      }
+    }
+
+    // 3) Critical fields. Patient name is the worst silent-fail mode — without
+    //    it, we have nothing to bill against. Provider next.
+    if (!inv.patientName || /^Unknown/i.test(inv.patientName)) {
+      warnings.push('Patient name missing or marked Unknown — manual review required');
+    }
+    if (!inv.providerName || /^Unknown/i.test(inv.providerName)) {
+      warnings.push('Provider name missing or marked Unknown');
+    }
+    if (inv.invoiceAmount <= 0) {
+      warnings.push('Invoice amount is 0 — model failed to read the total');
+    }
+
+    // 4) High-value claims always go to manual review regardless of confidence.
+    //    Anything north of KES 500k should be eyeballed before payout.
+    if (inv.invoiceAmount > 500_000) {
+      warnings.push(`High-value claim (KES ${inv.invoiceAmount.toFixed(2)}) — manual review required`);
+    }
+
+    return warnings.length > 0 ? { ...inv, validationWarnings: warnings } : inv;
   }
 
   private async _extractAndParseInvoiceRaw(filePath: string, mimetype: string, modelId?: string): Promise<{
