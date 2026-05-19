@@ -1,8 +1,10 @@
-fastapi==0.115.0
-uvicorn[standard]==0.30.6
-scikit-learn==1.5.2
-numpy==2.1.1
-pydantic==2.9.2
-scipy==1.14.1
-Pillow==10.4.0
-opencv-python-headless==4.10.0.84
+# Python 3.14-compatible pins. Upper bound on numpy/scipy/cv2/sklearn keeps
+# us inside a known-good wheel set without chasing breaking releases.
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30,<1.0
+scikit-learn>=1.6,<2.0
+numpy>=2.2,<3.0
+pydantic>=2.9,<3.0
+scipy>=1.15,<2.0
+Pillow>=11.0,<12.0
+opencv-python-headless>=4.11,<5.0

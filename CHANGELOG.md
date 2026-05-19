@@ -7,6 +7,23 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Build & Tooling
+
+- **ml-sidecar requirements re-pinned for Python 3.14 compatibility** —
+  exact pins replaced with major-version-bounded ranges
+  (e.g. `numpy>=2.2,<3.0`, `scipy>=1.15,<2.0`, `Pillow>=11.0,<12.0`,
+  `opencv-python-headless>=4.11,<5.0`, `scikit-learn>=1.6,<2.0`) so the
+  sidecar installs cleanly on Python 3.14 wheels while still being
+  protected from breaking major-version releases. Header comment in
+  `ml-sidecar/requirements.txt` documents the policy so future bumps
+  follow the same shape.
+
+- **Python build artifacts gitignored at the repo root** — `__pycache__/`,
+  `*.py[cod]`, `*$py.class`, `.venv/`, `venv/`, `.python-version`,
+  `.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/` are now ignored. The
+  ml-sidecar is the only Python tree but bytecode caches were leaking
+  into `git status` after every sidecar run.
+
 ### Documentation
 
 - **`ML_SIDECAR_URL` documented in `backend/.env.example`** — the

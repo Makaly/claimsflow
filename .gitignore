@@ -54,3 +54,14 @@ audit_report.html
 # Downloaded installer artifacts from testing the curl|bash one-liner
 /claimsflow-install.sh
 claimsflow-install.sh
+
+# Python — ml-sidecar
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.python-version
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
