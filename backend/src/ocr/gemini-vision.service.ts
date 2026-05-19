@@ -2,6 +2,13 @@ import { Injectable, Logger } from '@nestjs/common';
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import * as fs from 'fs';
 import { ParsedInvoice } from './ocr.service';
+import {
+  GEMINI_EXTRACTION_SCHEMA,
+  GEMINI_EXTRACTION_PROMPT,
+  FIELD_CONFIDENCE_THRESHOLD,
+  StructuredExtractionResult,
+  LineItemExtraction,
+} from './extraction-schema.constants';
 
 // ── Structured page-hint contract ────────────────────────────────────────────
 // This is the "master classifier" output.  Both the AI path (Gemini / Claude)
@@ -312,29 +319,9 @@ const MULTI_RESPONSE_SCHEMA: any = {
   required: ['claims'],
 };
 
-const RESPONSE_SCHEMA: any = {
-  type: SchemaType.OBJECT,
-  properties: {
-    patientName:      { type: SchemaType.STRING },
-    patientId:        { type: SchemaType.STRING },
-    membershipNumber: { type: SchemaType.STRING },
-    providerName:     { type: SchemaType.STRING },
-    invoiceNumber:    { type: SchemaType.STRING },
-    invoiceDate:      { type: SchemaType.STRING },
-    invoiceAmount:    { type: SchemaType.NUMBER },
-    serviceDate:      { type: SchemaType.STRING },
-    diagnosis:        { type: SchemaType.STRING },
-    diagnosisCode:    { type: SchemaType.STRING },
-    procedureCode:    { type: SchemaType.STRING },
-    treatment:        { type: SchemaType.STRING },
-    insuranceCompany: { type: SchemaType.STRING },
-    accountName:      { type: SchemaType.STRING },
-    confidence:       { type: SchemaType.NUMBER },
-  },
-  required: ['patientName', 'providerName', 'invoiceAmount', 'confidence'],
-};
-
-const PROMPT = `Extract every field you can see from this medical claim document. Be exact — copy names, numbers, amounts, and codes as they appear. If a value isn't on the page, leave it empty; never guess. Rate your confidence 0.0-1.0.`;
+// Single-invoice structured extraction schema — field-level confidence included.
+// See extraction-schema.constants.ts for the full type definitions.
+const RESPONSE_SCHEMA: any = GEMINI_EXTRACTION_SCHEMA;
 
 const PROBE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const CALL_TIMEOUT_MS = 30_000;      // 30 s per Gemini API call
@@ -495,42 +482,79 @@ Return one entry per distinct claim.`;
     const result = await Promise.race([
       model.generateContent([
         { inlineData: { mimeType: effectiveMime, data: b64 } },
-        { text: PROMPT },
+        { text: GEMINI_EXTRACTION_PROMPT },
       ]),
       timeout,
     ]);
 
     const text = result.response.text();
-    let fields: Record<string, any> = {};
+    let structured: StructuredExtractionResult;
     try {
-      fields = JSON.parse(text);
-    } catch (err) {
+      structured = JSON.parse(text) as StructuredExtractionResult;
+    } catch {
       throw new Error(`Gemini returned non-JSON response: ${text.slice(0, 200)}`);
     }
 
+    return this.mapStructuredToInvoice(structured);
+  }
+
+  // Converts the new field-level-confidence schema into ParsedInvoice.
+  // Low-confidence fields are preserved so downstream code can gate on them.
+  mapStructuredToInvoice(s: StructuredExtractionResult): ParsedInvoice {
+    const h = s.header ?? {};
+    const fv = (f: any): string => (f?.value ?? '').trim();
+    const fc = (f: any): number => Math.max(0, Math.min(1, Number(f?.confidence ?? 0)));
+
+    const diagnosisCode = fv(s.diagnosis?.diagnosisCode);
+    const procedureCode = fv(s.diagnosis?.procedureCode);
+
+    // Flag low-confidence header fields so the caller can decide on arbitration.
+    const lowConfFields = Object.entries(h)
+      .filter(([, v]: [string, any]) => fc(v) < FIELD_CONFIDENCE_THRESHOLD && fv(v))
+      .map(([k]) => k);
+    if (lowConfFields.length) {
+      this.logger.log(`Low-conf header fields (< ${FIELD_CONFIDENCE_THRESHOLD}): ${lowConfFields.join(', ')}`);
+    }
+
+    const lineItems = (s.lineItems ?? []).map((li: LineItemExtraction, idx: number) => ({
+      description:    li.description    || '',
+      category:       li.category,
+      quantity:       li.quantity,
+      unitPrice:      li.unitPrice,
+      totalPrice:     li.totalPrice,
+      taxAmount:      li.taxAmount,
+      discount:       li.discount,
+      currency:       li.currency       || 'KES',
+      serviceDate:    li.serviceDate,
+      procedureCode:  li.procedureCode,
+      overallConfidence: li.confidence  ?? 1,
+      lineNumber:     li.lineNumber     ?? idx + 1,
+    }));
+
     return {
-      patientName:      fields.patientName      || '',
-      patientId:        fields.patientId        || '',
-      membershipNumber: fields.membershipNumber || '',
-      providerName:     fields.providerName     || '',
-      invoiceNumber:    fields.invoiceNumber    || '',
-      invoiceDate:      fields.invoiceDate      || '',
-      invoiceAmount:    Number(fields.invoiceAmount) || 0,
-      serviceDate:      fields.serviceDate      || fields.invoiceDate || '',
-      diagnosis:        fields.diagnosis        || '',
-      diagnosisCode:    fields.diagnosisCode    || '',
-      procedureCode:    fields.procedureCode    || '',
-      cptCodes:         [],
-      icd10Codes:       fields.diagnosisCode ? [fields.diagnosisCode] : [],
+      patientName:      fv(h.patientName)      || '',
+      patientId:        fv(h.patientId)        || '',
+      membershipNumber: fv(h.membershipNumber) || '',
+      providerName:     fv(h.providerName)     || '',
+      invoiceNumber:    fv(h.invoiceNumber)    || '',
+      invoiceDate:      fv(h.invoiceDate)      || '',
+      invoiceAmount:    Number(s.totals?.invoiceAmount) || 0,
+      serviceDate:      fv(h.serviceDate)      || fv(h.invoiceDate) || '',
+      diagnosis:        fv(s.diagnosis?.diagnosis)    || '',
+      diagnosisCode,
+      procedureCode,
+      cptCodes:         procedureCode ? [procedureCode] : [],
+      icd10Codes:       diagnosisCode ? [diagnosisCode] : [],
       hcpcsCodes:       [],
-      allMedicalCodes:  [fields.diagnosisCode, fields.procedureCode].filter(Boolean),
-      treatment:        fields.treatment        || '',
-      insuranceCompany: fields.insuranceCompany || '',
-      accountName:      fields.accountName      || '',
-      confidence:       Math.max(0, Math.min(1, Number(fields.confidence) || 0.85)),
+      allMedicalCodes:  [diagnosisCode, procedureCode].filter(Boolean),
+      treatment:        fv(s.diagnosis?.treatment)    || '',
+      insuranceCompany: fv(h.insuranceCompany) || '',
+      accountName:      fv(h.accountName)      || '',
+      confidence:       Math.max(0, Math.min(1, Number(s.confidence) || 0.85)),
       rawText:          '',
       pageRange:        '1',
       documentPages:    [],
+      lineItems: lineItems.length ? lineItems : undefined,
     };
   }
 }
