@@ -6,6 +6,7 @@ import { getRedisConnection } from './config/redis.config';
 import { APP_FILTER, APP_INTERCEPTOR, APP_GUARD } from '@nestjs/core';
 import { GlobalHttpExceptionFilter } from './common/filters/http-exception.filter';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
+import { TenantMiddleware } from './tenant/tenant.middleware';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { CommonModule } from './common/common.module';
@@ -35,6 +36,12 @@ import { MockIntegrationsModule } from './mock-integrations/mock-integrations.mo
 import { GdprModule } from './gdpr/gdpr.module';
 import { ScannerModule } from './scanner/scanner.module';
 import { ScanMeteringModule } from './scan-metering/scan-metering.module';
+import { DrModule } from './dr/dr.module';
+import { FeatureFlagsModule } from './feature-flags/feature-flags.module';
+import { TenantModule } from './tenant/tenant.module';
+import { CasesModule } from './cases/cases.module';
+import { CorrespondenceModule } from './correspondence/correspondence.module';
+import { WorkflowDefinitionsModule } from './workflow-definitions/workflow-definitions.module';
 
 @Module({
   imports: [
@@ -83,6 +90,12 @@ import { ScanMeteringModule } from './scan-metering/scan-metering.module';
     GdprModule,
     ScannerModule,
     ScanMeteringModule,
+    DrModule,
+    FeatureFlagsModule,
+    TenantModule,
+    CasesModule,
+    CorrespondenceModule,
+    WorkflowDefinitionsModule,
   ],
   controllers: [AppController],
   providers: [
@@ -104,5 +117,6 @@ import { ScanMeteringModule } from './scan-metering/scan-metering.module';
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer.apply(RequestIdMiddleware).forRoutes('*');
+    consumer.apply(TenantMiddleware).forRoutes('*');
   }
 }
