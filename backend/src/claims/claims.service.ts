@@ -477,7 +477,9 @@ export class ClaimsService {
       if (params.dateTo) where.submittedAt.lte = new Date(params.dateTo + 'T23:59:59');
     }
 
-    // Text search across claim number, member name, invoice number
+    // Text search across claim number, member name, invoice number.
+    // For terms >= 3 chars we add a similarity (%) filter using pg_trgm GIN indexes
+    // in addition to the ILIKE contains filter (which also benefits from GIN indexes).
     if (params.search) {
       const searchFilter = {
         OR: [
@@ -488,6 +490,22 @@ export class ClaimsService {
           { batchNumber: { contains: params.search, mode: 'insensitive' } },
         ],
       };
+      // For longer terms, also include trigram-similar rows so typos/OCR noise
+      // surface relevant results. Prisma does not expose % natively — we inject
+      // matching claim IDs via $queryRaw and merge into the OR filter.
+      if (params.search.length >= 3) {
+        try {
+          const similar = await this.prisma.$queryRaw<Array<{ id: string }>>`
+            SELECT id FROM claims
+            WHERE "claimNumber" % ${params.search}
+               OR "memberName"  % ${params.search}
+            LIMIT 200
+          `;
+          if (similar.length > 0) {
+            (searchFilter.OR as any[]).push({ id: { in: similar.map(r => r.id) } });
+          }
+        } catch { /* pg_trgm not yet installed — graceful degradation */ }
+      }
       // Merge search filter with existing where clause
       if (where.OR) {
         where.AND = [{ OR: where.OR }, searchFilter];
