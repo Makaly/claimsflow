@@ -11,6 +11,7 @@ import { DocumentClassifierModule } from '../document-classifier/document-classi
 import { AnomalyScoringService } from '../claims/anomaly-scoring.service';
 import { LineItemFraudService } from '../claims/line-item-fraud.service';
 import { ClaimTypeConfigService } from '../claims/claim-type-config.service';
+import { ProviderFraudThresholdsService } from '../claims/provider-fraud-thresholds.service';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { ClaimTypeConfigService } from '../claims/claim-type-config.service';
     AnomalyScoringService,
     LineItemFraudService,
     ClaimTypeConfigService,
+    ProviderFraudThresholdsService,
   ],
   exports: [OcrService, OllamaOcrService, VisionRouterService],
 })
