@@ -19,6 +19,32 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **OCR pipeline — post-extraction validation, 300 DPI rasterisation, and
+  stricter fallback gating** — three quality-related fixes that together
+  cut the silent-fail rate on phone-scanned and inpatient invoices.
+  - `OcrService.validateExtraction()` runs deterministic structural
+    checks after every extraction and attaches a `validationWarnings`
+    array to `ParsedInvoice`. Catches what model self-confidence
+    misses: line-item sum ≠ invoice total (tolerance `max(KES 1, 2%)`
+    to absorb VAT rounding), invoice date in the future / unparseable,
+    `patientName` / `providerName` missing or `Unknown`, `invoiceAmount`
+    zero, and a force-route to manual review for any claim over
+    KES 500 000. The invoice is never mutated — warnings surface in the
+    review UI so adjusters know exactly what to double-check.
+  - `pdftoppm` rasterisation in both the main PDF path and
+    `extractHocrPages()` bumped from 200/250 DPI to **300 DPI** —
+    matches the resolution the OpenCV sidecar normalises to, so the
+    searchable-PDF text layer sits on the same pixel grid as the
+    preprocessed image. Improves Tesseract accuracy on small fonts and
+    table cells.
+  - `VisionRouterService.isUsable()` now rejects any extraction that
+    reports `invoiceAmount > 0` but lacks a real patient name
+    (i.e. blank or the `Unknown Patient` / `OCR Processing Required`
+    placeholders). Persisting a billable claim without a payee was the
+    most common low-quality failure mode in production. The router now
+    falls through to the next provider in the chain (Gemini → Vision
+    API → Tesseract) instead of accepting the half-extraction.
+
 - **AI Extraction overlay now honours dark mode** — the `BatchUpload`
   extraction screen had hard-coded light-only Tailwind classes
   (`bg-gray-100`, `bg-violet-100`, `bg-emerald-100`, `bg-red-100`,
@@ -33,6 +59,19 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   cleanly on a dark surface; neutral chips and separators use
   `dark:bg-white/10` / `dark:bg-white/15` / `dark:border-white/20` for
   consistent low-contrast neutrals. Light-mode appearance is unchanged.
+
+### Performance
+
+- **Prompt caching on the Anthropic vision adapter** — the SYSTEM_PROMPT
+  block (~3 KB) and the multi/single extract tool schemas are now sent
+  with `cache_control: { type: 'ephemeral' }` on both call sites in
+  `ClaudeVisionService`. Both blocks are large and identical across every
+  claim, so the provider can serve them from the ~5-minute warm-tier
+  cache. Expected impact on a typical batch: input-token cost on repeat
+  extractions drops roughly an order of magnitude, and per-request latency
+  improves because the model no longer re-parses the prompt + schema on
+  each call. No behavioural change — request content is unchanged; the
+  flag only affects how the provider bills and serves the call.
 
 ### Added
 
