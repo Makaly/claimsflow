@@ -242,6 +242,8 @@ model Provider {
   aliases                ProviderAlias[]
   scanMeteringSettings   ScanMeteringSettings?
   scanEvents             ScanEvent[]                  @relation("ScanEventProvider")
+  fraudThreshold         ProviderFraudThreshold?
+  scanPacingAlerts       ScanPacingAlert[]
 
   @@index([status])
   @@index([type])
@@ -1198,7 +1200,6 @@ model ScanMeteringSettings {
 
   provider        Provider          @relation(fields: [providerId], references: [id], onDelete: Cascade)
   updatedBy       User?             @relation("ScanMeteringSettingsUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
-  pacingAlerts    ScanPacingAlert[]
 
   @@map("scan_metering_settings")
 }
