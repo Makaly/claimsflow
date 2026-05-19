@@ -43,6 +43,11 @@ import PolicyPlans from '@/pages/PolicyPlans'
 import MLLabelling from '@/pages/MLLabelling'
 import ZoneAnalytics from '@/pages/ZoneAnalytics'
 import ScanMeteringDashboard from '@/pages/ScanMeteringDashboard'
+import FeatureFlagsAdmin from '@/pages/FeatureFlagsAdmin'
+import CaseList from '@/pages/CaseList'
+import CaseDetail from '@/pages/CaseDetail'
+import LetterTemplates from '@/pages/LetterTemplates'
+import WorkflowDesigner from '@/pages/WorkflowDesigner'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -163,6 +168,11 @@ function AppRoutes() {
         <Route path="/ml-labelling" element={<ProtectedRoute allowedRoles={['admin','claims_officer','fraud_officer']}><MLLabelling /></ProtectedRoute>} />
         <Route path="/zone-analytics" element={<ProtectedRoute allowedRoles={['admin','claims_officer','fraud_officer','maker_checker']}><ZoneAnalytics /></ProtectedRoute>} />
         <Route path="/scan-metering" element={<ProtectedRoute allowedRoles={['admin','finance','provider_admin','claims_officer','maker_checker','fraud_officer']}><ScanMeteringDashboard /></ProtectedRoute>} />
+        <Route path="/feature-flags" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><FeatureFlagsAdmin /></ProtectedRoute>} />
+        <Route path="/cases" element={<ProtectedRoute allowedRoles={CIC_STAFF}><CaseList /></ProtectedRoute>} />
+        <Route path="/cases/:id" element={<ProtectedRoute allowedRoles={CIC_STAFF}><CaseDetail /></ProtectedRoute>} />
+        <Route path="/letter-templates" element={<ProtectedRoute allowedRoles={['admin','claims_officer']}><LetterTemplates /></ProtectedRoute>} />
+        <Route path="/workflow-designer" element={<ProtectedRoute allowedRoles={['admin','claims_officer']}><WorkflowDesigner /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
