@@ -22,6 +22,7 @@ import {
 import api from '@/services/api'
 import { useAuthStore } from '@/store/authStore'
 import { getInitials, formatDateTime, cn } from '@/lib/utils'
+import { setLocale } from '@/lib/i18n'
 
 // Extended profile fields — persisted per-user on the backend (users table)
 interface ProfileExtras {
@@ -188,9 +189,12 @@ export default function Profile() {
         location: extras.location,
         timezone: extras.timezone,
         language: extras.language,
+        locale: extras.language,  // C5: persist locale to DB; notifications will use this
         bio: extras.bio,
         avatarUrl: avatarDataUrl,
       })
+      // C5: apply i18n locale immediately on save
+      if (extras.language) setLocale(extras.language)
       setUser?.({ ...(user as any), ...updated })
       setProfileMsg({ text: 'Profile saved', ok: true })
     } catch (err: any) {
