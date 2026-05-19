@@ -7,6 +7,23 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+
+- **AI Extraction overlay now honours dark mode** — the `BatchUpload`
+  extraction screen had hard-coded light-only Tailwind classes
+  (`bg-gray-100`, `bg-violet-100`, `bg-emerald-100`, `bg-red-100`,
+  `border-gray-300`, …) on the "0/3 done" badge, the four stage pills
+  (Reading / Extracting / Fraud Checks / Verifying), the per-file rows,
+  the progress-bar track, the confidence badges, the rotating insight
+  panel, and the page-indicator dots. Under the dark theme they
+  rendered as bright white blocks on the near-black background. Every
+  affected utility now ships a matching `dark:` variant — coloured pills
+  use translucent `dark:bg-{hue}-500/15` fills with `dark:text-{hue}-300`
+  ink so the violet / blue / emerald / amber / red semantics still read
+  cleanly on a dark surface; neutral chips and separators use
+  `dark:bg-white/10` / `dark:bg-white/15` / `dark:border-white/20` for
+  consistent low-contrast neutrals. Light-mode appearance is unchanged.
+
 ### Added
 
 #### Auth + access control — Phase 4 tenant scoping (runtime)

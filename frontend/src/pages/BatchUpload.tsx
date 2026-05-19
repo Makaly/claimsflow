@@ -1824,8 +1824,32 @@ function ProcessingInsightCard({
     : null
 
   const v = isAi
-    ? { pill: 'bg-violet-100 text-violet-700', ring: 'ring-violet-300', scanLine: '#8b5cf6', shimA: '#8b5cf6', shimB: '#c4b5fd', icon: 'text-violet-600', cardBorder: 'border-violet-200', activeBg: 'bg-violet-50 border-violet-300', insightBg: 'bg-violet-50 border-violet-200', insightText: 'text-violet-800', insightSub: 'text-violet-600', badge: 'bg-violet-100 text-violet-700', shimmer: 'linear-gradient(90deg,#8b5cf6 0%,#a78bfa 40%,#c4b5fd 50%,#a78bfa 60%,#8b5cf6 100%)' }
-    : { pill: 'bg-blue-100 text-blue-700', ring: 'ring-blue-300', scanLine: '#3b82f6', shimA: '#3b82f6', shimB: '#93c5fd', icon: 'text-blue-600', cardBorder: 'border-blue-200', activeBg: 'bg-blue-50 border-blue-300', insightBg: 'bg-blue-50 border-blue-200', insightText: 'text-blue-800', insightSub: 'text-blue-600', badge: 'bg-blue-100 text-blue-700', shimmer: 'linear-gradient(90deg,#3b82f6 0%,#60a5fa 40%,#93c5fd 50%,#60a5fa 60%,#3b82f6 100%)' }
+    ? {
+        pill: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
+        ring: 'ring-violet-300 dark:ring-violet-500/40',
+        scanLine: '#8b5cf6', shimA: '#8b5cf6', shimB: '#c4b5fd',
+        icon: 'text-violet-600 dark:text-violet-400',
+        cardBorder: 'border-violet-200 dark:border-violet-500/30',
+        activeBg: 'bg-violet-50 border-violet-300 dark:bg-violet-500/10 dark:border-violet-500/40',
+        insightBg: 'bg-violet-50 border-violet-200 dark:bg-violet-500/10 dark:border-violet-500/30',
+        insightText: 'text-violet-800 dark:text-violet-200',
+        insightSub: 'text-violet-600 dark:text-violet-300',
+        iconHalo: 'bg-violet-100 dark:bg-violet-500/20',
+        shimmer: 'linear-gradient(90deg,#8b5cf6 0%,#a78bfa 40%,#c4b5fd 50%,#a78bfa 60%,#8b5cf6 100%)',
+      }
+    : {
+        pill: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300',
+        ring: 'ring-blue-300 dark:ring-blue-500/40',
+        scanLine: '#3b82f6', shimA: '#3b82f6', shimB: '#93c5fd',
+        icon: 'text-blue-600 dark:text-blue-400',
+        cardBorder: 'border-blue-200 dark:border-blue-500/30',
+        activeBg: 'bg-blue-50 border-blue-300 dark:bg-blue-500/10 dark:border-blue-500/40',
+        insightBg: 'bg-blue-50 border-blue-200 dark:bg-blue-500/10 dark:border-blue-500/30',
+        insightText: 'text-blue-800 dark:text-blue-200',
+        insightSub: 'text-blue-600 dark:text-blue-300',
+        iconHalo: 'bg-blue-100 dark:bg-blue-500/20',
+        shimmer: 'linear-gradient(90deg,#3b82f6 0%,#60a5fa 40%,#93c5fd 50%,#60a5fa 60%,#3b82f6 100%)',
+      }
 
   return (
     <div className="space-y-4">
@@ -1855,7 +1879,7 @@ function ProcessingInsightCard({
               <div className="relative w-10 h-10 flex items-center justify-center">
                 <div className="_cf_ripple" />
                 <div className="_cf_ripple2" />
-                <div className={`relative z-10 w-10 h-10 rounded-full flex items-center justify-center ${isAi ? 'bg-violet-100' : 'bg-blue-100'}`}>
+                <div className={`relative z-10 w-10 h-10 rounded-full flex items-center justify-center ${v.iconHalo}`}>
                   {isAi
                     ? <Brain className={`h-5 w-5 ${v.icon} _cf_glow`} />
                     : <Scan className={`h-5 w-5 ${v.icon} _cf_glow`} />
@@ -1878,7 +1902,11 @@ function ProcessingInsightCard({
                 {doneCount}/{totalCount} done
               </span>
               {avgConf !== null && (
-                <span className={`px-2 py-1 rounded-full font-medium ${avgConf >= 0.85 ? 'bg-emerald-100 text-emerald-700' : avgConf >= 0.70 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                <span className={`px-2 py-1 rounded-full font-medium ${
+                  avgConf >= 0.85 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+                  : avgConf >= 0.70 ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
+                  : 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300'
+                }`}>
                   {Math.round(avgConf * 100)}% avg conf
                 </span>
               )}
@@ -1889,7 +1917,7 @@ function ProcessingInsightCard({
         <CardContent className="space-y-5 pb-5">
           {/* Progress bar */}
           <div className="space-y-1.5">
-            <div className="h-3 w-full rounded-full bg-gray-100 overflow-hidden">
+            <div className="h-3 w-full rounded-full bg-gray-100 dark:bg-white/10 overflow-hidden">
               <div
                 className="_cf_shimmer_bar transition-all duration-700"
                 style={{ width: `${Math.max(2, aiExtractPct)}%`, height: '100%' }}
@@ -1917,13 +1945,14 @@ function ProcessingInsightCard({
                 <Fragment key={stage}>
                   <div className={`flex items-center gap-1 px-2 py-1 rounded-full transition-all ${
                     active ? `${v.pill} font-semibold ring-2 ${v.ring}` :
-                    done   ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'
+                    done   ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+                           : 'bg-gray-100 text-gray-400 dark:bg-white/5 dark:text-muted-foreground'
                   }`}>
                     {done && <CheckCircle className="h-3 w-3" />}
                     {active && <Loader2 className="h-3 w-3 animate-spin" />}
                     {stage}
                   </div>
-                  {i < 3 && <div className="h-px flex-1 bg-gray-200" />}
+                  {i < 3 && <div className="h-px flex-1 bg-gray-200 dark:bg-white/10" />}
                 </Fragment>
               )
             })}
@@ -1939,8 +1968,8 @@ function ProcessingInsightCard({
                   key={claim.id}
                   className={`relative flex items-center gap-3 rounded-xl border p-3 overflow-hidden transition-all duration-300 ${
                     isActive ? `${v.activeBg} shadow-sm` :
-                    isDone   ? 'border-emerald-200 bg-emerald-50/40' :
-                    'border-gray-100 bg-gray-50/50 opacity-60'
+                    isDone   ? 'border-emerald-200 bg-emerald-50/40 dark:border-emerald-500/30 dark:bg-emerald-500/10' :
+                    'border-gray-100 bg-gray-50/50 opacity-60 dark:border-white/10 dark:bg-white/5'
                   }`}
                 >
                   {/* Scan line animation — only on active card */}
@@ -1949,8 +1978,8 @@ function ProcessingInsightCard({
                   <div className="shrink-0 relative z-10">
                     {isActive && <Loader2 className={`h-5 w-5 animate-spin ${v.icon}`} />}
                     {claim.status === 'extracted' && <Sparkles className="h-5 w-5 text-violet-500" />}
-                    {claim.status === 'verified'  && <ShieldCheck className="h-5 w-5 text-emerald-600" />}
-                    {!isActive && !isDone && <div className="h-5 w-5 rounded-full border-2 border-gray-300" />}
+                    {claim.status === 'verified'  && <ShieldCheck className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />}
+                    {!isActive && !isDone && <div className="h-5 w-5 rounded-full border-2 border-gray-300 dark:border-white/20" />}
                   </div>
 
                   <div className="flex-1 min-w-0 relative z-10">
@@ -1972,14 +2001,14 @@ function ProcessingInsightCard({
                   <div className="flex items-center gap-2 relative z-10">
                     {claim.aiConfidence > 0 && (
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                        claim.aiConfidence >= 0.85 ? 'bg-emerald-100 text-emerald-700' :
-                        claim.aiConfidence >= 0.70 ? 'bg-amber-100 text-amber-700' :
-                        'bg-red-100 text-red-700'
+                        claim.aiConfidence >= 0.85 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' :
+                        claim.aiConfidence >= 0.70 ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300' :
+                        'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300'
                       }`}>
                         {Math.round(claim.aiConfidence * 100)}%
                       </span>
                     )}
-                    {isDone && <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />}
+                    {isDone && <CheckCircle className="h-4 w-4 text-emerald-500 dark:text-emerald-400 shrink-0" />}
                   </div>
                 </div>
               )
@@ -2015,7 +2044,7 @@ function ProcessingInsightCard({
               <div
                 key={i}
                 className={`h-1.5 rounded-full transition-all duration-300 ${
-                  i === insightIdx ? `w-4 ${isAi ? 'bg-violet-500' : 'bg-blue-500'}` : 'w-1.5 bg-gray-300'
+                  i === insightIdx ? `w-4 ${isAi ? 'bg-violet-500' : 'bg-blue-500'}` : 'w-1.5 bg-gray-300 dark:bg-white/15'
                 }`}
               />
             ))}
