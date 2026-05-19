@@ -72,19 +72,40 @@ export class ProviderFraudThresholdsService {
   @Cron(CronExpression.EVERY_1ST_DAY_OF_MONTH_AT_MIDNIGHT)
   async recomputeMonthly() {
     const since = new Date(Date.now() - 180 * 86_400_000);
-    const candidates = await this.prisma.claim.groupBy({
+    // Pre-built args silence Prisma's recursive WhereInput generics that trip
+    // up `groupBy` type-checking in TS 5.x.
+    const groupByArgs: any = {
       by: ['providerId'],
       where: { submittedAt: { gte: since }, fraudSignals: { not: null } },
       _count: { _all: true },
       having: { id: { _count: { gte: 30 } } },
-    } as any).catch(() => [] as Array<{ providerId: string }>);
+    };
+    const candidates = await (this.prisma.claim.groupBy as any)(groupByArgs)
+      .catch(() => [] as Array<{ providerId: string }>);
 
     let updated = 0;
     for (const c of candidates as Array<{ providerId: string }>) {
-      const labelled = await this.prisma.claimLabel.findMany({
-        where: { claim: { providerId: c.providerId, submittedAt: { gte: since } } },
-        include: { claim: { select: { fraudSignals: true } } },
-      }).catch(() => [] as any[]);
+      // ClaimLabel has no Prisma relation back to Claim (only a unique
+      // claimId scalar), so fetch the relevant claim IDs first, then their
+      // labels and fraudSignals separately.
+      const claimsForProvider = await this.prisma.claim.findMany({
+        where: { providerId: c.providerId, submittedAt: { gte: since } },
+        select: { id: true, fraudSignals: true },
+      }).catch(() => [] as Array<{ id: string; fraudSignals: any }>);
+
+      if (claimsForProvider.length === 0) continue;
+
+      const fraudSignalsByClaimId = new Map(
+        claimsForProvider.map(cl => [cl.id, cl.fraudSignals] as const),
+      );
+      const labelRows = await this.prisma.claimLabel.findMany({
+        where: { claimId: { in: claimsForProvider.map(cl => cl.id) } },
+      }).catch(() => [] as Array<{ claimId: string; source: string; label: string }>);
+
+      const labelled = labelRows.map(row => ({
+        outcome: row.source,
+        claim: { fraudSignals: fraudSignalsByClaimId.get(row.claimId) ?? null },
+      }));
 
       if (labelled.length < 30) continue;
 
