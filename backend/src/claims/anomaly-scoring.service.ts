@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ProviderFraudThresholdsService } from './provider-fraud-thresholds.service';
 
 export interface AnomalyDetail {
   score: number; // 0-1, higher = more anomalous
@@ -28,7 +29,10 @@ export class AnomalyScoringService {
   private weightsCachedAt = 0;
   private readonly CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private providerThresholds: ProviderFraudThresholdsService,
+  ) {}
 
   private async loadWeights(): Promise<Record<string, number>> {
     const now = Date.now();
@@ -210,7 +214,13 @@ export class AnomalyScoringService {
     // Sum contributions, cap at 1.0
     const rawScore = factors.reduce((s, f) => s + f.contribution, 0);
     const score = Math.min(1, Math.max(0, rawScore));
-    const riskLevel: 'low' | 'medium' | 'high' = score >= 0.6 ? 'high' : score >= 0.3 ? 'medium' : 'low';
+
+    // T2.2 — high-risk cutoff is per-provider, calibrated monthly against
+    // historical FP/FN rates. Medium is half the high cutoff so the band
+    // scales naturally as the high threshold moves.
+    const highCut = await this.providerThresholds.getThresholdForProvider(claim.providerId);
+    const medCut = highCut / 2;
+    const riskLevel: 'low' | 'medium' | 'high' = score >= highCut ? 'high' : score >= medCut ? 'medium' : 'low';
 
     // Persist on OcrExtraction if it exists, otherwise create
     try {
