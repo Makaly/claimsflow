@@ -412,7 +412,7 @@ RULE 3 — Each distinct invoice number is its own claim. Two invoices with diff
 RULE 3b — A SCANNED/IMAGE page before a "Page 1 of N" sequence: if it shows a different provider/invoice, it is a SEPARATE claim.
 RULE 4 — Discharge summaries, lab results, auth letters, referral letters attach to the nearest preceding invoice — do NOT create separate claim entries for them.
 
-For invoiceAmount: use Sponsor Coverage (inpatient) or Grand Total / Balance Due (outpatient) — NOT the patient co-pay.
+For invoiceAmount: use the GROSS TOTAL charged by the hospital — the full bill BEFORE any insurance/NHIF/sponsor deduction. On Aga Khan inpatient bills this is "Grand Total", "Sponsor Amount Payable", or "Total Charges" (typically hundreds of thousands of KES). Do NOT use "Patient Balance", "Patient Co-pay", or "Amount Due from Patient" — those are residual amounts after coverage. Any value below KES 100 on a hospital bill is definitionally a co-pay, not an invoice total.
 pageRange must be "start-end" (e.g. "1-2") or single page (e.g. "5"). Ranges must not overlap.
 Return one entry per distinct claim.`;
 

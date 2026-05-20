@@ -77,7 +77,7 @@ const EXTRACT_TOOL: Anthropic.Tool = {
       providerName:     { type: 'string', description: 'Name of the hospital, clinic, or medical provider' },
       invoiceNumber:    { type: 'string', description: 'Invoice or receipt number' },
       invoiceDate:      { type: 'string', description: 'Invoice date as YYYY-MM-DD' },
-      invoiceAmount:    { type: 'number', description: 'Total amount on the invoice, as a number (no currency symbol)' },
+      invoiceAmount:    { type: 'number', description: 'GROSS TOTAL charged by the hospital/clinic — the full bill BEFORE any insurance, NHIF, or sponsor deductions. This is what the hospital charged, not what the patient owes. Do NOT use: "Patient Balance", "Patient Co-pay", "Amount Due from Patient", or any figure below KES 100 on a hospital bill — those are residual co-payments after coverage, NOT the invoice total. On Aga Khan inpatient bills use "Grand Total", "Sponsor Amount Payable", or "Total Charges" (all typically in the hundreds of thousands of KES).' },
       serviceDate:      { type: 'string', description: 'Date service was rendered as YYYY-MM-DD (if different from invoice date)' },
       diagnosis:        { type: 'string', description: 'Primary diagnosis text' },
       diagnosisCode:    { type: 'string', description: 'ICD-10 code (e.g. A09, J06.9)' },

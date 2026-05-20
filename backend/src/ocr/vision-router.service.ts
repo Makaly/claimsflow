@@ -292,6 +292,13 @@ export class VisionRouterService {
     // tries the next provider in the fallback chain.
     if (r.invoiceAmount > 0 && !realName) return false;
 
+    // Amounts under KES 100 are almost always the patient's residual co-payment
+    // after NHIF/sponsor coverage — NOT the gross invoice total. Any Kenyan
+    // medical claim worth processing through an insurer will be at least KES 100.
+    // Reject so the fallback chain (and ultimately Tesseract with back-page OCR)
+    // can find the real gross total on the summary page.
+    if (r.invoiceAmount > 0 && r.invoiceAmount < 100) return false;
+
     const populated = [
       realName ? r.patientName : '',
       realProvider ? r.providerName : '',

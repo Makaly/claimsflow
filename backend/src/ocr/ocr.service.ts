@@ -294,7 +294,7 @@ export class OcrService {
     // small per-day or per-line subtotal. Middle pages still get a lighter
     // 150 DPI scan for document categorisation.
     const FRONT_HIGH_RES = Math.min(pageCount, 3);
-    const BACK_HIGH_RES = pageCount > 5 ? 2 : 0;        // last N pages
+    const BACK_HIGH_RES = pageCount >= 5 ? 2 : 0;       // last N pages (>= 5 catches 5-page bills)
     const backStart = pageCount - BACK_HIGH_RES + 1;     // 1-indexed
     const midStart  = FRONT_HIGH_RES + 1;
     const midEnd    = BACK_HIGH_RES > 0 ? backStart - 1 : pageCount;
@@ -458,11 +458,21 @@ export class OcrService {
     try {
       const multiResults = await this.visionRouter.extractMulti(chosen, filePath, mimetype);
       if (multiResults && multiResults.length > 0) {
-        this.logger.log(`Multi-claim extraction returned ${multiResults.length} claim(s) via ${chosen}`);
-        const realPageCount = await this.getPdfPageCount(filePath, mimetype);
-        return { invoices: multiResults, pageCount: realPageCount, modelUsed: chosen };
+        // Quality-gate: reject batches where every extracted amount looks like a
+        // patient co-pay (> 0 but < 100 KES).  This catches the Aga Khan inpatient
+        // pattern where NHIF+sponsor leaves the patient owing KES 0–50, but the
+        // gross bill is hundreds of thousands.  Fall through so the Tesseract path
+        // can read the summary/totals page and find the real gross total.
+        const hasUsableAmount = multiResults.some(r => r.invoiceAmount === 0 || r.invoiceAmount >= 100);
+        if (hasUsableAmount) {
+          this.logger.log(`Multi-claim extraction returned ${multiResults.length} claim(s) via ${chosen}`);
+          const realPageCount = await this.getPdfPageCount(filePath, mimetype);
+          return { invoices: multiResults, pageCount: realPageCount, modelUsed: chosen };
+        }
+        this.logger.warn(`Multi-claim extract returned only co-pay-level amounts (< KES 100) — falling through to Tesseract`);
+      } else {
+        this.logger.warn(`Multi-claim extract returned 0 results for ${chosen}`);
       }
-      this.logger.warn(`Multi-claim extract returned 0 results for ${chosen}`);
     } catch (err: any) {
       this.logger.warn(`Multi-claim extract failed for ${chosen}: ${err?.message || err}`);
     }
