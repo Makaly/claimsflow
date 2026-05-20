@@ -9,6 +9,53 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **OCR digit-substitution recovery for Aga Khan inpatient amount fields**
+  (`invoice-patterns.ts`) — the PDF text layer on Aga Khan IP bills
+  consistently garbles digit glyphs inside large currency figures:
+  `4` → `\`, `8` → `E`/`B`, `0` → `o`/`O`, `1` → `l`/`I`/`|`,
+  `5` → `S`, `2` → `Z`. Patterns like `552, 997 . E2` or `5oo, ooo. oo`
+  never matched `TOTAL_AMOUNT_PATTERNS`, so the pipeline fell back to the
+  vision model which latched onto a visible co-pay (KES 18.00) or bed fee
+  instead. `restoreOcrAmounts()` now runs a narrow, label-gated
+  restoration pass before pattern matching: it only rewrites text inside a
+  300-character window after one of a fixed set of amount-bearing labels
+  (`Total Charges`, `Sponsor Coverage`, `Net Amount Payable`, etc.) and
+  gates every candidate rewrite with a strict money-format regex so it
+  cannot invent a number that wasn't already shaped like one. Dates,
+  account numbers, and phone numbers elsewhere in the document are
+  untouched.
+
+- **Patient-name regex widened for Aga Khan inpatient column layout**
+  (`invoice-patterns.ts`) — inpatient bills use a two-column header where
+  the patient name and `MR#:` / `Acct:` sit on the same physical line
+  separated by 50+ spaces, e.g.:
+
+  ```text
+  Patient: MUGO,JASON NYAGA                                    MR#: AK00385327
+  ```
+
+  The previous 40-character capture cap stopped short of the column gap
+  and the lazy `?` quantifier failed to match. Cap raised to 80 characters
+  and the lookahead extended to include `\s{2,}`, `MR#`, `Acct`, and
+  `Account` as valid stop-anchors. Plain newline-terminated names
+  (`Patient: NYIKA,DAVID\n`) continue to work unchanged.
+
+- **Ollama vision model pinned to deterministic (greedy) decoding**
+  (`ollama-ocr.service.ts`) — with the previous `temperature: 0.1` and
+  no fixed seed, the model would re-sample on every call. Re-uploading the
+  same invoice could silently drop a field (patient name, member number,
+  diagnosis) one run and keep it the next, surfacing as inconsistent
+  "field missing" badges on the review screen.
+  `OLLAMA_OPTIONS` now sets `temperature: 0`, `top_p: 1`, `top_k: 1`, and
+  `seed: 42` so identical inputs always produce identical JSON output.
+
+- **WIA scanner connect retried on busy/locked device** (`scan-agent/agent.js`)
+  — when another application holds the WIA device lock, the previous code
+  threw immediately and the scan failed. The connect call is now wrapped in
+  a 3-attempt retry loop with 1.5 s between tries; if all three fail, a
+  human-readable message instructs the user to close other scanning
+  applications before retrying.
+
 - **"Unknown Patient" / "Unknown Provider" placeholder no longer
   poisons the merge step** (`ocr.service.ts:1167-1175`) — when the
   regex-based fallback in `parseInvoiceFromText` couldn't find a value,

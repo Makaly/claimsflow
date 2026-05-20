@@ -168,7 +168,17 @@ $wia = New-Object -ComObject WIA.DeviceManager
 $dev = $null
 for ($i = 1; $i -le $wia.DeviceInfos.Count; $i++) {
   $di = $wia.DeviceInfos.Item($i)
-  if ($di.DeviceID -eq '${safeId}') { $dev = $di.Connect(); break }
+  if ($di.DeviceID -eq '${safeId}') {
+    $attempts = 0
+    while ($attempts -lt 3) {
+      try { $dev = $di.Connect(); break } catch {
+        $attempts++
+        if ($attempts -ge 3) { throw "Scanner is busy (locked by another process). Close any other scanning applications and try again." }
+        Start-Sleep -Milliseconds 1500
+      }
+    }
+    break
+  }
 }
 if (-not $dev) { throw 'Device not found' }
 $item = $dev.Items.Item(1)
