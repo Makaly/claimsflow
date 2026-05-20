@@ -1,7 +1,8 @@
 import {
   Controller, Get, Patch, Post, Body, Param, Req, UseGuards,
-  ForbiddenException, BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
+import { IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, Matches, Max, Min } from 'class-validator';
 import { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -20,20 +21,57 @@ interface AuthedRequest extends Request {
 }
 
 class UpdateSettingsDto {
+  @IsOptional()
+  @IsBoolean()
   enabled?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100000)
   costPerScan?: number;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^[A-Z]{3}$/)
   currency?: string;
 }
 
 class RecordEventDto {
+  @IsString()
+  @IsIn(['desktop', 'mobile', 'camera'])
   deviceClass!: 'desktop' | 'mobile' | 'camera';
+
+  @IsOptional()
+  @IsString()
   os?: string;
+
+  @IsOptional()
+  @IsString()
   machineHostname?: string;
+
+  @IsOptional()
+  @IsString()
   scannerName?: string;
+
+  @IsOptional()
+  @IsInt()
   resolution?: number;
+
+  @IsOptional()
+  @IsString()
   mode?: string;
+
+  @IsOptional()
+  @IsInt()
   pages?: number;
+
+  @IsOptional()
+  @IsBoolean()
   success?: boolean;
+
+  @IsOptional()
+  @IsString()
   errorMessage?: string;
 }
 
@@ -65,12 +103,6 @@ export class ScanMeteringController {
     @Body() body: UpdateSettingsDto,
     @Req() req: AuthedRequest,
   ) {
-    if (body.costPerScan !== undefined && (body.costPerScan < 0 || body.costPerScan > 100000)) {
-      throw new BadRequestException('costPerScan must be between 0 and 100000');
-    }
-    if (body.currency !== undefined && !/^[A-Z]{3}$/.test(body.currency)) {
-      throw new BadRequestException('currency must be a 3-letter ISO code');
-    }
     return this.service.updateSettings(providerId, { userId: req.user.userId }, body);
   }
 
@@ -79,9 +111,6 @@ export class ScanMeteringController {
   @Post('events')
   @Roles('admin', 'finance', 'claims_officer', 'maker_checker', 'fraud_officer', 'provider_admin', 'provider_user')
   async recordEvent(@Body() body: RecordEventDto, @Req() req: AuthedRequest) {
-    if (!['desktop', 'mobile', 'camera'].includes(body.deviceClass)) {
-      throw new BadRequestException('deviceClass must be one of: desktop, mobile, camera');
-    }
     const userAgent = req.headers['user-agent'] ?? null;
     const event = await this.service.recordEvent({
       userId: req.user.userId,
