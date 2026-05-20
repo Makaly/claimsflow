@@ -1,13 +1,12 @@
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { Logger } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
 
 @Processor({ name: 'claims' }, { concurrency: 3 })
 export class ClaimsProcessor extends WorkerHost {
   private readonly logger = new Logger(ClaimsProcessor.name);
 
-  constructor(private prisma: PrismaService) {
+  constructor() {
     super();
   }
 
@@ -22,22 +21,8 @@ export class ClaimsProcessor extends WorkerHost {
 
   private async handleClaimProcessing(job: Job) {
     const { claimId } = job.data;
-    this.logger.log(`Processing claim: ${claimId}`);
-
-    await this.prisma.claim.update({
-      where: { id: claimId },
-      data: { status: 'processing' },
-    });
-
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    await this.prisma.claim.update({
-      where: { id: claimId },
-      data: { status: 'approved' },
-    });
-
-    this.logger.log(`Claim ${claimId} processed`);
-    return { claimId, status: 'approved' };
+    this.logger.log(`Claim ${claimId} queued for workflow — no automatic status change`);
+    return { claimId };
   }
 
   @OnWorkerEvent('failed')
