@@ -11,6 +11,17 @@ const api = axios.create({
   withCredentials: true,
 })
 
+// Attach the Bearer token from localStorage on every request so auth works
+// on mobile browsers and any browser with strict SameSite cookie policies
+// that block cross-origin cookies (cookie alone is not reliable cross-origin).
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token')
+  if (token && !config.headers['Authorization']) {
+    config.headers['Authorization'] = `Bearer ${token}`
+  }
+  return config
+})
+
 // Retry once on network errors / 502-504 — covers Render free-tier
 // cold-start, where the first request after a long idle returns a
 // CORS-headerless 502 from the edge while the container boots.
