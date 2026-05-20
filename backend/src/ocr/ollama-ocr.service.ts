@@ -7,7 +7,7 @@ import {
   INVOICE_NUMBER_PATTERNS, INVOICE_DATE_PATTERNS, TOTAL_AMOUNT_PATTERNS,
   PATIENT_NAME_PATTERNS, PATIENT_ID_PATTERNS, MEMBERSHIP_PATTERNS,
   PROVIDER_PATTERNS, DIAGNOSIS_PATTERNS, SERVICE_DATE_PATTERNS,
-  extractMedicalCodes,
+  extractMedicalCodes, restoreOcrAmounts,
 } from './invoice-patterns';
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
@@ -20,6 +20,19 @@ const VISION_MODEL = process.env.OLLAMA_VISION_MODEL || 'moondream';
 // CPU-friendly first: moondream (1B) is ~10x faster than llama3.2-vision (11B)
 // on CPU, so prefer it unless a GPU-class model is explicitly configured.
 const MODEL_PRIORITY = ['moondream', 'llava', 'llama3.2-vision', 'llava:13b'];
+
+// Deterministic decoding for the vision model. With `temperature: 0.1` and no
+// pinned seed Ollama would re-sample on every call, so re-uploading the same
+// invoice could drop a field (patient name, member #, etc.) one run and keep
+// it the next — surfacing as inconsistent "X missing" badges on the review
+// screen. Greedy decoding (`temperature: 0`, `top_p: 1`, `top_k: 1`) plus a
+// fixed seed pins the output: same image in, same JSON out.
+const OLLAMA_OPTIONS = {
+  temperature: 0,
+  top_p: 1,
+  top_k: 1,
+  seed: 42,
+} as const;
 
 const EXTRACT_PROMPT = `You are reading a Kenyan medical insurance invoice. Extract every field visible. Look carefully at headers, labels, and tables.
 
@@ -138,8 +151,8 @@ Return ONLY valid JSON with no extra text:
     // minutes after each call. Without it the model is unloaded after ~5 min
     // idle, forcing a 30–90 s reload on the next request.
     const body = isLlama32
-      ? { model, messages: [{ role: 'user', content: prompt, images: [imageBase64] }], stream: false, keep_alive: '15m', options: { temperature: 0.1 } }
-      : { model, prompt: EXTRACT_PROMPT, images: [imageBase64], stream: false, keep_alive: '15m', options: { temperature: 0.1 } };
+      ? { model, messages: [{ role: 'user', content: prompt, images: [imageBase64] }], stream: false, keep_alive: '15m', options: OLLAMA_OPTIONS }
+      : { model, prompt: EXTRACT_PROMPT, images: [imageBase64], stream: false, keep_alive: '15m', options: OLLAMA_OPTIONS };
 
     // Per-page timeout: 40 s keeps two pages well within the 180 s frontend
     // budget (2×40 + ~10 s Tesseract fallback = ~90 s total).
@@ -285,9 +298,17 @@ Return ONLY valid JSON with no extra text:
 
       // Amount: try each pattern; pick the largest value found (guards against
       // picking up a line-item sub-total smaller than the grand total).
+      //
+      // Run amount extraction against a digit-restored copy of the text so
+      // Aga Khan IP bills (where scanned text turns `4`→`\`, `8`→`E`, `0`→`o`
+      // etc. inside the Sponsor Coverage / Total Charges figures) actually
+      // produce a number. The restoration is scoped to a 300-char window
+      // after amount-bearing labels, so other fields (dates, IDs, names)
+      // continue to read from the un-mutated `text` below.
+      const amountText = restoreOcrAmounts(text);
       let invoiceAmount = 0;
       for (const p of TOTAL_AMOUNT_PATTERNS) {
-        const m = text.match(p);
+        const m = amountText.match(p);
         if (m?.[1]) {
           const v = parseFloat(m[1].replace(/,/g, ''));
           if (!isNaN(v) && v > invoiceAmount) invoiceAmount = v;

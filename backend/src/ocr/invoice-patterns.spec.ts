@@ -7,6 +7,7 @@ import {
   DIAGNOSIS_PATTERNS,
   extractMedicalCodes,
   icd10Label,
+  restoreOcrAmounts,
 } from './invoice-patterns';
 
 function firstMatch(patterns: RegExp[], text: string): string | null {
@@ -124,6 +125,17 @@ describe('OCR invoice patterns', () => {
       expect(firstMatch(PATIENT_NAME_PATTERNS, 'Patient: NYIKA,DAVID\nDOB 1980')).toBe('NYIKA,DAVID');
     });
 
+    it('parses Aga Khan IP column layout — wide gap to MR#/Acct on same line', () => {
+      // Real text from a 9-page UH-prefix AK inpatient bill: the patient
+      // sits on a line beside "MR#:" with a 50+ space column gap. Pre-fix
+      // the regex bailed at the 40-char cap and returned empty.
+      const wide = 'Patient: MUGO,JASON NYAGA                                                            MR#: AK00385327';
+      expect(firstMatch(PATIENT_NAME_PATTERNS, wide)).toBe('MUGO,JASON NYAGA');
+
+      const acct = 'Patient: NYIKA,DAVID                                       Acct:UH283059137';
+      expect(firstMatch(PATIENT_NAME_PATTERNS, acct)).toBe('NYIKA,DAVID');
+    });
+
     it('parses generic Name: label', () => {
       const out = firstMatch(PATIENT_NAME_PATTERNS, 'Patient Name: JANE DOE\nInvoice No.');
       expect(out).toBe('JANE DOE');
@@ -181,5 +193,61 @@ describe('extractMedicalCodes', () => {
     const result = extractMedicalCodes('Codes: I99 O42');
     expect(result.icd10Codes).not.toContain('I99');
     expect(result.icd10Codes).not.toContain('O42');
+  });
+});
+
+describe('restoreOcrAmounts (Aga Khan digit-substitution recovery)', () => {
+  // Pulls the amount captured by TOTAL_AMOUNT_PATTERNS so we test the end-
+  // to-end "restore → match → parse" path the production code actually uses.
+  function captureAmount(text: string): number {
+    let max = 0;
+    for (const p of TOTAL_AMOUNT_PATTERNS) {
+      const m = text.match(p);
+      if (m?.[1]) {
+        const v = parseFloat(m[1].replace(/,/g, ''));
+        if (!isNaN(v) && v > max) max = v;
+      }
+    }
+    return max;
+  }
+
+  it('rescues `561 ,\\99 .82` after Total Charges (backslash→4, internal spaces)', () => {
+    const raw = 'Total Charges:                                              561 ,\\99 .82\n';
+    const restored = restoreOcrAmounts(raw);
+    expect(restored).toContain('561,499.82');
+    // Total Charges itself isn't a labelled pattern in TOTAL_AMOUNT_PATTERNS,
+    // so we just assert the inline restoration here.
+  });
+
+  it('rescues Sponsor Coverage where the figure is `552, 997 . E2`', () => {
+    const raw =
+      'Sponsor Coverage:\n' +
+      'AGRICULTURE AND FOOD AUTHORITY                              552, 997 . E2\n';
+    const restored = restoreOcrAmounts(raw);
+    expect(restored).toContain('552,997.82');
+    expect(captureAmount(restored)).toBeCloseTo(552997.82, 2);
+  });
+
+  it('rescues Sponsor Coverage where lowercase `o` stands in for 0', () => {
+    const raw =
+      'Sponsor Coverage:\n' +
+      'AAR corporate\n' +
+      '                                              5oo, ooo. oo\n';
+    const restored = restoreOcrAmounts(raw);
+    expect(restored).toContain('500,000.00');
+    expect(captureAmount(restored)).toBeCloseTo(500000.0, 2);
+  });
+
+  it('leaves dates / account numbers / phone numbers outside an amount label alone', () => {
+    const raw = 'Visit Date: 25/02/24  Patient No. UH283059137  Tel: 0712 345 678';
+    expect(restoreOcrAmounts(raw)).toBe(raw);
+  });
+
+  it('does not invent an amount from garbage that no longer parses as money', () => {
+    // After substitution `S.E.A` would become `5.8.4` — two decimals, not a
+    // valid money shape. The gate must keep the original.
+    const raw = 'Sponsor Coverage: S.E.A region not a number\n';
+    const restored = restoreOcrAmounts(raw);
+    expect(restored).toContain('S.E.A');
   });
 });

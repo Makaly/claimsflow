@@ -64,8 +64,16 @@ export const LINE_ITEM_PATTERNS = [
 
 // Patient name patterns
 export const PATIENT_NAME_PATTERNS = [
-  // Aga Khan discharge summary: "Patient: NYIKA,DAVID" — stops at newline, not word boundary
-  /\bPatient\s*:\s*([A-Z][^\n\r]{3,40}?)(?=\s*[\n\r]|\s+DOB|\s+Age|\s+Reg|$)/,
+  // Aga Khan discharge summary: "Patient: NYIKA,DAVID" — stops at newline, not word boundary.
+  // Aga Khan inpatient bills also use a column layout where the patient name and
+  // "MR#:" / "Acct:" sit on the same physical line separated by a wide gap of
+  // spaces (50+), e.g.:
+  //   Patient: MUGO,JASON NYAGA                                    MR#: AK00385327
+  // Without `\s{2,}` and the MR#/Acct/Account stops, the lookahead falls off the
+  // end of the 40-char cap and the regex fails — leaving the name empty even
+  // though the text layer has it cleanly. Cap raised to 80 to leave headroom
+  // for compound names; lazy `?` keeps the capture as short as possible.
+  /\bPatient\s*:\s*([A-Z][^\n\r]{3,80}?)(?=\s{2,}|\s*[\n\r]|\s+DOB|\s+Age|\s+Reg|\s+MR\s*#?|\s+Acct|\s+Account|$)/,
   // "Patient Name:" label (common on Aga Khan outpatient invoices)
   /Patient\s+Name\s*[:\-]\s*([A-Z][A-Za-z\s.'-]{2,40}?)(?:\s*\n|\s+(?:DOB|Age|Sex|Gender|Reg|Date|No[.:\s]))/i,
   /Patient\s+Name\s*[:\-]\s*([A-Z][A-Za-z\s.'-]{2,40})/i,
@@ -320,4 +328,91 @@ export function extractMedicalCodes(text: string): {
     hcpcsCodes: unique(hcpcsCodes),
     allCodes,
   };
+}
+
+// ---------------------------------------------------------------------------
+// OCR digit-restoration for amount fields
+// ---------------------------------------------------------------------------
+//
+// PDF text-layer extraction on Aga Khan inpatient bills consistently yields
+// garbled amounts where letters are substituted for digits and whitespace
+// is sprinkled inside the number:
+//
+//   "Total Charges:                       561 ,\99 .82"        (real → 561,499.82)
+//   "Sponsor Coverage: ... 552, 997 . E2"                       (real → 552,997.82)
+//   "5oo, ooo. oo"                                              (real → 500,000.00)
+//   "948,2A6 . A2"                                              (real → 948,246.42)
+//
+// The downstream TOTAL_AMOUNT_PATTERNS only accept `[\d,]+\.\d{2}` shapes,
+// so these come back unmatched — at which point the amount stays at 0 and
+// the Ollama vision fallback latches onto whatever small line-item number it
+// happened to read (the co-pay, the bed fee, etc.). The badly extracted
+// `Ksh 18.00` / `Ksh 1.00` we've been seeing in the review UI is this path.
+//
+// `restoreOcrAmounts` runs once over the text before TOTAL_AMOUNT_PATTERNS
+// fires. It is intentionally narrow:
+//   1. It only rewrites text within a 300-char window after one of a small
+//      list of amount-bearing labels (Total Charges, Sponsor Coverage, etc.).
+//      Body text, dates, account numbers, and phone numbers elsewhere in the
+//      document are not touched.
+//   2. Inside that window, it looks for sequences shaped like a corrupted
+//      money string (`\d` + digit-or-confusion chars + `\d`-or-`o`/`I`/`l`),
+//      squashes whitespace, and applies a fixed digit-substitution table.
+//   3. Each candidate rewrite is gated by a strict money-format regex.
+//      Anything that doesn't end up looking like `1,234.56` / `1234.56` /
+//      `1234` is reverted to the original characters. This means we may miss
+//      some pathological corruptions, but we never invent an amount that
+//      wasn't already shaped like one.
+//
+// The `/` character is deliberately left out of both the scan class and the
+// substitution table to keep dates like `25/02/24` from collapsing into
+// `25402424`.
+
+const AMOUNT_LABEL_RE =
+  /(?:Total\s+Charges?|Sponsor\s+Coverage|Sponsor\s+(?:Amount\s+)?Payable(?:\s+to\s+Hospital)?|Net\s+(?:Amount\s+)?Payable(?:\s+to\s+Hospital)?|Sponsor\s+Settlement|Grand\s+Total|Total\s+Amount|Amount\s+(?:Due|Payable)|Total\s+(?:Due|Payable|Bill)|Balance\s+Due)/gi;
+
+// A "money-shaped" run: starts with a digit, contains only digits / digit-
+// confusion letters / commas / dots / whitespace / backslash, ends with a
+// digit or one of the more reliable confusion letters (`o`/`O`/`l`/`I`).
+const AMOUNT_TOKEN_RE = /(\d[\d\\,.\sOolI|ASEBZ]{1,40}[\dOolI])/g;
+
+// Accepts: `123`, `123.45`, `1,234`, `1,234.56`, `1,234,567.89`. Rejects bare
+// commas, mis-grouped numbers, multi-dot strings, etc.
+const VALID_MONEY_RE = /^(?:\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)$/;
+
+function restoreAmountsInWindow(s: string): string {
+  return s.replace(AMOUNT_TOKEN_RE, (raw) => {
+    const r = raw
+      .replace(/\s+/g, '')
+      .replace(/[Oo]/g, '0')
+      .replace(/[lI|]/g, '1')
+      .replace(/Z/g, '2')
+      .replace(/[A\\]/g, '4')
+      .replace(/S/g, '5')
+      .replace(/[BE]/g, '8');
+    return VALID_MONEY_RE.test(r) ? r : raw;
+  });
+}
+
+export function restoreOcrAmounts(text: string): string {
+  // Fresh stateful regex so we don't mutate the module-level `lastIndex`.
+  const labels = new RegExp(AMOUNT_LABEL_RE.source, 'gi');
+  let out = '';
+  let lastEnd = 0;
+  let m: RegExpExecArray | null;
+  while ((m = labels.exec(text)) !== null) {
+    // Skip a label that falls inside the previous window — its content was
+    // already restored.
+    if (m.index < lastEnd) continue;
+    out += text.slice(lastEnd, m.index) + m[0];
+    const winStart = m.index + m[0].length;
+    let winLen = Math.min(300, text.length - winStart);
+    // Stop the window at a blank line — amount sections rarely span one.
+    const blank = text.slice(winStart, winStart + winLen).search(/\n[ \t]*\n/);
+    if (blank >= 0) winLen = blank;
+    out += restoreAmountsInWindow(text.slice(winStart, winStart + winLen));
+    lastEnd = winStart + winLen;
+  }
+  out += text.slice(lastEnd);
+  return out;
 }
