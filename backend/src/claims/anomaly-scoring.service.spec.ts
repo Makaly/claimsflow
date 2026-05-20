@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { AnomalyScoringService } from './anomaly-scoring.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ProviderFraudThresholdsService } from './provider-fraud-thresholds.service';
 
 describe('AnomalyScoringService', () => {
   let service: AnomalyScoringService;
@@ -10,7 +11,10 @@ describe('AnomalyScoringService', () => {
       findMany: jest.Mock;
       count: jest.Mock;
     };
+    fraudModelWeights: { findFirst: jest.Mock };
+    ocrExtraction: { upsert: jest.Mock };
   };
+  let providerThresholds: { getThresholdForProvider: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -19,12 +23,20 @@ describe('AnomalyScoringService', () => {
         findMany: jest.fn().mockResolvedValue([]),
         count: jest.fn().mockResolvedValue(0),
       },
+      fraudModelWeights: { findFirst: jest.fn().mockResolvedValue(null) },
+      ocrExtraction: { upsert: jest.fn().mockResolvedValue({}) },
+    };
+
+    // Default high-risk cutoff matches the service's GLOBAL_DEFAULT_HIGH (0.6).
+    providerThresholds = {
+      getThresholdForProvider: jest.fn().mockResolvedValue(0.6),
     };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         AnomalyScoringService,
         { provide: PrismaService, useValue: prisma },
+        { provide: ProviderFraudThresholdsService, useValue: providerThresholds },
       ],
     }).compile();
 
@@ -94,5 +106,24 @@ describe('AnomalyScoringService', () => {
     expect(result.score).toBeGreaterThan(0);
     expect(result.score).toBeLessThanOrEqual(1);
     expect(['low', 'medium', 'high']).toContain(result.riskLevel);
+  });
+
+  it('applies the per-provider high-risk threshold from ProviderFraudThresholdsService', async () => {
+    prisma.claim.findUnique.mockResolvedValueOnce({
+      id: 'c1',
+      providerId: 'p-strict',
+      invoiceAmount: 100_000,
+      memberNumber: 'MEM-1',
+      submittedAt: new Date('2026-05-12T10:00:00Z'),
+      dateOfService: new Date('2026-05-10'),
+    });
+
+    // A single round high-value factor contributes ~0.10 to the score.
+    // With a strict cutoff of 0.08 that crosses into "medium" (>= cutoff/2).
+    providerThresholds.getThresholdForProvider.mockResolvedValueOnce(0.08);
+
+    const result = await service.scoreClaim('c1');
+    expect(providerThresholds.getThresholdForProvider).toHaveBeenCalledWith('p-strict');
+    expect(result.riskLevel).toBe('high');
   });
 });
