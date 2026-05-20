@@ -81,3 +81,9 @@ export async function logout(): Promise<void> {
 export async function getStoredToken(): Promise<string | null> {
   return SecureStore.getItemAsync('access_token');
 }
+
+/** Fetch the currently authenticated user's profile. */
+export async function getProfile(): Promise<AuthUser> {
+  const { data } = await api.get<AuthUser>('/auth/profile');
+  return data;
+}

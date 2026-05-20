@@ -2,15 +2,15 @@
  * Root navigator — switches between Auth stack and the main tab navigator
  * based on whether a valid token exists in SecureStore.
  *
- * TODO(prod): subscribe to a global auth event emitter so that the
- *             api.ts 401 interceptor can trigger navigation without a
- *             direct import.
+ * It re-evaluates the stored token whenever `notifyAuthChanged()` fires
+ * (after login/logout), so screens never need to import the navigator.
  */
 import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ActivityIndicator, View } from 'react-native';
 import { getStoredToken } from '../services/auth';
+import { onAuthChanged } from '../services/session';
 import AuthStack from './AuthStack';
 import MainTabs from './MainTabs';
 
@@ -26,9 +26,13 @@ export default function RootNavigator() {
   const [isAuthed, setIsAuthed] = useState(false);
 
   useEffect(() => {
-    getStoredToken()
-      .then((t) => setIsAuthed(!!t))
-      .finally(() => setChecking(false));
+    const evaluate = () => {
+      getStoredToken()
+        .then((t) => setIsAuthed(!!t))
+        .finally(() => setChecking(false));
+    };
+    evaluate();
+    return onAuthChanged(evaluate);
   }, []);
 
   if (checking) {
