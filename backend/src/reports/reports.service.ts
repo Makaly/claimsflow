@@ -170,7 +170,7 @@ export class ReportsService {
     const where = this.buildDateFilter(dateFrom, dateTo);
 
     const providers = await this.prisma.provider.findMany({
-      where: { isActive: true },
+      where: {},
       select: {
         id: true,
         name: true,
@@ -235,7 +235,10 @@ export class ReportsService {
   // ── Provider Performance Scorecard ────────────────────────────
   async getProviderScorecard(providerId?: string, dateFrom?: string, dateTo?: string) {
     const where = this.buildDateFilter(dateFrom, dateTo);
-    const providerFilter = providerId ? { id: providerId } : { isActive: true };
+    // Include all providers that have submitted at least one claim — isActive
+    // defaults to false until admin-approved but providers with claims are real
+    // participants. The total===0 guard below handles providers with no data.
+    const providerFilter = providerId ? { id: providerId } : {};
 
     const providers = await this.prisma.provider.findMany({
       where: providerFilter,
