@@ -9,6 +9,131 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **`CameraScanner` — fullscreen document capture overlay**
+  (`frontend/src/components/CameraScanner.tsx`) — a self-contained
+  component that handles the complete camera-to-upload workflow on mobile
+  and desktop browsers.
+
+  *Live phase* — full-screen video feed with a document-guide rectangle
+  and corner markers. A single large capture button freezes the frame and
+  advances to the review phase.
+
+  *Review phase* — four draggable corner handles let the user adjust the
+  crop quad before confirming. The captured image is perspective-corrected
+  with a bilinear quad→rectangle warp so mild document tilt is removed
+  automatically. Additional tools available in the review toolbar:
+
+  - **Auto-crop** — pixel-level edge detector samples the four image
+    corners to estimate background luminance, then scans the full frame
+    to find the tight bounding box of the document content and snaps all
+    four corner handles to it.
+  - **Enhance** — toggles a desaturation + contrast boost (1.55×) pass
+    applied during the final warp, improving readability of printed
+    invoices on off-white or coloured backgrounds.
+  - **Rotate** — cycles the output 90° clockwise per tap.
+  - **OCR preview** — Tesseract.js is lazy-loaded and run on a downscaled
+    copy of the capture in the background. A collapsible panel at the
+    bottom of the screen shows the extracted text (up to 500 chars) with
+    a live progress bar; the operator can verify the document is readable
+    before confirming.
+
+  Stream lifecycle is managed with `useEffect` cleanup (tracks released
+  on close, unmount, or retake). The component uses CSS `env(safe-area-
+  inset-*)` padding so it renders correctly behind notches and home-bar
+  areas on iOS and Android.
+
+- **NAPS2 TWAIN/ISIS driver for the local scan agent**
+  (`scan-agent/drivers/naps2.js`) — integrates
+  [NAPS2](https://www.naps2.com) (Not Another PDF Scanner 2), a free
+  open-source scanning application, as a first-class driver for
+  professional document scanners.
+
+  Supported scanner families via TWAIN/ISIS:
+  - **Canon** — imageCLASS, imageRUNNER, PIXMA; uses JPEG compression at
+    92 quality, A4 page size.
+  - **Kodak Alaris** — S-series, i-series; defaults to duplex ADF mode
+    at 90 quality; ISIS driver checked first (Kodak's preferred protocol).
+  - **Fujitsu** — ScanSnap, fi-series; duplex ADF at 95 quality to
+    preserve PaperStream image processing.
+  - **Xerox, Ricoh, and any TWAIN-compliant device** — generic profile.
+
+  The driver locates the NAPS2 binary from `NAPS2_PATH` env var or common
+  install paths, then calls `naps2 scan` with vendor-specific flags. A
+  `diagnoseWindows()` helper lists installed ISIS and TWAIN devices and
+  emits actionable recommendations when a scanner is missing (e.g. "Install
+  Alaris S2000 driver from alarisworld.com").
+
+  Install: `winget install cyanfish.naps2` (Windows) or
+  `brew install --cask naps2` (macOS).
+
+- **eSCL / AirScan network scanner driver**
+  (`scan-agent/drivers/escl.js`) — implements the Mopria Alliance eSCL
+  2.x protocol for network scanners that advertise `_uscan._tcp` or
+  `_uscans._tcp` via mDNS.
+
+  Supported vendors: Canon imageRUNNER / PIXMA, Kodak Alaris S-series
+  network models, Epson, Fujitsu network scanners, HP, Brother, Xerox —
+  any device with an eSCL endpoint.
+
+  Discovery uses `dns-sd` (macOS/Windows Bonjour) or `avahi-browse`
+  (Linux); scanners can also be pinned via `ESCL_SCANNERS=url1,url2`
+  env var for environments where mDNS is blocked. The full eSCL workflow
+  is implemented: fetch capabilities → POST ScanJob → GET NextDocument →
+  DELETE job.
+
+- **Windows installer for the local scan agent** (`scan-agent/installer.iss`)
+  — an Inno Setup 6 script that produces a signed, one-click
+  `ClaimsFlow-Scan-Agent-Setup.exe` for Windows 10+.
+
+  What the installer does:
+  - Bundles the compiled agent executable (built by `@yao-pkg/pkg`),
+    the WinSW v3 service wrapper, and all driver modules.
+  - Installs and starts a Windows service (`ClaimsFlowScanAgent`) so the
+    agent is available immediately after reboot without any user action.
+  - Optional task: downloads and silently installs NAPS2 via `winget`
+    for TWAIN/ISIS support (Canon, Kodak, Fujitsu).
+  - Registers install path, version, and port in `HKLM\Software\
+    ClaimsFlow\ScanAgent` for programmatic discovery by IT management
+    tools.
+  - Pre-install Pascal script stops and unregisters an existing service
+    before overwriting files; post-install opens the ClaimsFlow URL.
+  - Requires Windows 10+ (checked at launch via `GetWindowsVersionEx`).
+  - Modern wizard appearance with dark-branded sidebar and header images.
+
+- **Installer asset generator** (`scan-agent/scripts/generate-installer-
+  assets.js`) — a Node.js script that uses the `canvas` package to render
+  three branded BMP/PNG graphics for the installer wizard:
+  - `wizard-sidebar.bmp` (164×314) — dark navy left panel with the
+    ClaimsFlow shield icon, product name, and a feature list.
+  - `wizard-header.bmp` (497×58) — compact top banner for inner wizard
+    pages.
+  - `setup-splash.bmp` (614×386) — full welcome-page background with a
+    stylised scan-line animation, feature badges, and product headline.
+
+  All assets are also exported as PNGs for web use. BMP output is written
+  with a hand-rolled 24bpp encoder (no external bmp library needed) that
+  produces files Inno Setup 6 accepts directly.
+
+- **Scan agent v1.1.0 — multi-driver registry and `/diagnostics` endpoint**
+  (`scan-agent/agent.js`) — the agent now pools devices from all three
+  available drivers (WIA/SANE built-in, NAPS2, eSCL) into a single
+  `/scanners` response. Device IDs carry a driver prefix (`naps2:twain:…`,
+  `escl:http://…`) so the `scan()` router can dispatch to the correct
+  backend without additional state.
+
+  The `/health` response now includes a `drivers` object:
+
+  ```json
+  { "wia": true, "sane": false, "naps2": true, "escl": true }
+  ```
+
+  A new `/diagnostics` GET endpoint returns vendor-specific setup
+  information: WIA devices from `Win32_PnPEntity`, NAPS2 ISIS/TWAIN
+  device lists, eSCL discovery results, and install recommendations for
+  missing drivers. Targeted at IT administrators setting up Canon or
+  Kodak scanning stations. The startup banner now shows which drivers are
+  active and prints a `winget` install hint when NAPS2 is absent.
+
 - **Camera barcode scanner on Scan Station** (`ScanStation.tsx`) — a
   camera toggle in the header lets operators or counter staff use a
   phone or webcam as a barcode reader without any extra hardware. The
@@ -31,10 +156,47 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   the `cloudHostedScanner` conditional so `captureFrame` works regardless
   of scanner availability.
 
+### Changed
+
+- **Batch Upload camera flow refactored to use `CameraScanner` overlay**
+  (`BatchUpload.tsx`) — the ~250 lines of inline camera state
+  (`videoRef`, `canvasRef`, `cameraActive`, `cameraStream`,
+  `capturedDataUrl`, `cameraError`, `startCamera`, `stopCamera`,
+  `captureFrame`, `retakePhoto`, `useCapture`) and their corresponding JSX
+  have been replaced by the new `<CameraScanner>` component rendered as a
+  fullscreen overlay (`cameraScannerOpen` boolean). The `handleCameraCapture`
+  callback handles metering and hands the resulting `File` to `onDrop`
+  exactly as before. All camera visibility guards (`!cameraActive &&
+  !capturedDataUrl`) are removed, simplifying every scanner sub-panel
+  branch. Net change: −270 / +25 lines in `BatchUpload.tsx`.
+
 - **Tailwind `scan` keyframe animation** (`tailwind.config.js`) — adds
   a 2-second ease-in-out infinite sweep animation (`animate-scan` /
   `animate-[scan_2s_…]`) used by the camera scanner overlay in
   `ScanStation` and `BatchUpload`.
+
+### Build & Tooling
+
+- **Scan agent build pipeline upgraded from NSIS to Inno Setup 6**
+  (`scan-agent/build-windows.ps1`, `scan-agent/package.json`) — the
+  previous NSIS-based build script is replaced with a modernised 5-step
+  PowerShell script:
+  1. `npm ci` — install dependencies.
+  2. `node scripts/generate-installer-assets.js` — render the three
+     branded BMP graphics (installs `canvas` on demand if not yet
+     present).
+  3. `@yao-pkg/pkg` — bundle Node.js + agent into a single Windows exe
+     with GZip compression and `--assets "drivers/**"` so the driver
+     modules are embedded.
+  4. WinSW download — idempotent (skips if `winsw.exe` already present,
+     prints a manual-download URL if the network request fails).
+  5. `iscc.exe` — compile the Inno Setup 6 installer; probes three
+     common install paths and falls back to `PATH`.
+  Coloured step headers, per-step ✓/✗ feedback, file-size reporting, and
+  a final summary with `gh release create` and `irm | iex` one-liner
+  instructions replace the previous bare command sequence.
+  `package.json` bumped to `1.1.0`; `npm run assets` added as a
+  standalone script; `canvas ^2.11.2` added as a dev dependency.
 
 ### Fixed
 
