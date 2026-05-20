@@ -15,7 +15,7 @@ import io
 import json
 import os
 import pickle
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -410,7 +410,7 @@ def train(req: TrainRequest):
         _save_iforest(iforest)
 
     meta = {
-        "trainedAt":          datetime.utcnow().isoformat(),
+        "trainedAt":          datetime.now(timezone.utc).isoformat(),
         "sampleSize":         len(req.data),
         "fraudCount":         fraud_count,
         "legitimateCount":    legit_count,
@@ -612,23 +612,25 @@ def image_quality(req: ImageQualityRequest):
     quality = _score_image_quality(img)
     quality["filename"] = req.filename
 
-    # Preprocessing sequence recommendation based on detected issues
-    pipeline: list[str] = []
+    # Preprocessing sequence recommendation based on detected issues.
+    # Steps are numbered dynamically so conditionally-skipped steps don't
+    # leave gaps in the sequence.
+    steps: list[str] = []
     if img.mode != "L":
-        pipeline.append("1. Convert to greyscale")
-    if quality["orientationScore"] if "orientationScore" in quality else False:
-        pipeline.append("2. Auto-rotate to upright orientation")
+        steps.append("Convert to greyscale")
+    if quality["orientation"] == "landscape":
+        steps.append("Auto-rotate to upright orientation")
     if quality["sharpnessScore"] < 0.4:
-        pipeline.append("3. Apply Gaussian blur removal / unsharp mask")
+        steps.append("Apply Gaussian blur removal / unsharp mask")
     if quality["brightnessScore"] < 0.5:
-        pipeline.append("4. Normalise brightness (histogram equalisation)")
+        steps.append("Normalise brightness (histogram equalisation)")
     if quality["contrastScore"] < 0.4:
-        pipeline.append("5. Apply CLAHE contrast enhancement")
-    pipeline.append("6. Apply Otsu adaptive thresholding for binarisation")
-    pipeline.append("7. Run deskew / perspective correction (OpenCV warpPerspective)")
-    pipeline.append("8. Denoise with bilateral filter or morphological opening")
+        steps.append("Apply CLAHE contrast enhancement")
+    steps.append("Apply Otsu adaptive thresholding for binarisation")
+    steps.append("Run deskew / perspective correction (OpenCV warpPerspective)")
+    steps.append("Denoise with bilateral filter or morphological opening")
 
-    quality["recommendedPipeline"] = pipeline
+    quality["recommendedPipeline"] = [f"{i}. {s}" for i, s in enumerate(steps, 1)]
     return quality
 
 
@@ -636,8 +638,13 @@ def image_quality(req: ImageQualityRequest):
 
 def _decode_image_cv(b64: str):
     """Decode a base64 string into an OpenCV BGR image."""
-    raw = base64.b64decode(b64)
+    try:
+        raw = base64.b64decode(b64)
+    except Exception as e:
+        raise HTTPException(400, f"Invalid base64 image data: {e}")
     arr = np.frombuffer(raw, dtype=np.uint8)
+    if arr.size == 0:
+        raise HTTPException(400, "Empty image payload")
     img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
     if img is None:
         raise HTTPException(400, "Could not decode image (cv2.imdecode returned None)")
