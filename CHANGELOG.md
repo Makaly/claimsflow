@@ -196,7 +196,21 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   a final summary with `gh release create` and `irm | iex` one-liner
   instructions replace the previous bare command sequence.
   `package.json` bumped to `1.1.0`; `npm run assets` added as a
-  standalone script; `canvas ^2.11.2` added as a dev dependency.
+  standalone script.
+
+- **Installer asset generator rewritten in pure JavaScript** —
+  `generate-installer-assets.js` no longer requires the `canvas` npm
+  package (a native Node.js addon that needs a C++ toolchain to install).
+  The script now contains a self-contained `Bitmap` class with a pixel
+  buffer, vertical and horizontal gradient fills, filled/stroked
+  rectangles, circles, radial glow, dot-grid and grid-line textures, and
+  a minimal 5×7 pixel-font renderer for all glyphs needed by the three
+  images. BMP output uses the same 24bpp top-down encoder as before.
+  Visual output is identical to the previous version. The `canvas
+  ^2.11.2` dev-dependency is removed from `package.json` and the
+  canvas-install guard is removed from `build-windows.ps1`. Generated
+  BMP assets (`assets/*.bmp`) are committed to the repository so the
+  installer can be compiled without running the generator first.
 
 ### Fixed
 
