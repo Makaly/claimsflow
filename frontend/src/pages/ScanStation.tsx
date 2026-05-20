@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ScanLine, CheckCircle, XCircle, RefreshCw, Keyboard, Volume2, History } from 'lucide-react'
+import { ScanLine, CheckCircle, XCircle, RefreshCw, Keyboard, Volume2, History, Camera, CameraOff, AlertTriangle, Smartphone } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -17,6 +17,11 @@ interface ScanHistoryItem {
   claim?: any
 }
 
+const BARCODE_FORMATS = [
+  'code_128', 'code_39', 'ean_13', 'ean_8',
+  'qr_code', 'data_matrix', 'pdf417', 'codabar', 'itf',
+]
+
 export default function ScanStation() {
   const navigate = useNavigate()
   const [scanEnabled, setScanEnabled] = useState(true)
@@ -28,6 +33,98 @@ export default function ScanStation() {
   const [loading, setLoading] = useState(false)
   const lookupRef = useRef<((barcode: string) => void) | null>(null)
 
+  // ── Camera scanner ──────────────────────────────────────────────────────────
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const scanLoopRef = useRef<number | null>(null)
+  const lastDetectedRef = useRef<{ code: string; time: number } | null>(null)
+  const [cameraMode, setCameraMode] = useState(false)
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null)
+  const [cameraError, setCameraError] = useState<string | null>(null)
+  const barcodeDetectorSupported = 'BarcodeDetector' in window
+
+  // Attach stream to video element whenever it changes
+  useEffect(() => {
+    if (cameraStream && videoRef.current) {
+      videoRef.current.srcObject = cameraStream
+    }
+  }, [cameraStream])
+
+  // Stop stream on unmount
+  useEffect(() => {
+    return () => { cameraStream?.getTracks().forEach(t => t.stop()) }
+  }, [cameraStream])
+
+  const stopCamera = useCallback(() => {
+    if (scanLoopRef.current !== null) {
+      cancelAnimationFrame(scanLoopRef.current)
+      scanLoopRef.current = null
+    }
+    cameraStream?.getTracks().forEach(t => t.stop())
+    setCameraStream(null)
+    setCameraMode(false)
+    setCameraError(null)
+  }, [cameraStream])
+
+  const startCamera = useCallback(async () => {
+    setCameraError(null)
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      })
+      setCameraStream(stream)
+      setCameraMode(true)
+    } catch (err: any) {
+      setCameraError(
+        err.name === 'NotAllowedError'
+          ? 'Camera access denied. Allow camera permission in your browser and try again.'
+          : 'Could not access camera. Make sure a camera is connected and not in use by another app.',
+      )
+    }
+  }, [])
+
+  // BarcodeDetector scan loop — runs while cameraMode is active
+  useEffect(() => {
+    if (!cameraMode || !barcodeDetectorSupported) return
+
+    let active = true
+    let detecting = false
+    const detector = new (window as any).BarcodeDetector({ formats: BARCODE_FORMATS })
+
+    const loop = async () => {
+      if (!active) return
+      const video = videoRef.current
+      // readyState 4 = HAVE_ENOUGH_DATA — video is streaming
+      if (video && video.readyState === 4 && !detecting) {
+        detecting = true
+        try {
+          const barcodes: Array<{ rawValue: string }> = await detector.detect(video)
+          if (barcodes.length > 0) {
+            const code = barcodes[0].rawValue
+            const now = Date.now()
+            const last = lastDetectedRef.current
+            // Debounce: ignore the same barcode for 3 s to prevent repeated triggers
+            if (!last || last.code !== code || now - last.time > 3000) {
+              lastDetectedRef.current = { code, time: now }
+              lookupRef.current?.(code)
+            }
+          }
+        } catch {}
+        detecting = false
+      }
+      if (active) scanLoopRef.current = requestAnimationFrame(loop)
+    }
+
+    scanLoopRef.current = requestAnimationFrame(loop)
+    return () => {
+      active = false
+      if (scanLoopRef.current !== null) {
+        cancelAnimationFrame(scanLoopRef.current)
+        scanLoopRef.current = null
+      }
+    }
+  }, [cameraMode, barcodeDetectorSupported])
+
+  // ── Barcode lookup ──────────────────────────────────────────────────────────
   const playBeep = (success: boolean) => {
     if (!soundEnabled) return
     try {
@@ -59,7 +156,7 @@ export default function ScanStation() {
         playBeep(false)
         setHistory(h => [{ barcode, timestamp: new Date(), found: false }, ...h].slice(0, 20))
       }
-    } catch (e) {
+    } catch {
       setNotFoundBarcode(barcode)
       playBeep(false)
     } finally {
@@ -84,6 +181,7 @@ export default function ScanStation() {
 
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
+      {/* Header + toggles */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
@@ -100,10 +198,22 @@ export default function ScanStation() {
             <Switch checked={soundEnabled} onCheckedChange={setSoundEnabled} />
             <Volume2 className="h-4 w-4 text-gray-500" />
           </label>
+          {/* Camera toggle */}
+          <label className="flex items-center gap-2">
+            <Switch
+              checked={cameraMode}
+              onCheckedChange={(on) => on ? startCamera() : stopCamera()}
+            />
+            {cameraMode
+              ? <Camera className="h-4 w-4 text-blue-600" />
+              : <Camera className="h-4 w-4 text-gray-400" />
+            }
+            <span className="text-gray-600">Camera {cameraMode ? 'on' : 'off'}</span>
+          </label>
         </div>
       </div>
 
-      {/* Scanner status banner */}
+      {/* Hardware scanner status banner */}
       <Card className={scanEnabled ? 'border-green-200 bg-green-50' : 'border-gray-200'}>
         <CardContent className="p-4 flex items-center gap-3">
           <ScanLine className={`h-8 w-8 ${scanEnabled ? 'text-green-600 animate-pulse' : 'text-gray-400'}`} />
@@ -119,6 +229,67 @@ export default function ScanStation() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Camera scanner section — visible when cameraMode is on */}
+      {cameraMode && (
+        <Card className="border-blue-200 bg-blue-50/30">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Camera className="h-4 w-4 text-blue-600" /> Camera Scanner
+              <Badge variant="secondary" className="text-[10px] ml-1">
+                <Smartphone className="h-3 w-3 mr-1" />phone / webcam
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {!barcodeDetectorSupported ? (
+              <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>
+                  Your browser does not support the Camera Barcode Scanner. Use <strong>Chrome</strong> or <strong>Edge</strong> for automatic barcode detection, or enter the barcode manually below.
+                </span>
+              </div>
+            ) : cameraStream ? (
+              <>
+                <div className="relative rounded-xl overflow-hidden bg-black aspect-video max-h-72">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover"
+                  />
+                  {/* Scan-line animation overlay */}
+                  <div className="pointer-events-none absolute inset-0">
+                    <div className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-blue-400 to-transparent animate-[scan_2s_ease-in-out_infinite]" />
+                    <div className="absolute inset-0 border-2 border-blue-400/30 rounded-xl" />
+                  </div>
+                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1 text-[11px] text-white">
+                    {loading ? 'Looking up…' : 'Point camera at barcode'}
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={stopCamera}
+                  className="gap-1.5 border-blue-300 text-blue-700 hover:bg-blue-100"
+                >
+                  <CameraOff className="h-3.5 w-3.5" />
+                  Close Camera
+                </Button>
+              </>
+            ) : (
+              <div className="text-xs text-gray-500">Opening camera…</div>
+            )}
+            {cameraError && (
+              <p className="flex items-center gap-1.5 text-xs text-red-600">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                {cameraError}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Manual entry */}
       <Card>
