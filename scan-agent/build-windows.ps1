@@ -48,15 +48,9 @@ if ($LASTEXITCODE -ne 0) { throw "npm ci failed" }
 Write-Ok "node_modules ready"
 
 # ── Step 2: Generate installer assets ────────────────────────────────────────
-Write-Step 2 $STEPS "Generating installer graphics (dark-branded BMPs)"
+Write-Step 2 $STEPS "Generating installer graphics (pure-JS, no native deps)"
 New-Item -ItemType Directory -Force -Path assets | Out-Null
 
-# Check if canvas is available; if not, install it
-$canvasOk = node -e "require('canvas')" 2>$null; $canvasOk = ($LASTEXITCODE -eq 0)
-if (-not $canvasOk) {
-    Write-Host "        Installing canvas for asset generation…" -ForegroundColor Gray
-    npm install canvas --save-dev --silent
-}
 
 node scripts\generate-installer-assets.js
 if ($LASTEXITCODE -ne 0) { throw "Asset generation failed" }

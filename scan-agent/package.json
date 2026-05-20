@@ -28,8 +28,7 @@
     "pdfkit": "^0.15.0"
   },
   "devDependencies": {
-    "@yao-pkg/pkg": "^5.13.0",
-    "canvas": "^2.11.2"
+    "@yao-pkg/pkg": "^5.13.0"
   },
   "engines": {
     "node": ">=18"
