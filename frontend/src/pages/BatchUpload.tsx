@@ -3620,6 +3620,9 @@ export default function BatchUpload() {
                 {/* ── Scanner panel ── */}
                 {inputTab === 'scanner' && (
                   <div className="rounded-xl border bg-muted/20 p-5 space-y-4">
+                    {/* hidden canvas — always mounted so captureFrame works in all code paths */}
+                    <canvas ref={canvasRef} className="hidden" />
+
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-semibold">Connected Scanners</p>
@@ -3638,9 +3641,6 @@ export default function BatchUpload() {
                       </div>
                     ) : cloudHostedScanner ? (
                       <div className="space-y-4">
-                        {/* hidden canvas — always mounted for frame capture */}
-                        <canvas ref={canvasRef} className="hidden" />
-
                         {/* ── Local agent running → full TWAIN/SANE/ISIS scanner UI ── */}
                         {agentAvailable === true && !cameraActive && !capturedDataUrl && (
                           <>
@@ -3901,13 +3901,100 @@ export default function BatchUpload() {
                         </p>
                       </div>
                     ) : scanners.length === 0 ? (
-                      <div className="rounded-xl border-2 border-dashed p-8 text-center">
-                        <WifiOff className="h-8 w-8 text-muted-foreground/40 mx-auto mb-3" />
-                        <p className="text-sm font-medium text-muted-foreground">No scanners detected</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Connect a scanner via USB or network and click Refresh.<br />
-                          Supports all TWAIN/SANE devices including Kodak Alaris, Epson, HP, Canon, Fujitsu.
-                        </p>
+                      <div className="space-y-4">
+                        {/* No scanner empty state — only shown when camera isn't active */}
+                        {!cameraActive && !capturedDataUrl && (
+                          <div className="rounded-xl border-2 border-dashed p-6 text-center">
+                            <WifiOff className="h-8 w-8 text-muted-foreground/40 mx-auto mb-3" />
+                            <p className="text-sm font-medium text-muted-foreground">No scanners detected</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Connect a scanner via USB or network and click Refresh.<br />
+                              Supports all TWAIN/SANE devices including Kodak Alaris, Epson, HP, Canon, Fujitsu.
+                            </p>
+                          </div>
+                        )}
+
+                        {/* ── Camera / phone fallback ── */}
+                        {!cameraActive && !capturedDataUrl && (
+                          <>
+                            <div className="relative flex items-center gap-2">
+                              <div className="flex-1 border-t" />
+                              <span className="text-xs text-muted-foreground shrink-0">or scan with your camera / phone</span>
+                              <div className="flex-1 border-t" />
+                            </div>
+                            <div className="rounded-xl border-2 border-dashed border-blue-200 dark:border-blue-800 p-5 text-center space-y-3">
+                              <Camera className="h-8 w-8 text-blue-400 mx-auto" />
+                              <div>
+                                <p className="text-sm font-semibold">Camera / Phone Scan</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                  Photograph invoices or medical documents with your webcam or phone camera.
+                                  Processed identically to uploaded PDFs.
+                                </p>
+                              </div>
+                              <Button
+                                onClick={startCamera}
+                                variant="outline"
+                                className="gap-2 border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                              >
+                                <Camera className="h-4 w-4" />
+                                Open Camera
+                              </Button>
+                              {cameraError && (
+                                <p className="text-xs text-red-500 dark:text-red-400 flex items-center gap-1 justify-center">
+                                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />{cameraError}
+                                </p>
+                              )}
+                            </div>
+                          </>
+                        )}
+
+                        {/* ── Camera active: live preview ── */}
+                        {cameraActive && !capturedDataUrl && (
+                          <div className="space-y-3">
+                            <div className="relative rounded-xl overflow-hidden bg-black aspect-video">
+                              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 border-2 border-violet-400/40 rounded-xl pointer-events-none" />
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={captureFrame}
+                                className="flex-1 bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white gap-2 h-11"
+                              >
+                                <ScanLine className="h-4 w-4" />
+                                Capture Document
+                              </Button>
+                              <Button variant="outline" onClick={stopCamera} className="gap-1.5">
+                                <CameraOff className="h-4 w-4" />
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ── Captured: review before submitting ── */}
+                        {capturedDataUrl && (
+                          <div className="space-y-3">
+                            <div className="relative rounded-xl overflow-hidden border">
+                              <img src={capturedDataUrl} alt="Captured document" className="w-full object-contain max-h-72" />
+                              <div className="absolute top-2 right-2 bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                Captured
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={useCapture}
+                                className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white gap-2 h-11"
+                              >
+                                <Check className="h-4 w-4" />
+                                Use This Photo
+                              </Button>
+                              <Button variant="outline" onClick={retakePhoto} className="gap-1.5">
+                                <RotateCcw className="h-4 w-4" />
+                                Retake
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="space-y-2">
