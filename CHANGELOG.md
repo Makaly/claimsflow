@@ -33,6 +33,29 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   (≤ 5 page) documents are unaffected — the back-page pass only
   activates when `pageCount > 5`.
 
+- **Back-page threshold corrected to `>= 5`** (`ocr.service.ts`) — the
+  previous threshold was `pageCount > 5`, which excluded exactly 5-page
+  documents (the most common Aga Khan inpatient bill length). The last
+  page — containing the grand total — was therefore never OCRed on these
+  documents. Threshold changed to `pageCount >= 5` so 5-page bills now
+  have their last two pages scanned at 300 DPI.
+
+- **Vision-model co-pay amounts rejected in quality gate** — models were
+  returning the patient's residual co-payment (KES 0–50 after NHIF and
+  sponsor coverage) as the `invoiceAmount`. The system-prompt instruction
+  "never return < KES 100" was being ignored. A hard `< 100` guard has
+  been added to `isUsable()` in `vision-router.service.ts`; any result
+  with `0 < invoiceAmount < 100` is now treated as a quality failure and
+  the fallback chain tries the next provider. The `extractMulti` path
+  (which previously bypassed `isUsable()` entirely) now also applies this
+  check before returning results.
+
+- **`invoiceAmount` tool description strengthened in Claude and Gemini** —
+  both schemas now explicitly list forbidden sources ("Patient Balance",
+  "Patient Co-pay", "Amount Due from Patient") and preferred sources
+  ("Grand Total", "Sponsor Amount Payable", "Total Charges") with a note
+  that values below KES 100 on a hospital bill are definitionally co-pays.
+
 ### Changed
 
 - **Vision-model prompts now teach the model the Aga Khan inpatient
