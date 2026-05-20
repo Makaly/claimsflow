@@ -7,7 +7,65 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- **Camera barcode scanner on Scan Station** (`ScanStation.tsx`) — a
+  camera toggle in the header lets operators or counter staff use a
+  phone or webcam as a barcode reader without any extra hardware. The
+  scanner uses the browser-native `BarcodeDetector` API (Chrome/Edge)
+  and supports nine formats: Code 128, Code 39, EAN-13, EAN-8, QR,
+  DataMatrix, PDF417, Codabar, and ITF. A `requestAnimationFrame` scan
+  loop with a 3-second same-barcode debounce feeds directly into the
+  existing `lookupRef` handler so every scan goes through the same
+  audit trail as a hardware scanner. A live scan-line animation overlays
+  the camera preview; an in-browser fallback banner is shown on browsers
+  without `BarcodeDetector` support. Stream lifecycle is managed with
+  `useEffect` cleanup so tracks are always released on unmount.
+
+- **Camera capture fallback in Batch Upload** (`BatchUpload.tsx`) — when
+  no hardware scanner is detected the scanner panel now surfaces a
+  camera/phone fallback instead of a bare "No scanners detected" notice.
+  Users can open their webcam, capture a document image, review the
+  thumbnail, and confirm it (or retake) before it is submitted through
+  the normal upload pipeline. The hidden canvas element is moved outside
+  the `cloudHostedScanner` conditional so `captureFrame` works regardless
+  of scanner availability.
+
+- **Tailwind `scan` keyframe animation** (`tailwind.config.js`) — adds
+  a 2-second ease-in-out infinite sweep animation (`animate-scan` /
+  `animate-[scan_2s_…]`) used by the camera scanner overlay in
+  `ScanStation` and `BatchUpload`.
+
 ### Fixed
+
+- **Claims processor no longer auto-approves with a stub 2-second delay**
+  (`claims.processor.ts`) — the placeholder `setTimeout` + double
+  `prisma.claim.update` that silently set every queued claim to
+  `"approved"` has been removed. The worker now simply logs receipt of
+  the job and returns so the real workflow engine (maker-checker,
+  adjudication, fraud scoring) handles status transitions. The unused
+  `PrismaService` dependency is also dropped from the constructor.
+
+- **Provider performance and scorecard reports now include all providers
+  that have submitted claims** (`reports.service.ts`) — both queries
+  previously filtered `isActive: true`, excluding providers whose
+  `isActive` flag had not yet been flipped by an admin even though they
+  had already submitted real claims. The filter is now unconditional;
+  providers with zero claims are naturally hidden by the
+  `total === 0` guard already present in the scorecard aggregation.
+
+- **Bearer token attached to every API request for cross-origin auth**
+  (`api.ts`) — added an Axios request interceptor that reads
+  `localStorage.getItem('token')` and sets the `Authorization: Bearer …`
+  header when a token is present and no explicit `Authorization` header
+  has been set by the caller. This fixes authentication on mobile browsers
+  and strict-SameSite environments where the session cookie is blocked on
+  cross-origin requests.
+
+- **Reports page hydrates from the server on mount** (`Reports.tsx`) —
+  `fetchFromServer()` is now called in a `useEffect` on the Reports page
+  so the table always reflects the latest server state rather than only
+  showing claims already in the local store from a previous navigation.
 
 - **OCR digit-substitution recovery for Aga Khan inpatient amount fields**
   (`invoice-patterns.ts`) — the PDF text layer on Aga Khan IP bills

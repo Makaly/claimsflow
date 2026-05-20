@@ -36,8 +36,10 @@ function fmtAmount(n: number) {
 }
 
 export default function Reports() {
-  const { claims } = useClaimsStore()
+  const { claims, fetchFromServer } = useClaimsStore()
   const navigate = useNavigate()
+
+  useEffect(() => { fetchFromServer() }, [])
 
   // Filter state
   const [dateFrom, setDateFrom] = useState('')
