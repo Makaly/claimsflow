@@ -10,6 +10,12 @@ const { join } = require('path');
 const { randomUUID } = require('crypto');
 const PDFDocument = require('pdfkit');
 
+// ── Vendor SDK drivers ───────────────────────────────────────────────────────
+// naps2  → TWAIN driver; covers Canon, Kodak/Alaris, Fujitsu, Xerox, Ricoh …
+// escl   → eSCL/AirScan HTTP protocol; covers network scanners from all vendors
+const naps2Driver = (() => { try { return require('./drivers/naps2'); } catch { return null; } })();
+const esclDriver  = (() => { try { return require('./drivers/escl');  } catch { return null; } })();
+
 const execFileAsync = promisify(execFile);
 
 // ── Config ──────────────────────────────────────────────────────────────────
@@ -202,28 +208,107 @@ $img.SaveFile('${safePath}')
   }
 }
 
-// ── Route helpers ───────────────────────────────────────────────────────────
+// ── Driver registry ──────────────────────────────────────────────────────────
+// All discovered devices are pooled from every available driver.
+// deviceId prefixes determine which driver handles each scan:
+//   'naps2:twain:…'  → NAPS2 TWAIN (Canon, Kodak, Fujitsu, Xerox, …)
+//   'naps2:wia:…'    → NAPS2 WIA
+//   'escl:http://…'  → eSCL network scanner
+//   anything else    → native WIA (Windows) or SANE (Linux/macOS)
+
 async function listDevices() {
-  if (OS === 'win32') return listWindowsDevices();
-  return listLinuxDevices();            // Linux & macOS
+  const allDevices = [];
+  let driverAvailable = false;
+
+  // 1. Native driver (WIA / SANE) — always attempted
+  const native = OS === 'win32' ? await listWindowsDevices() : await listLinuxDevices();
+  if (native.driverAvailable) driverAvailable = true;
+  allDevices.push(...(native.devices || []).map(d => ({ ...d, driver: OS === 'win32' ? 'wia' : 'sane' })));
+
+  // 2. NAPS2 (TWAIN / Canon / Kodak / Fujitsu) — when installed
+  if (naps2Driver) {
+    try {
+      const naps2Devices = await naps2Driver.listAllNaps2Devices();
+      if (naps2Devices.length) driverAvailable = true;
+      // Deduplicate by name — some scanners appear in both WIA and TWAIN lists
+      for (const d of naps2Devices) {
+        if (!allDevices.find(x => x.name === d.name)) allDevices.push(d);
+      }
+    } catch { /* NAPS2 not installed */ }
+  }
+
+  // 3. eSCL network scanners (Canon, Kodak, Epson, HP, Brother, Xerox, …)
+  if (esclDriver) {
+    try {
+      const esclDevices = await esclDriver.listEsclDevices();
+      if (esclDevices.length) driverAvailable = true;
+      allDevices.push(...esclDevices);
+    } catch { /* eSCL discovery failed */ }
+  }
+
+  return { devices: allDevices, driverAvailable };
 }
 
 async function scan(deviceId, resolution, mode) {
+  // Route by deviceId prefix
+  if (deviceId.startsWith('naps2:') && naps2Driver) {
+    return naps2Driver.scanNaps2(deviceId, resolution, mode);
+  }
+  if (deviceId.startsWith('escl:') && esclDriver) {
+    return esclDriver.scanEscl(deviceId, resolution, mode);
+  }
+  // Native fallback
   if (OS === 'win32') return scanWindows(deviceId, resolution, mode);
   return scanLinux(deviceId, resolution, mode);
 }
 
 // ── Routes ──────────────────────────────────────────────────────────────────
-app.get('/health', (_req, res) => {
-  // hostname + os let the cloud dashboard show which physical machine the
-  // scan came from.
+app.get('/health', async (_req, res) => {
+  const naps2Available = naps2Driver ? await naps2Driver.isNaps2Available().catch(() => false) : false;
   res.json({
     ok: true,
-    version: '1.0.0',
+    version: '1.1.0',
     os: OS,
     hostname: hostname(),
     port: PORT,
+    drivers: {
+      wia:   OS === 'win32',
+      sane:  OS !== 'win32',
+      naps2: naps2Available,   // TWAIN — Canon, Kodak, Fujitsu, Xerox, etc.
+      escl:  !!esclDriver,     // network eSCL/AirScan scanners
+    },
   });
+});
+
+// Returns driver availability and vendor-specific install recommendations.
+// Useful for IT admins setting up Canon, Kodak, or Fujitsu scanners.
+app.get('/diagnostics', async (_req, res) => {
+  const result = { os: OS, drivers: {} };
+
+  if (OS === 'win32') {
+    try {
+      const { stdout } = await execFileAsync(
+        'powershell',
+        ['-NoProfile', '-NonInteractive', '-Command',
+          'Get-WmiObject Win32_PnPEntity | Where-Object {$_.Name -like "*Scanner*" -or $_.Name -like "*Scan*"} | Select-Object Name,Manufacturer | ConvertTo-Json'],
+        { timeout: 10_000 },
+      );
+      result.drivers.wia_devices = JSON.parse(stdout || '[]');
+    } catch { result.drivers.wia_devices = []; }
+  }
+
+  if (naps2Driver) {
+    result.drivers.naps2 = await naps2Driver.diagnoseWindows().catch(err => ({ error: err.message }));
+  } else {
+    result.drivers.naps2 = { naps2Installed: false, recommendations: ['Install NAPS2: winget install cyanfish.naps2'] };
+  }
+
+  if (esclDriver) {
+    const esclDevices = await esclDriver.listEsclDevices().catch(() => []);
+    result.drivers.escl = { devices: esclDevices, note: 'Set ESCL_SCANNERS env var to comma-separated scanner URLs for static config' };
+  }
+
+  res.json(result);
 });
 
 app.get('/scanners', async (_req, res) => {
@@ -265,19 +350,25 @@ app.post('/scan', async (req, res) => {
 });
 
 // ── Start ───────────────────────────────────────────────────────────────────
-app.listen(PORT, HOST, () => {
+app.listen(PORT, HOST, async () => {
+  const naps2Ok = naps2Driver ? await naps2Driver.isNaps2Available().catch(() => false) : false;
+  const nativeDriver = OS === 'win32' ? 'WIA' : OS === 'darwin' ? 'SANE' : 'SANE';
+
   console.log(`
-╔══════════════════════════════════════════════════════╗
-║          ClaimsFlow Local Scan Agent v1.0.0          ║
-╠══════════════════════════════════════════════════════╣
-║  Listening on  http://127.0.0.1:${PORT}                ║
-║  Platform      ${OS.padEnd(38)}║
-║                                                      ║
-║  Open ClaimsFlow in your browser, go to              ║
-║  Batch Upload → Scan Document.                       ║
-║  Your TWAIN / SANE / ISIS scanners will appear.      ║
-║                                                      ║
-║  Press Ctrl+C to stop.                               ║
-╚══════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════════╗
+║          ClaimsFlow Local Scan Agent v1.1.0              ║
+╠══════════════════════════════════════════════════════════╣
+║  Listening on  http://127.0.0.1:${PORT}                    ║
+║  Platform      ${OS.padEnd(42)}║
+╠══════════════════════════════════════════════════════════╣
+║  Active drivers:                                         ║
+║    ${(nativeDriver + ' (built-in)').padEnd(54)}║
+║    NAPS2/TWAIN/ISIS  ${naps2Ok ? '✓ ready (Canon, Kodak, Fujitsu…)' : '✗ not installed — run: winget install cyanfish.naps2'}${''.padEnd(Math.max(0, 3 - (naps2Ok ? 0 : 0)))}║
+║    eSCL/AirScan      ${esclDriver ? '✓ ready (Canon, Kodak, Epson, HP…)' : '✗ unavailable'}${''.padEnd(19)}║
+╠══════════════════════════════════════════════════════════╣
+║  Open ClaimsFlow → Batch Upload → Scan Document          ║
+║  Run GET /diagnostics for vendor-specific setup help     ║
+║  Press Ctrl+C to stop                                    ║
+╚══════════════════════════════════════════════════════════╝
 `);
 });
