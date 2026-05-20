@@ -1,0 +1,5 @@
+# Test-only dependencies for the ML sidecar. Not installed in the
+# production image — see Dockerfile, which only copies requirements.txt.
+-r requirements.txt
+pytest>=8.0,<9.0
+httpx>=0.27,<1.0
