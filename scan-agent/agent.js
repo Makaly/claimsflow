@@ -35,27 +35,48 @@ const ALLOWED_ORIGINS = [
 const app = express();
 app.use(express.json({ limit: '2mb' }));
 
-// Chrome Private Network Access (PNA): public-origin HTTPS pages calling
-// localhost must receive Access-Control-Allow-Private-Network: true in the
-// preflight, otherwise the fetch is blocked silently. Set it on every response.
-app.use((req, res, next) => {
+// Allowed-origin check shared by both the preflight handler and cors()
+function isAllowedOrigin(origin) {
+  return !origin
+    || origin.startsWith('http://localhost')
+    || origin.startsWith('http://127.0.0.1')
+    || origin.startsWith('https://localhost')
+    || ALLOWED_ORIGINS.includes(origin);
+}
+
+// Chrome Private Network Access (PNA): a public-origin HTTPS page (e.g. the
+// Render deployment) calling localhost must receive Access-Control-Allow-Private-Network
+// in the preflight OPTIONS response, or Chrome blocks the request silently.
+// We handle OPTIONS explicitly before cors() so the header is guaranteed.
+app.options('*', (req, res) => {
+  const origin = req.headers.origin ?? '';
+  if (isAllowedOrigin(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Private-Network', 'true');
-  next();
+  res.setHeader('Access-Control-Max-Age', '86400');
+  res.sendStatus(204);
 });
 
 app.use(cors({
   origin: (origin, cb) => {
-    // Allow requests with no origin (e.g. curl) and all localhost variants
-    if (!origin || origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1') || ALLOWED_ORIGINS.includes(origin)) {
-      return cb(null, true);
-    }
+    if (isAllowedOrigin(origin)) return cb(null, true);
     cb(new Error(`CORS: origin '${origin}' not allowed`));
   },
   credentials: true,
-  // Allow the preflight to advertise PNA support
   allowedHeaders: ['Content-Type', 'Authorization'],
   exposedHeaders: ['Content-Disposition'],
 }));
+
+// Ensure PNA header is present on every non-OPTIONS response too
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Private-Network', 'true');
+  next();
+});
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 const VALID_RESOLUTIONS = new Set([75, 150, 300, 600]);
@@ -216,7 +237,17 @@ $img.SaveFile('${safePath}')
 //   'escl:http://…'  → eSCL network scanner
 //   anything else    → native WIA (Windows) or SANE (Linux/macOS)
 
+// Cache the device list so /scan validation doesn't re-run a slow mDNS
+// discovery. TTL is long because network scanner indices (airscan wN) can
+// change between scanimage -L runs, causing false "Unknown device" errors.
+let _deviceCache = null;
+let _deviceCacheAt = 0;
+const DEVICE_CACHE_TTL_MS = 5 * 60_000; // 5 min
+
 async function listDevices() {
+  if (_deviceCache && Date.now() - _deviceCacheAt < DEVICE_CACHE_TTL_MS) {
+    return _deviceCache;
+  }
   const allDevices = [];
   let driverAvailable = false;
 
@@ -246,7 +277,10 @@ async function listDevices() {
     } catch { /* eSCL discovery failed */ }
   }
 
-  return { devices: allDevices, driverAvailable };
+  const result = { devices: allDevices, driverAvailable };
+  _deviceCache = result;
+  _deviceCacheAt = Date.now();
+  return result;
 }
 
 async function scan(deviceId, resolution, mode) {
@@ -329,14 +363,28 @@ app.post('/scan', async (req, res) => {
   const resolution = sanitiseResolution(rawRes);
   const mode       = sanitiseMode(rawMode);
 
-  // Validate device is in the discovered list (prevents injection)
+  // Validate device is in the discovered list (prevents injection).
+  // execFileAsync passes deviceId as an array arg so shell injection is
+  // already impossible; this check just gates unknown devices.
   const { devices } = await listDevices();
-  if (!devices.some(d => d.id === deviceId)) {
+  const exactMatch = devices.some(d => d.id === deviceId);
+  // airscan:wN: indices are non-deterministic between scanimage -L runs.
+  // Accept any airscan device whose scanner-name suffix matches.
+  const airscanSuffix = deviceId.startsWith('airscan:')
+    ? deviceId.replace(/^airscan:w\d+:/, '')
+    : null;
+  const nameMatch = airscanSuffix
+    && devices.some(d => d.id.startsWith('airscan:') && d.id.replace(/^airscan:w\d+:/, '') === airscanSuffix);
+  if (!exactMatch && !nameMatch) {
     return res.status(400).json({ error: 'Unknown scanner device' });
   }
+  // If the index changed, normalise deviceId to what the live list has
+  const resolvedId = (nameMatch && !exactMatch)
+    ? devices.find(d => d.id.startsWith('airscan:') && d.id.replace(/^airscan:w\d+:/, '') === airscanSuffix).id
+    : deviceId;
 
   try {
-    const pdf = await scan(deviceId, resolution, mode);
+    const pdf = await scan(resolvedId, resolution, mode);
     const ts  = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     res.set({
       'Content-Type':        'application/pdf',
