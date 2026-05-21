@@ -98,6 +98,47 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
   `authService.login()`; the `LoginCredentials` type gains an optional field;
   the backend sets a 30-day cookie when the flag is true.
 
+- **Scanner device cards redesigned** (`BatchUpload`) — both scanner list
+  panels (desktop sidebar and mobile tab) now render rich device cards with a
+  coloured icon square (violet + `Printer` for USB/SANE; blue + `Wifi` for
+  network scanners), a driver protocol badge (`SANE`, `WIA`, `TWAIN`, `NAPS2`,
+  `eSCL`, `AirScan`) in accent colours derived from `getScannerMeta()`, a
+  custom dot-in-ring radio indicator, and the agent hostname shown in the panel
+  header. A scanner count badge appears next to "Connected Scanners" when
+  devices are present.
+
+- **Stale agent liveness re-check before scan** (`BatchUpload`) — a 1.5-second
+  `AbortSignal.timeout` ping to `/health` runs immediately before every scan;
+  if the agent has stopped since the page loaded, `agentAvailable` is cleared
+  and the request routes to the cloud backend rather than surfacing a raw
+  network error.
+
+### Added
+
+- **Scan preview & approval dialog** (`BatchUpload`) — after the local scan
+  agent returns a PDF, a modal opens with a full pdf.js canvas renderer, page
+  navigation arrows, and ±25% zoom. The operator approves (adds to upload
+  queue + session cache), rescans, or cancels — preventing misfeeds and blank
+  pages from entering the processing pipeline silently.
+
+- **`getScannerMeta(device)` helper** — pure function that derives
+  `{ isNetwork, driverLabel }` from a `ScannerDevice` record. Handles
+  `airscan:` → AirScan, `escl:` → eSCL, `naps2-wia` → WIA,
+  `naps2-twain` → TWAIN, `naps2*` → NAPS2, default → SANE. Shared by both
+  scanner card render paths so driver-badge logic stays in one place.
+
+- **Scan agent version check and in-app upgrade banner** (`BatchUpload`) —
+  the `version` field from `GET /health` is compared against
+  `AGENT_MIN_VERSION` (`1.1.0`). When the agent is older, an amber banner
+  appears with the current / required versions and OS-aware download links
+  (Windows `.exe` or Linux/macOS shell script) so operators can upgrade
+  without filing a support ticket.
+
+- **Firefox-compatible no-body POST for scan requests** (`BatchUpload`) —
+  `POST /scan` now passes parameters as query-string fields with no request
+  body, avoiding the CORS preflight that Firefox refuses to send to an HTTP
+  localhost origin from an HTTPS page. Works in all browsers unchanged.
+
 ### Planned
 - Unit and integration test suite (Vitest + React Testing Library)
 - End-to-end tests (Playwright)

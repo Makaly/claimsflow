@@ -1216,6 +1216,26 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   The scanner service returned `saneAvailable: false` and the UI showed a
   driver-not-installed warning even on hosts with a scanner attached.
 
+- **Scan agent version check and upgrade banner** (`BatchUpload.tsx`) — the UI
+  now reads the `version` field from `GET /health` and compares it against
+  `AGENT_MIN_VERSION` (`1.1.0`) using a locale-aware numeric collation. When
+  the running agent is below the minimum an amber warning banner appears in the
+  scanner panel with the current and required versions, a plain-English
+  explanation, and OS-specific download links (Windows `.exe` installer or
+  Linux/macOS shell script) so operators can self-serve the upgrade without
+  filing a support ticket.
+
+- **Firefox-compatible no-body POST for scan requests** (`BatchUpload.tsx`) —
+  Firefox applies stricter CORS preflight rules than Chrome when an HTTPS page
+  calls an HTTP-only localhost endpoint: a `Content-Type: application/json`
+  body triggers a preflight that Firefox refuses to send to a non-HTTPS origin
+  even with `Access-Control-Allow-Private-Network`. The `/scan` call now uses a
+  query-string POST (`fetch(\`/scan?${new URLSearchParams(...)}\`, { method: 'POST' })`)
+  with no body and no `Content-Type` header, which is treated as a simple
+  request and requires no preflight in any browser. The scan-agent `/scan`
+  handler was updated to merge `req.query` and `req.body` so both forms are
+  accepted.
+
 ---
 
 ## [1.9.2] - 2026-05-17

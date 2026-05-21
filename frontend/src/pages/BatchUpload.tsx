@@ -2150,9 +2150,14 @@ export default function BatchUpload() {
 
   // ── Local scan agent (localhost:7420) ──────────────────────────────────────
   const AGENT_URL = 'http://127.0.0.1:7420'
+  const AGENT_MIN_VERSION = '1.1.0'
   const [agentAvailable, setAgentAvailable] = useState<boolean | null>(null) // null = checking
   const [agentHostname, setAgentHostname] = useState<string | null>(null)
   const [agentOs,       setAgentOs]       = useState<string | null>(null)
+  const [agentVersion,  setAgentVersion]  = useState<string | null>(null)
+
+  const agentNeedsUpgrade = agentAvailable === true && !!agentVersion &&
+    agentVersion.localeCompare(AGENT_MIN_VERSION, undefined, { numeric: true, sensitivity: 'base' }) < 0
 
   const [scanDpi, setScanDpi] = useState('300')
   const [scanMode, setScanMode] = useState('Color')
@@ -2542,7 +2547,8 @@ export default function BatchUpload() {
             setAgentAvailable(true)
             const health = await r.json().catch(() => ({}))
             if (health?.hostname) setAgentHostname(String(health.hostname))
-            if (health?.os) setAgentOs(String(health.os))
+            if (health?.os)       setAgentOs(String(health.os))
+            if (health?.version)  setAgentVersion(String(health.version))
             const sr = await fetch(`${AGENT_URL}/scanners`)
             return await sr.json()
           }
@@ -2595,11 +2601,15 @@ export default function BatchUpload() {
 
       if (agentStillUp) {
         // Route through local agent — scanner is on the user's machine
-        const resp = await fetch(`${AGENT_URL}/scan`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ deviceId: selectedScanner, resolution: parseInt(scanDpi, 10), mode: scanMode }),
+        // POST with params in the query string and no body — no Content-Type
+        // means no CORS preflight, so Firefox doesn't block it when the page
+        // is served over HTTPS and the agent is HTTP-only localhost.
+        const scanParams = new URLSearchParams({
+          deviceId: selectedScanner,
+          resolution: String(parseInt(scanDpi, 10)),
+          mode: scanMode,
         })
+        const resp = await fetch(`${AGENT_URL}/scan?${scanParams}`, { method: 'POST' })
         if (!resp.ok) {
           const err = await resp.json().catch(() => ({}))
           // Record the failed scan so dashboards reflect real-world reliability
@@ -3833,6 +3843,44 @@ export default function BatchUpload() {
                                 Scan Agent connected{agentHostname ? ` · ${agentHostname}` : ''} — TWAIN / SANE / ISIS ready
                               </span>
                             </div>
+
+                            {/* ── Upgrade banner ── */}
+                            {agentNeedsUpgrade && (
+                              <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-3 flex gap-3 items-start">
+                                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                                <div className="flex-1 min-w-0 space-y-1.5">
+                                  <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+                                    Scan Agent update required (v{agentVersion} → v{AGENT_MIN_VERSION})
+                                  </p>
+                                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                                    Your scan agent is out of date. Scanning may fail until you upgrade. Download the latest installer and run it — your settings are preserved.
+                                  </p>
+                                  <div className="flex gap-2 flex-wrap pt-0.5">
+                                    {agentOs === 'win32' ? (
+                                      <a
+                                        href="https://github.com/Makaly/claimsflow/releases/download/scan-agent-latest/ClaimsFlow-Scan-Agent-Setup.exe"
+                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium transition-colors"
+                                        rel="noopener noreferrer"
+                                        target="_blank"
+                                      >
+                                        <Download className="h-3 w-3" />
+                                        Download Windows Installer
+                                      </a>
+                                    ) : (
+                                      <a
+                                        href="https://github.com/Makaly/claimsflow/releases/download/scan-agent-latest/install.sh"
+                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium transition-colors"
+                                        rel="noopener noreferrer"
+                                        target="_blank"
+                                      >
+                                        <Download className="h-3 w-3" />
+                                        Download Linux/macOS Installer
+                                      </a>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </>
                         )}
 
