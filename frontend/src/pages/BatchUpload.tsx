@@ -16,7 +16,7 @@ import {
   Pen, FileSignature, Eraser, Square, Stamp,
   Underline, Strikethrough, ChevronDown, Save, MapPin,
   Copy, Check, AlertTriangle, Trash2,
-  ScanLine, Printer, RefreshCw, WifiOff, Camera, CameraOff,
+  ScanLine, Printer, RefreshCw, WifiOff, Wifi, Camera, CameraOff,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -2058,6 +2058,20 @@ function ProcessingInsightCard({
   )
 }
 
+function getScannerMeta(s: { id: string; type?: string; driver?: string }) {
+  const id = s.id ?? ''
+  const driver = s.driver ?? ''
+  const isNetwork = id.startsWith('airscan:') || id.startsWith('escl:')
+    || driver === 'escl' || s.type === 'network'
+  let driverLabel = 'SANE'
+  if (driver === 'escl' || id.startsWith('escl:')) driverLabel = 'eSCL'
+  else if (id.startsWith('airscan:')) driverLabel = 'AirScan'
+  else if (driver === 'wia' || driver === 'naps2-wia') driverLabel = 'WIA'
+  else if (driver === 'naps2-twain') driverLabel = 'TWAIN'
+  else if (driver.startsWith('naps2')) driverLabel = 'NAPS2'
+  return { isNetwork, driverLabel }
+}
+
 function InstallSnippet({ command }: { command: string }) {
   const [copied, setCopied] = useState(false)
   const handleCopy = () => {
@@ -2111,7 +2125,7 @@ export default function BatchUpload() {
   const [extractionMode, setExtractionMode] = useState<ExtractionMode>('ai')
 
   // ── Document scanner (hardware) ────────────────────────────────────────────
-  type ScannerDevice = { id: string; name: string; vendor: string; model: string; type: string }
+  type ScannerDevice = { id: string; name: string; vendor: string; model: string; type: string; driver?: string }
   const [inputTab, setInputTab] = useState<'upload' | 'scanner'>('upload')
   const [scanners, setScanners] = useState<ScannerDevice[]>([])
   const [scannersLoading, setScannersLoading] = useState(false)
@@ -2119,6 +2133,17 @@ export default function BatchUpload() {
   const [serverPlatform, setServerPlatform] = useState<'linux' | 'windows' | 'other'>('linux')
   const [cloudHostedScanner, setCloudHostedScanner] = useState(false)
   const [selectedScanner, setSelectedScanner] = useState('')
+
+  // ── Scan preview (approve before upload) ──────────────────────────────────
+  const [scanPreviewBlob, setScanPreviewBlob]     = useState<Blob | null>(null)
+  const [scanPreviewUrl,  setScanPreviewUrl]      = useState<string | null>(null)
+  const [scanPreviewPage, setScanPreviewPage]     = useState(1)
+  const [scanPreviewPages, setScanPreviewPages]   = useState(1)
+  const [scanPreviewZoom, setScanPreviewZoom]     = useState(1.0)
+  const scanPreviewCanvasRef                      = useRef<HTMLCanvasElement>(null)
+  const scanPreviewDocRef                         = useRef<pdfjsLib.PDFDocumentProxy | null>(null)
+  const scanPreviewRenderRef                      = useRef<pdfjsLib.RenderTask | null>(null)
+  const [scanPreviewTs, setScanPreviewTs]         = useState('')
 
   // ── Camera scanner (fullscreen overlay) ───────────────────────────────────
   const [cameraScannerOpen, setCameraScannerOpen] = useState(false)
@@ -2561,7 +2586,14 @@ export default function BatchUpload() {
 
       const scannerName = scanners.find(s => s.id === selectedScanner)?.name ?? selectedScanner
 
-      if (agentAvailable) {
+      // Re-verify the agent is still up — stale agentAvailable state from the
+      // initial health check can cause a CORS/network error if the agent stopped.
+      const agentStillUp = agentAvailable && await fetch(`${AGENT_URL}/health`, { signal: AbortSignal.timeout(1500) })
+        .then(r => r.ok)
+        .catch(() => false)
+      if (!agentStillUp && agentAvailable) setAgentAvailable(false)
+
+      if (agentStillUp) {
         // Route through local agent — scanner is on the user's machine
         const resp = await fetch(`${AGENT_URL}/scan`, {
           method: 'POST',
@@ -2611,18 +2643,77 @@ export default function BatchUpload() {
         blob = resp.data
       }
 
-      const file = new File([blob], `scan-${ts}.pdf`, { type: 'application/pdf' })
-      setUploadedFiles(prev => [...prev, file])
-      const sid = session?.sessionId ?? `ses-${Date.now()}`
-      upsertSession({ sessionId: sid })
-      cacheFile(sid, file).catch(() => {})
-      setInputTab('upload')
+      // Show preview for approval before adding to the upload queue.
+      setScanPreviewTs(ts)
+      setScanPreviewBlob(blob)
+      setScanPreviewPage(1)
+      setScanPreviewZoom(1.0)
+      const blobUrl = URL.createObjectURL(blob)
+      setScanPreviewUrl(blobUrl)
     } catch (err: any) {
       setScanError(err?.message ?? err?.response?.data?.message ?? 'Scan failed. Check scanner connection and try again.')
     } finally {
       setScanning(false)
     }
   }, [agentAvailable, agentHostname, agentOs, scanners, selectedScanner, scanning, scanDpi, scanMode, session, upsertSession, meter])
+
+  // ── Scan preview helpers ──────────────────────────────────────────────────
+  const closeScanPreview = useCallback(() => {
+    if (scanPreviewUrl) URL.revokeObjectURL(scanPreviewUrl)
+    scanPreviewDocRef.current?.destroy().catch(() => {})
+    scanPreviewDocRef.current = null
+    setScanPreviewBlob(null)
+    setScanPreviewUrl(null)
+    setScanPreviewPage(1)
+    setScanPreviewPages(1)
+    setScanPreviewZoom(1.0)
+  }, [scanPreviewUrl])
+
+  const handleScanApprove = useCallback(() => {
+    if (!scanPreviewBlob) return
+    const file = new File([scanPreviewBlob], `scan-${scanPreviewTs}.pdf`, { type: 'application/pdf' })
+    setUploadedFiles(prev => [...prev, file])
+    const sid = session?.sessionId ?? `ses-${Date.now()}`
+    upsertSession({ sessionId: sid })
+    cacheFile(sid, file).catch(() => {})
+    closeScanPreview()
+    setInputTab('upload')
+  }, [scanPreviewBlob, scanPreviewTs, session, upsertSession, closeScanPreview])
+
+  // Load PDF into canvas whenever preview URL or page/zoom changes
+  useEffect(() => {
+    if (!scanPreviewUrl) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        if (!scanPreviewDocRef.current) {
+          const resp = await fetch(scanPreviewUrl)
+          const buf  = await resp.arrayBuffer()
+          const doc  = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise
+          if (cancelled) { doc.destroy(); return }
+          scanPreviewDocRef.current = doc
+          setScanPreviewPages(doc.numPages)
+        }
+        const doc  = scanPreviewDocRef.current!
+        const page = await doc.getPage(scanPreviewPage)
+        if (cancelled) return
+        const viewport = page.getViewport({ scale: scanPreviewZoom })
+        const canvas   = scanPreviewCanvasRef.current
+        if (!canvas) return
+        canvas.width  = viewport.width
+        canvas.height = viewport.height
+        if (scanPreviewRenderRef.current) scanPreviewRenderRef.current.cancel()
+        scanPreviewRenderRef.current = page.render({
+          canvasContext: canvas.getContext('2d')!,
+          viewport,
+        })
+        await scanPreviewRenderRef.current.promise
+      } catch (e: any) {
+        if (e?.name !== 'RenderingCancelledException') console.error('Preview render error', e)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [scanPreviewUrl, scanPreviewPage, scanPreviewZoom])
 
   // ── Camera capture callback ────────────────────────────────────────────────
   const handleCameraCapture = useCallback((file: File) => {
@@ -3289,6 +3380,72 @@ export default function BatchUpload() {
         />
       )}
 
+      {/* ── Scan preview — approve before upload ──────────────────────────── */}
+      <Dialog open={!!scanPreviewUrl} onOpenChange={open => { if (!open) closeScanPreview() }}>
+        <DialogContent className="max-w-3xl w-full p-0 gap-0 overflow-hidden">
+          <DialogHeader className="px-5 pt-5 pb-3 border-b">
+            <DialogTitle className="flex items-center gap-2">
+              <ScanLine className="h-4 w-4 text-violet-500" />
+              Review Scanned Document
+            </DialogTitle>
+            <DialogDescription>
+              Check the scan looks correct before sending it for AI processing. Blank or misaligned? Rescan instead.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* PDF canvas */}
+          <div className="flex flex-col items-center bg-muted/40 overflow-auto" style={{ maxHeight: '60vh' }}>
+            {/* Page / zoom controls */}
+            <div className="flex items-center gap-2 px-4 py-2 w-full border-b bg-background/80 backdrop-blur-sm sticky top-0 z-10">
+              <Button variant="ghost" size="icon" className="h-7 w-7"
+                disabled={scanPreviewPage <= 1}
+                onClick={() => setScanPreviewPage(p => p - 1)}>
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </Button>
+              <span className="text-xs tabular-nums">{scanPreviewPage} / {scanPreviewPages}</span>
+              <Button variant="ghost" size="icon" className="h-7 w-7"
+                disabled={scanPreviewPage >= scanPreviewPages}
+                onClick={() => setScanPreviewPage(p => p + 1)}>
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+              <div className="w-px h-4 bg-border mx-1" />
+              <Button variant="ghost" size="icon" className="h-7 w-7"
+                onClick={() => setScanPreviewZoom(z => Math.max(0.5, z - 0.25))}>
+                <ZoomOut className="h-3.5 w-3.5" />
+              </Button>
+              <span className="text-xs w-10 text-center">{Math.round(scanPreviewZoom * 100)}%</span>
+              <Button variant="ghost" size="icon" className="h-7 w-7"
+                onClick={() => setScanPreviewZoom(z => Math.min(3, z + 0.25))}>
+                <ZoomIn className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+
+            <div className="p-4 flex justify-center w-full">
+              <canvas
+                ref={scanPreviewCanvasRef}
+                className="shadow-lg rounded max-w-full"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="px-5 py-4 border-t flex-row gap-2 justify-between">
+            <Button variant="outline" onClick={closeScanPreview}>
+              Cancel
+            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => { closeScanPreview() }}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Rescan
+              </Button>
+              <Button onClick={handleScanApprove} className="bg-violet-600 hover:bg-violet-700 text-white">
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Approve &amp; Process
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* ── Restored session banner ────────────────────────────────────────── */}
       {restoredSession && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-4 py-3 text-sm">
@@ -3550,8 +3707,18 @@ export default function BatchUpload() {
                   <div className="rounded-xl border bg-muted/20 p-5 space-y-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-semibold">Connected Scanners</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">TWAIN / SANE compatible devices</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold">Connected Scanners</p>
+                          {scanners.length > 0 && !scannersLoading && (
+                            <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
+                              {scanners.length}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          TWAIN / SANE / AirScan compatible devices
+                          {agentHostname && <span className="ml-1 text-muted-foreground/60">· {agentHostname}</span>}
+                        </p>
                       </div>
                       <Button variant="ghost" size="sm" onClick={fetchScanners} disabled={scannersLoading} className="h-8 gap-1.5">
                         <RefreshCw className={cn('h-3.5 w-3.5', scannersLoading && 'animate-spin')} />
@@ -3585,30 +3752,52 @@ export default function BatchUpload() {
                               </div>
                             ) : (
                               <div className="space-y-2">
-                                {scanners.map(s => (
-                                  <label
-                                    key={s.id}
-                                    className={cn(
-                                      'flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all',
-                                      selectedScanner === s.id
-                                        ? 'border-violet-400 bg-violet-50/50 dark:bg-violet-950/20'
-                                        : 'border-border hover:border-violet-300/60',
-                                    )}
-                                  >
-                                    <input type="radio" name="scanner-device" value={s.id}
-                                      checked={selectedScanner === s.id}
-                                      onChange={() => setSelectedScanner(s.id)}
-                                      className="accent-violet-600" />
-                                    <Printer className="h-5 w-5 text-violet-600 shrink-0" />
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-sm font-medium truncate">{s.model}</p>
-                                      <p className="text-[11px] text-muted-foreground font-mono truncate">{s.id}</p>
-                                    </div>
-                                    {selectedScanner === s.id && (
-                                      <Badge variant="secondary" className="text-[10px] shrink-0">Selected</Badge>
-                                    )}
-                                  </label>
-                                ))}
+                                {scanners.map(s => {
+                                  const { isNetwork, driverLabel } = getScannerMeta(s)
+                                  return (
+                                    <label
+                                      key={s.id}
+                                      className={cn(
+                                        'flex items-center gap-3 p-3.5 rounded-xl border cursor-pointer transition-all',
+                                        selectedScanner === s.id
+                                          ? 'border-violet-400 bg-violet-50/60 dark:bg-violet-950/30 ring-1 ring-violet-400/20'
+                                          : 'border-border hover:border-violet-300/60 hover:bg-muted/30',
+                                      )}
+                                    >
+                                      <input type="radio" name="scanner-device" value={s.id}
+                                        checked={selectedScanner === s.id}
+                                        onChange={() => setSelectedScanner(s.id)}
+                                        className="sr-only" />
+                                      <div className={cn(
+                                        'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border',
+                                        isNetwork
+                                          ? 'bg-blue-50 border-blue-200 text-blue-600 dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-400'
+                                          : 'bg-violet-50 border-violet-200 text-violet-600 dark:bg-violet-950/40 dark:border-violet-800 dark:text-violet-400',
+                                      )}>
+                                        {isNetwork ? <Wifi className="h-5 w-5" /> : <Printer className="h-5 w-5" />}
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-semibold leading-tight truncate">{s.model || s.name}</p>
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                          <Badge variant="outline" className={cn(
+                                            'text-[9px] h-4 px-1.5 shrink-0 font-mono',
+                                            isNetwork ? 'border-blue-300 text-blue-600 dark:border-blue-700 dark:text-blue-400'
+                                                      : 'border-violet-300 text-violet-600 dark:border-violet-700 dark:text-violet-400',
+                                          )}>
+                                            {driverLabel}
+                                          </Badge>
+                                          <p className="text-[10px] text-muted-foreground font-mono truncate">{s.id}</p>
+                                        </div>
+                                      </div>
+                                      <div className={cn(
+                                        'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
+                                        selectedScanner === s.id ? 'border-violet-500' : 'border-muted-foreground/30',
+                                      )}>
+                                        {selectedScanner === s.id && <div className="h-2.5 w-2.5 rounded-full bg-violet-500" />}
+                                      </div>
+                                    </label>
+                                  )
+                                })}
                               </div>
                             )}
                             {scanners.length > 0 && (
@@ -3640,7 +3829,9 @@ export default function BatchUpload() {
                             )}
                             <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-800 px-3 py-2">
                               <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse shrink-0" />
-                              <span className="text-xs text-green-700 dark:text-green-400 font-medium">Scan Agent connected — TWAIN / SANE / ISIS ready</span>
+                              <span className="text-xs text-green-700 dark:text-green-400 font-medium">
+                                Scan Agent connected{agentHostname ? ` · ${agentHostname}` : ''} — TWAIN / SANE / ISIS ready
+                              </span>
                             </div>
                           </>
                         )}
@@ -3789,34 +3980,56 @@ export default function BatchUpload() {
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        {scanners.map(s => (
-                          <label
-                            key={s.id}
-                            className={cn(
-                              'flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all',
-                              selectedScanner === s.id
-                                ? 'border-violet-400 bg-violet-50/50 dark:bg-violet-950/20'
-                                : 'border-border hover:border-violet-300/60',
-                            )}
-                          >
-                            <input
-                              type="radio"
-                              name="scanner-device"
-                              value={s.id}
-                              checked={selectedScanner === s.id}
-                              onChange={() => setSelectedScanner(s.id)}
-                              className="accent-violet-600"
-                            />
-                            <Printer className="h-5 w-5 text-violet-600 shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{s.model}</p>
-                              <p className="text-[11px] text-muted-foreground font-mono truncate">{s.id}</p>
-                            </div>
-                            {selectedScanner === s.id && (
-                              <Badge variant="secondary" className="text-[10px] shrink-0">Selected</Badge>
-                            )}
-                          </label>
-                        ))}
+                        {scanners.map(s => {
+                          const { isNetwork, driverLabel } = getScannerMeta(s)
+                          return (
+                            <label
+                              key={s.id}
+                              className={cn(
+                                'flex items-center gap-3 p-3.5 rounded-xl border cursor-pointer transition-all',
+                                selectedScanner === s.id
+                                  ? 'border-violet-400 bg-violet-50/60 dark:bg-violet-950/30 ring-1 ring-violet-400/20'
+                                  : 'border-border hover:border-violet-300/60 hover:bg-muted/30',
+                              )}
+                            >
+                              <input
+                                type="radio"
+                                name="scanner-device"
+                                value={s.id}
+                                checked={selectedScanner === s.id}
+                                onChange={() => setSelectedScanner(s.id)}
+                                className="sr-only"
+                              />
+                              <div className={cn(
+                                'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border',
+                                isNetwork
+                                  ? 'bg-blue-50 border-blue-200 text-blue-600 dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-400'
+                                  : 'bg-violet-50 border-violet-200 text-violet-600 dark:bg-violet-950/40 dark:border-violet-800 dark:text-violet-400',
+                              )}>
+                                {isNetwork ? <Wifi className="h-5 w-5" /> : <Printer className="h-5 w-5" />}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold leading-tight truncate">{s.model || s.name}</p>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <Badge variant="outline" className={cn(
+                                    'text-[9px] h-4 px-1.5 shrink-0 font-mono',
+                                    isNetwork ? 'border-blue-300 text-blue-600 dark:border-blue-700 dark:text-blue-400'
+                                              : 'border-violet-300 text-violet-600 dark:border-violet-700 dark:text-violet-400',
+                                  )}>
+                                    {driverLabel}
+                                  </Badge>
+                                  <p className="text-[10px] text-muted-foreground font-mono truncate">{s.id}</p>
+                                </div>
+                              </div>
+                              <div className={cn(
+                                'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
+                                selectedScanner === s.id ? 'border-violet-500' : 'border-muted-foreground/30',
+                              )}>
+                                {selectedScanner === s.id && <div className="h-2.5 w-2.5 rounded-full bg-violet-500" />}
+                              </div>
+                            </label>
+                          )
+                        })}
                       </div>
                     )}
 
