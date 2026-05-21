@@ -47,6 +47,23 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **`scanimage -L` listing time reduced from ~9 s to <1 s on Linux/macOS**
+  (`scan-agent/agent.js`, `scan-agent/sane.d/`) — the system `dll.conf`
+  enables 40+ SANE backends that each probe USB, SNMP, and WSD on every
+  `scanimage -L` invocation. The agent now sets `SANE_CONFIG_DIR` to a
+  curated `sane.d/` directory bundled alongside `agent.js`, bypassing the
+  system config entirely. Only three backends are loaded:
+
+  - **`airscan`** — eSCL + WSD network scanners (RICOH, Canon, HP, Epson,
+    Brother, and any Mopria-compliant device). The RICOH MP C4503 is pinned
+    by static IP (`http://192.168.1.240`) so WSD re-discovery is skipped;
+    dynamic mDNS discovery remains enabled as a fallback.
+  - **`kds_i2000`** — Kodak Alaris i2000-series USB document scanners.
+  - **`kodakaio`** — Kodak consumer and AIO inkjet scanners (USB + SNMP).
+
+  Both the `listLinuxDevices()` and `scanLinux()` paths receive the
+  narrowed `SANE_ENV`; Windows behaviour is unchanged.
+
 - **Chrome PNA preflight always receives `Access-Control-Allow-Private-Network`**
   (`scan-agent/agent.js`) — added an explicit `app.options('*', …)` handler
   that fires *before* `cors()` and unconditionally sets the header in the

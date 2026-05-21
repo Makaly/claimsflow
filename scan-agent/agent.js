@@ -23,6 +23,12 @@ const PORT = process.env.SCAN_AGENT_PORT ? parseInt(process.env.SCAN_AGENT_PORT)
 const HOST = '127.0.0.1'; // localhost only — never expose to the network
 const OS   = platform();  // 'win32' | 'linux' | 'darwin'
 
+// On Linux/macOS, point scanimage at our minimal SANE config so only the
+// airscan backend loads. The system dll.conf enables 40+ backends that probe
+// USB/SNMP on every scanimage -L call and inflate listing time to ~9 seconds.
+const SANE_CONFIG_DIR = join(__dirname, 'sane.d');
+const SANE_ENV = OS !== 'win32' ? { ...process.env, SANE_CONFIG_DIR } : process.env;
+
 const ALLOWED_ORIGINS = [
   'https://claimsflow-frontend.onrender.com',
   'http://localhost:3000',
@@ -102,7 +108,7 @@ function imageToPdf(imageBuffer) {
 // ── Linux / macOS — SANE (scanimage) ────────────────────────────────────────
 async function listLinuxDevices() {
   try {
-    const { stdout } = await execFileAsync('scanimage', ['-L'], { timeout: 15_000 });
+    const { stdout } = await execFileAsync('scanimage', ['-L'], { timeout: 15_000, env: SANE_ENV });
     const devices = [];
     for (const line of stdout.split('\n')) {
       const m = line.match(/^device\s+`([^']+)'\s+is a\s+(.+)$/i);
@@ -130,7 +136,7 @@ async function scanLinux(deviceId, resolution, mode) {
     await execFileAsync(
       'scanimage',
       [`--device-name=${deviceId}`, `--resolution=${resolution}`, `--mode=${mode}`, '--format=png', '-o', tmpPng],
-      { timeout: 120_000 },
+      { timeout: 120_000, env: SANE_ENV },
     );
     return imageToPdf(await readFile(tmpPng));
   } finally {
