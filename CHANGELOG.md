@@ -40,6 +40,33 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `1200 dpi` added to the validated resolution list alongside 75, 150, 300,
   and 600.
 
+- **eSCL driver — source and paper size support** (`scan-agent/drivers/escl.js`) —
+  `scanEscl()` now accepts `{ source, skipBlank, paperSize }` options.
+  The eSCL `InputSource` field is set from a source map (`flatbed → Platen`,
+  `feeder → Feeder`, `feeder-duplex → FeederDuplex`). For ADF sources, the
+  driver loops `fetchDocument` until the scanner returns "no document ready",
+  collecting all pages. The scan region is sized from a paper-dimension map
+  in eSCL three-hundredths-of-an-inch units. `getEsclCapabilities()` added —
+  parses `ScannerCapabilities` XML for available `Platen`/`Feeder`/
+  `FeederDuplex` sources. Exported as `getEsclCapabilities`.
+
+- **NAPS2 driver — source and paper size support** (`scan-agent/drivers/naps2.js`) —
+  `scanNaps2()` and vendor profile helpers (`canonProfile`, `kodakProfile`,
+  `fujitsuProfile`, `genericProfile`) updated to accept `source` and
+  `paperSize`. A shared `buildSourceFlags()` helper maps source tokens to
+  NAPS2 `--source`/`--duplex` flags. `--skip-blank-pages` is passed when
+  `skipBlank` is true. Scan timeout extended to 5 minutes for ADF batches.
+
+- **Scan option state in Batch Upload UI** (`frontend/src/pages/BatchUpload.tsx`) —
+  three new controls added to the scan panel: paper source (auto / flatbed /
+  feeder / feeder-duplex), paper size (auto / A4 / A5 / Letter / Legal), and
+  a "skip blank pages" toggle (defaults to on). A `useEffect` on
+  `selectedScanner` fetches `GET /scanner/capabilities` from the local agent
+  and auto-selects the best available source (duplex feeder preferred).
+  Source, paper size, and skip-blank values are forwarded in both the local
+  agent `POST /scan` query string and the on-premises `api.post('/scanner/scan')`
+  request body.
+
 - **Scan preview dialog in Batch Upload** (`BatchUpload.tsx`) — after a
   hardware scan completes the scanned PDF is shown in an approval modal
   before it enters the upload queue. The dialog renders the PDF via pdf.js

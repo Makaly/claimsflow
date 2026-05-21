@@ -106,59 +106,71 @@ async function listAllNaps2Devices() {
 // ── Vendor-specific NAPS2 profiles ─────────────────────────────────────────
 // These translate ClaimsFlow scan settings to optimal NAPS2 CLI flags per brand.
 
-function canonProfile(resolution, colorMode) {
-  // Canon TWAIN drivers support up to 600 DPI on flatbed, 300 on ADF.
-  // Force ADF duplex when resolution ≤ 300 — optimal for invoice batches.
+// NAPS2 --page-size values
+const NAPS2_PAGE_SIZE = { a4: 'a4', a5: 'a5', letter: 'letter', legal: 'legal', auto: 'a4' };
+
+function buildSourceFlags(source, duplex) {
+  const flags = [];
+  if (source === 'flatbed') {
+    flags.push('--source', 'glass');
+  } else if (source === 'feeder') {
+    flags.push('--source', 'feeder');
+  } else if (source === 'feeder-duplex') {
+    flags.push('--source', 'feeder', '--duplex');
+  }
+  // 'auto' → no flags, let NAPS2 use device default
+  if (duplex && source === 'feeder') flags.push('--duplex');
+  return flags;
+}
+
+function canonProfile(resolution, colorMode, source, paperSize) {
   return [
     '--dpi', String(resolution),
     '--color-mode', colorMode === 'Color' ? 'color' : colorMode === 'Gray' ? 'gray' : 'bw',
-    '--page-size', 'a4',
-    '--compress', 'jpeg',   // Canon JPEG compression is high quality
+    '--page-size', NAPS2_PAGE_SIZE[paperSize] ?? 'a4',
+    '--compress', 'jpeg',
     '--jpeg-quality', '92',
+    ...buildSourceFlags(source, false),
   ];
 }
 
-function kodakProfile(resolution, colorMode) {
-  // Kodak Alaris scanners excel at high-speed duplex ADF scanning.
-  // Their TWAIN driver supports blank-page detection.
+function kodakProfile(resolution, colorMode, source, paperSize) {
   return [
     '--dpi', String(resolution),
     '--color-mode', colorMode === 'Color' ? 'color' : colorMode === 'Gray' ? 'gray' : 'bw',
-    '--page-size', 'a4',
-    '--source', 'feeder',   // Kodak's strength is ADF
-    '--duplex',
+    '--page-size', NAPS2_PAGE_SIZE[paperSize] ?? 'a4',
     '--compress', 'jpeg',
     '--jpeg-quality', '90',
+    ...buildSourceFlags(source === 'auto' ? 'feeder-duplex' : source, false),
   ];
 }
 
-function fujitsuProfile(resolution, colorMode) {
-  // Fujitsu PaperStream/fi-series: excellent image processing built into driver.
+function fujitsuProfile(resolution, colorMode, source, paperSize) {
   return [
     '--dpi', String(resolution),
     '--color-mode', colorMode === 'Color' ? 'color' : colorMode === 'Gray' ? 'gray' : 'bw',
-    '--page-size', 'a4',
-    '--source', 'feeder',
-    '--duplex',
+    '--page-size', NAPS2_PAGE_SIZE[paperSize] ?? 'a4',
     '--compress', 'jpeg',
     '--jpeg-quality', '95',
+    ...buildSourceFlags(source === 'auto' ? 'feeder-duplex' : source, false),
   ];
 }
 
-function genericProfile(resolution, colorMode) {
+function genericProfile(resolution, colorMode, source, paperSize) {
   return [
     '--dpi', String(resolution),
     '--color-mode', colorMode === 'Color' ? 'color' : colorMode === 'Gray' ? 'gray' : 'bw',
-    '--page-size', 'a4',
+    '--page-size', NAPS2_PAGE_SIZE[paperSize] ?? 'a4',
+    ...buildSourceFlags(source, false),
   ];
 }
 
-function vendorProfile(deviceName, resolution, colorMode) {
+function vendorProfile(deviceName, resolution, colorMode, source = 'auto', paperSize = 'auto') {
   const n = (deviceName || '').toLowerCase();
-  if (n.includes('canon'))   return canonProfile(resolution, colorMode);
-  if (n.includes('kodak') || n.includes('alaris')) return kodakProfile(resolution, colorMode);
-  if (n.includes('fujitsu') || n.includes('scansnap') || n.includes('fi-')) return fujitsuProfile(resolution, colorMode);
-  return genericProfile(resolution, colorMode);
+  if (n.includes('canon'))   return canonProfile(resolution, colorMode, source, paperSize);
+  if (n.includes('kodak') || n.includes('alaris')) return kodakProfile(resolution, colorMode, source, paperSize);
+  if (n.includes('fujitsu') || n.includes('scansnap') || n.includes('fi-')) return fujitsuProfile(resolution, colorMode, source, paperSize);
+  return genericProfile(resolution, colorMode, source, paperSize);
 }
 
 // ── Scan ────────────────────────────────────────────────────────────────────
@@ -166,8 +178,11 @@ function vendorProfile(deviceName, resolution, colorMode) {
 /**
  * Scan using NAPS2.
  * deviceId: 'naps2:twain:Canon MF753Cdw'
+ * opts: { source, skipBlank, paperSize }
  */
-async function scanNaps2(deviceId, resolution, colorMode) {
+async function scanNaps2(deviceId, resolution, colorMode, opts = {}) {
+  const { source = 'auto', skipBlank = false, paperSize = 'auto' } = opts;
+
   // Parse: naps2:<driver>:<device name>
   const [, driverType, ...nameParts] = deviceId.split(':');
   const deviceName = nameParts.join(':');
@@ -175,7 +190,8 @@ async function scanNaps2(deviceId, resolution, colorMode) {
   const outPath = join(tmpdir(), `cfa-naps2-${randomUUID()}.pdf`);
   const bin = naps2Binary();
 
-  const vendorFlags = vendorProfile(deviceName, resolution, colorMode);
+  const vendorFlags = vendorProfile(deviceName, resolution, colorMode, source, paperSize);
+  const skipBlankFlag = skipBlank ? ['--skip-blank-pages'] : [];
 
   try {
     await execAsync(bin, [
@@ -185,7 +201,8 @@ async function scanNaps2(deviceId, resolution, colorMode) {
       '--output',  outPath,
       '--format',  'pdf',
       ...vendorFlags,
-    ], { timeout: 120_000 });
+      ...skipBlankFlag,
+    ], { timeout: 300_000 });
 
     return await readFile(outPath);
   } finally {

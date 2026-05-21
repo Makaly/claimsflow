@@ -17,6 +17,7 @@ import {
   Underline, Strikethrough, ChevronDown, Save, MapPin,
   Copy, Check, AlertTriangle, Trash2,
   ScanLine, Printer, RefreshCw, WifiOff, Wifi, Camera, CameraOff,
+  Layers, FileX, RotateCw, FileStack,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -27,6 +28,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -2161,6 +2163,13 @@ export default function BatchUpload() {
 
   const [scanDpi, setScanDpi] = useState('300')
   const [scanMode, setScanMode] = useState('Color')
+  type ScanSource = 'auto' | 'flatbed' | 'feeder' | 'feeder-duplex'
+  type ScanPaperSize = 'auto' | 'a4' | 'a5' | 'letter' | 'legal'
+  const [scanSource, setScanSource] = useState<ScanSource>('auto')
+  const [scanSkipBlank, setScanSkipBlank] = useState(true)
+  const [scanPaperSize, setScanPaperSize] = useState<ScanPaperSize>('auto')
+  const [scannerCaps, setScannerCaps] = useState<{ sources: string[]; duplex: boolean } | null>(null)
+  const [scannerCapsLoading, setScannerCapsLoading] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
 
@@ -2577,6 +2586,27 @@ export default function BatchUpload() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputTab])
 
+  // Fetch capabilities (available sources/duplex) whenever the selected scanner changes
+  useEffect(() => {
+    if (!selectedScanner || !agentAvailable) { setScannerCaps(null); return }
+    let cancelled = false
+    setScannerCapsLoading(true)
+    fetch(`${AGENT_URL}/scanner/capabilities?deviceId=${encodeURIComponent(selectedScanner)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(caps => {
+        if (cancelled) return
+        setScannerCaps(caps ?? null)
+        // Auto-select duplex feeder when available; otherwise keep 'auto'
+        if (caps?.sources?.includes('feeder-duplex'))      setScanSource('feeder-duplex')
+        else if (caps?.sources?.includes('feeder'))        setScanSource('feeder')
+        else                                               setScanSource('flatbed')
+      })
+      .catch(() => { if (!cancelled) setScannerCaps(null) })
+      .finally(() => { if (!cancelled) setScannerCapsLoading(false) })
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedScanner, agentAvailable])
+
   const handleScan = useCallback(async () => {
     if (!selectedScanner || scanning) return
     // Metering gate — admin can flip scanning off for an organization
@@ -2608,11 +2638,13 @@ export default function BatchUpload() {
           deviceId: selectedScanner,
           resolution: String(parseInt(scanDpi, 10)),
           mode: scanMode,
+          source: scanSource,
+          paperSize: scanPaperSize,
+          skipBlank: String(scanSkipBlank),
         })
         const resp = await fetch(`${AGENT_URL}/scan?${scanParams}`, { method: 'POST' })
         if (!resp.ok) {
           const err = await resp.json().catch(() => ({}))
-          // Record the failed scan so dashboards reflect real-world reliability
           meter.recordScan({
             deviceClass: 'desktop',
             machineHostname: agentHostname ?? undefined,
@@ -2626,7 +2658,6 @@ export default function BatchUpload() {
           throw new Error(err.error ?? 'Scan failed')
         }
         blob = await resp.blob()
-        // The agent path bypasses our backend, so record the billable event from the browser.
         meter.recordScan({
           deviceClass: 'desktop',
           machineHostname: agentHostname ?? undefined,
@@ -2637,14 +2668,16 @@ export default function BatchUpload() {
           success: true,
         })
       } else {
-        // On-premises: scanner is on the server. Backend records metering itself —
-        // we only forward machine context for the audit log.
+        // On-premises: scanner is on the server. Backend records metering itself.
         const resp = await api.post(
           '/scanner/scan',
           {
             deviceId: selectedScanner,
             resolution: parseInt(scanDpi, 10),
             mode: scanMode,
+            source: scanSource,
+            paperSize: scanPaperSize,
+            skipBlank: scanSkipBlank,
             machineHostname: agentHostname ?? undefined,
             os: agentOs ?? undefined,
           },
@@ -2665,7 +2698,7 @@ export default function BatchUpload() {
     } finally {
       setScanning(false)
     }
-  }, [agentAvailable, agentHostname, agentOs, scanners, selectedScanner, scanning, scanDpi, scanMode, session, upsertSession, meter])
+  }, [agentAvailable, agentHostname, agentOs, scanners, selectedScanner, scanning, scanDpi, scanMode, scanSource, scanPaperSize, scanSkipBlank, session, upsertSession, meter])
 
   // ── Scan preview helpers ──────────────────────────────────────────────────
   const closeScanPreview = useCallback(() => {
