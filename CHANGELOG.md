@@ -9,6 +9,65 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **Scan preview dialog in Batch Upload** (`BatchUpload.tsx`) — after a
+  hardware scan completes the scanned PDF is shown in an approval modal
+  before it enters the upload queue. The dialog renders the PDF via pdf.js
+  with full multi-page navigation (previous / next buttons, page indicator)
+  and zoom controls (25 % steps, 50 %–300 % range). The operator can:
+
+  - **Approve & Process** — adds the file to the queue and closes the dialog.
+  - **Rescan** — discards the blob and returns to the scanner panel.
+  - **Cancel** — same as Rescan; the blob URL is revoked and memory is freed.
+
+  This prevents obviously misaligned or blank scans from silently entering
+  the AI extraction pipeline.
+
+### Changed
+
+- **Scanner list redesigned in Batch Upload** (`BatchUpload.tsx`) — both
+  scanner list panels (cloud-hosted path and scan-agent path) now display:
+
+  - **Network vs. USB icon** — eSCL/AirScan scanners show a `Wifi` icon in
+    a blue tile; USB/SANE scanners show a `Printer` icon in a violet tile.
+  - **Driver badge** — a compact `eSCL`, `AirScan`, `WIA`, `TWAIN`, `NAPS2`,
+    or `SANE` badge beneath the model name so operators can see which
+    protocol is in use without reading the raw device ID.
+  - **Custom radio indicator** — the native OS radio control is replaced by
+    a filled/unfilled circle styled to match the rest of the design system.
+  - **Hostname and count** — the Connected Scanners heading shows the total
+    device count in a badge and the hostname of the scan-agent machine in
+    the subtitle line. The "Scan Agent connected" status banner also shows
+    the hostname.
+
+- **Stale-agent health guard before each scan** (`BatchUpload.tsx`) — a
+  lightweight `GET /health` ping with a 1.5 s timeout now runs immediately
+  before dispatching to the local scan agent. If the agent has stopped since
+  the page loaded, `agentAvailable` is cleared and the cloud path is used
+  instead of surfacing a confusing CORS or network error to the user.
+
+### Fixed
+
+- **Chrome PNA preflight always receives `Access-Control-Allow-Private-Network`**
+  (`scan-agent/agent.js`) — added an explicit `app.options('*', …)` handler
+  that fires *before* `cors()` and unconditionally sets the header in the
+  204 preflight response. The previous approach (middleware appending the
+  header to the `cors()` response) was sometimes ignored by Chrome when the
+  handler chain modified response headers after the fact.
+
+- **Device list cached to avoid per-scan mDNS re-discovery**
+  (`scan-agent/agent.js`) — `listDevices()` now returns a cached result for
+  5 minutes after the last discovery run. Previously every `/scan` request
+  triggered a full mDNS discovery cycle, causing noticeable latency when
+  networks had many Bonjour devices.
+
+- **AirScan `wN` index normalised at scan time** (`scan-agent/agent.js`) —
+  the numeric index in airscan device IDs (`airscan:w0:Scanner%20Name`) is
+  non-deterministic across `scanimage -L` runs. `/scan` now accepts a device
+  whose name-suffix matches even when the exact `wN` index differs from the
+  stored ID, resolving it to the canonical live ID before dispatching to the
+  driver. Devices saved in the UI as `airscan:w0:…` continue to work after
+  an agent restart that renumbers them to `airscan:w1:…`.
+
 - **`CameraScanner` — fullscreen document capture overlay**
   (`frontend/src/components/CameraScanner.tsx`) — a self-contained
   component that handles the complete camera-to-upload workflow on mobile
