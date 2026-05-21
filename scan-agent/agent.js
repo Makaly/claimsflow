@@ -355,7 +355,8 @@ app.get('/scanners', async (_req, res) => {
 });
 
 app.post('/scan', async (req, res) => {
-  const { deviceId, resolution: rawRes, mode: rawMode } = req.body ?? {};
+  // Accept params from query string (no-body POST = no CORS preflight) or JSON body.
+  const { deviceId, resolution: rawRes, mode: rawMode } = { ...req.query, ...(req.body ?? {}) };
   if (!deviceId?.trim()) {
     return res.status(400).json({ error: 'deviceId is required' });
   }

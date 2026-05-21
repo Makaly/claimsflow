@@ -185,6 +185,7 @@ Or edit the systemd unit / launchd plist / Windows service config and restart th
 ## Security
 
 - Binds to `127.0.0.1` only — unreachable from other machines on the network.
-- CORS is restricted to `claimsflow-frontend.onrender.com` and localhost origins.
-- Device IDs are validated against the live discovered device list before any scan is executed — no shell injection possible.
+- CORS is restricted to `claimsflow-frontend.onrender.com` and localhost origins. Chrome's Private Network Access (PNA) preflight is handled by an explicit `OPTIONS` handler that emits `Access-Control-Allow-Private-Network: true` before `cors()` processes the request, ensuring HTTPS-hosted frontends can reach the local agent without silent browser blocks.
+- Device IDs are validated against the live discovered device list before any scan is executed — no shell injection possible. For AirScan / eSCL devices, whose `airscan:wN:` index is non-deterministic across `scanimage -L` runs, validation falls back to a name-suffix match and resolves the request to the current live ID.
+- The device list is cached in memory for 5 minutes (`DEVICE_CACHE_TTL_MS`) to avoid triggering slow mDNS discovery on every scan request.
 - The Linux/macOS installer downloads from `https://github.com/Makaly/claimsflow/releases/...` over TLS. Inspect the script before running by saving it to disk first (`curl -o`) rather than piping straight to `bash`.
