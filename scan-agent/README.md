@@ -182,6 +182,24 @@ Or edit the systemd unit / launchd plist / Windows service config and restart th
 
 ---
 
+## Linux / macOS — SANE performance
+
+The agent ships a curated `sane.d/` directory alongside `agent.js`. On Linux and macOS it sets `SANE_CONFIG_DIR` to this directory before invoking `scanimage`, bypassing the system `/etc/sane.d/dll.conf` which typically enables 40+ backends. Those backends probe USB, SNMP, and WSD on **every** `scanimage -L` call, inflating device-list time to ~9 seconds on networks with many Bonjour devices.
+
+The bundled config enables only three backends:
+
+| Backend | What it covers |
+|---|---|
+| `airscan` | eSCL + WSD network scanners — RICOH, Canon, HP, Epson, Brother, and any Mopria-compliant device |
+| `kds_i2000` | Kodak Alaris i2000-series USB document scanners |
+| `kodakaio` | Kodak consumer and AIO inkjet scanners (USB + SNMP network) |
+
+This reduces device-listing latency to under 1 second. Windows is unaffected (it uses WIA/TWAIN, not SANE).
+
+To add a backend not in this list, append its name to `sane.d/dll.conf` and place the matching `<backend>.conf` in the same directory.
+
+---
+
 ## Security
 
 - Binds to `127.0.0.1` only — unreachable from other machines on the network.
