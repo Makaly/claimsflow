@@ -9,6 +9,37 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **ADF batch scanning with multi-page PDF output** (`scan-agent/agent.js`) —
+  the `/scan` endpoint now accepts a `source` parameter (`flatbed`, `feeder`,
+  `feeder-duplex`, `auto`). When `feeder` or `feeder-duplex` is selected on
+  Linux/macOS, the agent invokes `scanimage --batch` to collect all pages
+  from the document feeder in a single pass and assembles them into a
+  multi-page PDF. On Windows the WIA
+  `WIA_IPS_DOCUMENT_HANDLING_SELECT` property is set accordingly.
+
+- **Paper size selection** (`scan-agent/agent.js`) — the `/scan` endpoint
+  accepts a `paperSize` parameter (`a4`, `a5`, `letter`, `legal`, `auto`).
+  The PDF canvas is sized to match the chosen paper, with the scanned image
+  fitted and centred. Defaults to A4 when `auto` or unset.
+
+- **Blank page detection** (`scan-agent/agent.js`) — an optional
+  `skipBlank=true` flag enables a heuristic PNG IDAT-size check. Pages
+  whose compressed pixel data is suspiciously small relative to image
+  dimensions (threshold 0.4 % bytes/pixel) are discarded silently from ADF
+  batches, or return a descriptive error for single-page scans. This avoids
+  blank pages from ADF over-feeds entering the extraction pipeline.
+
+- **`GET /scanner/capabilities` endpoint** (`scan-agent/agent.js`) — given a
+  `deviceId` query parameter, returns the available paper sources and whether
+  duplex scanning is supported. For eSCL devices, capabilities are parsed
+  from the `ScannerCapabilities` XML; for SANE devices, `scanimage --help`
+  output is parsed for `--source` options; other devices default to
+  `{sources: ['flatbed', 'feeder', 'feeder-duplex'], duplex: true}`.
+
+- **Expanded resolution set** (`scan-agent/agent.js`) — `200 dpi` and
+  `1200 dpi` added to the validated resolution list alongside 75, 150, 300,
+  and 600.
+
 - **Scan preview dialog in Batch Upload** (`BatchUpload.tsx`) — after a
   hardware scan completes the scanned PDF is shown in an approval modal
   before it enters the upload queue. The dialog renders the PDF via pdf.js

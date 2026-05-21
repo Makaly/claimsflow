@@ -168,6 +168,46 @@ Or edit the systemd unit / launchd plist / Windows service config and restart th
 
 ---
 
+## Scan options
+
+The `/scan` endpoint accepts the following parameters (query string or JSON body):
+
+| Parameter | Values | Default | Notes |
+|---|---|---|---|
+| `deviceId` | scanner ID | — | required; validated against live device list |
+| `resolution` | `75`, `150`, `200`, `300`, `600`, `1200` | `300` | dpi |
+| `mode` | `Color`, `Gray`, `Lineart` | `Color` | |
+| `source` | `auto`, `flatbed`, `feeder`, `feeder-duplex` | `auto` | ADF batch on Linux/macOS; WIA source on Windows |
+| `paperSize` | `auto`, `a4`, `a5`, `letter`, `legal` | `auto` (A4) | PDF canvas size |
+| `skipBlank` | `true` / `false` | `false` | discard blank pages in ADF batch scans |
+
+### ADF / document feeder
+
+When `source=feeder` or `source=feeder-duplex` is set on Linux/macOS, `scanimage --batch` collects all pages from the feeder in a single pass and returns a multi-page PDF. On Windows, the WIA document-handling property is set appropriately.
+
+### Blank page detection
+
+With `skipBlank=true`, each page's PNG IDAT payload size is compared against its pixel dimensions. Pages whose compressed data falls below 0.4 bytes/pixel are discarded as blank. Single-page scans with `skipBlank=true` return an error if the page is blank rather than silently returning an empty PDF.
+
+### Scanner capabilities
+
+```
+GET http://127.0.0.1:7420/scanner/capabilities?deviceId=<id>
+```
+
+Returns:
+
+```json
+{
+  "sources": ["flatbed", "feeder", "feeder-duplex"],
+  "duplex": true
+}
+```
+
+For eSCL devices, capabilities are parsed from the `ScannerCapabilities` XML; for SANE devices, `scanimage --help` is queried; other scanners default to all sources.
+
+---
+
 ## Scanner compatibility
 
 | Interface | Windows | Linux | macOS |
