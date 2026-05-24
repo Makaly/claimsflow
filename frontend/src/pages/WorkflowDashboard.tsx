@@ -4,6 +4,7 @@ import { useAuthStore } from '@/store/authStore'
 import {
   GitBranch, UserCheck, UserCog, CheckCircle, Clock,
   AlertTriangle, ArrowRight, Users, Loader2, RefreshCw,
+  Plane, AlertCircle,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -30,6 +31,18 @@ interface WorkflowStats {
 interface ReviewerWorkload {
   name: string
   assigned: number
+  completed: number
+}
+
+interface MakerCheckerMember {
+  id: string
+  name: string
+  email: string
+  isActive: boolean
+  isOnLeave: boolean
+  reliever: { id: string; name: string } | null
+  open: number
+  urgent: number
   completed: number
 }
 
@@ -81,15 +94,17 @@ export default function WorkflowDashboard() {
   const canManageProviders = user?.role === 'admin' || user?.role === 'claims_officer'
   const [stats, setStats] = useState<WorkflowStats | null>(null)
   const [workload, setWorkload] = useState<ReviewerWorkload[]>([])
+  const [mcWorkload, setMcWorkload] = useState<MakerCheckerMember[]>([])
   const [activity, setActivity] = useState<RecentAction[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
   const fetchData = async () => {
     try {
-      const [statsRes, workloadRes, activityRes] = await Promise.allSettled([
+      const [statsRes, workloadRes, mcWorkloadRes, activityRes] = await Promise.allSettled([
         api.get('/workflow/statistics'),
         api.get('/workflow/reviewer-workload'),
+        api.get('/workflow/maker-checker-workload'),
         api.get('/activity-logs?limit=10'),
       ])
       if (statsRes.status === 'fulfilled') {
@@ -114,6 +129,9 @@ export default function WorkflowDashboard() {
           completed: r.completed ?? r.completedCount ?? 0,
         }))
         setWorkload(list)
+      }
+      if (mcWorkloadRes.status === 'fulfilled') {
+        setMcWorkload(Array.isArray(mcWorkloadRes.value.data) ? mcWorkloadRes.value.data : [])
       }
       if (activityRes.status === 'fulfilled') {
         const data = activityRes.value.data
@@ -254,31 +272,56 @@ export default function WorkflowDashboard() {
           </CardContent>
         </Card>
 
-        {/* Reviewer Workload */}
+        {/* Maker-Checker Workload */}
         <Card>
           <CardHeader>
-            <CardTitle>Reviewer Workload</CardTitle>
-            <CardDescription>Claims completed vs. assigned per reviewer</CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <UserCog className="h-4 w-4" /> Maker-Checker Workload
+            </CardTitle>
+            <CardDescription>Open claims per team member · urgent · leave status</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {workload.map((r, i) => (
-                <div key={r.name ?? i} className="space-y-1">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="font-medium">{r.name}</span>
-                    <span className="text-muted-foreground text-xs">
-                      {r.completed}/{r.assigned}
-                      <span className={`ml-2 font-medium ${
-                        r.assigned > 0 && (r.completed / r.assigned) >= 0.8 ? 'text-emerald-600' : 'text-amber-600'
-                      }`}>
-                        {r.assigned > 0 ? `${Math.round((r.completed / r.assigned) * 100)}%` : '—'}
-                      </span>
-                    </span>
-                  </div>
-                  <Progress value={r.assigned > 0 ? (r.completed / r.assigned) * 100 : 0} className="h-1.5" />
-                </div>
-              ))}
-            </div>
+          <CardContent className="p-0">
+            {mcWorkload.length === 0 ? (
+              <p className="text-sm text-muted-foreground px-6 py-4">No maker-checker users found.</p>
+            ) : (
+              <div className="divide-y">
+                {mcWorkload.map((m) => {
+                  const total = m.open + m.completed
+                  const pct   = total > 0 ? Math.round((m.completed / total) * 100) : 0
+                  return (
+                    <div key={m.id} className="px-6 py-3 space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-medium text-sm truncate">{m.name}</span>
+                          {m.isOnLeave && (
+                            <Badge variant="secondary" className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 flex items-center gap-1 shrink-0">
+                              <Plane className="h-3 w-3" /> On Leave
+                            </Badge>
+                          )}
+                          {!m.isActive && (
+                            <Badge variant="secondary" className="text-xs bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400 shrink-0">Inactive</Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 text-xs shrink-0">
+                          {m.urgent > 0 && (
+                            <span className="flex items-center gap-1 text-red-600 font-medium">
+                              <AlertCircle className="h-3 w-3" />{m.urgent} urgent
+                            </span>
+                          )}
+                          <span className="text-muted-foreground">
+                            <span className="font-semibold text-foreground">{m.open}</span> open · {m.completed} done
+                          </span>
+                        </div>
+                      </div>
+                      <Progress value={pct} className="h-1.5" />
+                      {m.isOnLeave && m.reliever && (
+                        <p className="text-xs text-muted-foreground">Reliever: <span className="font-medium text-foreground">{m.reliever.name}</span></p>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

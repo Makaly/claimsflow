@@ -90,13 +90,13 @@ export class MakerCheckerService {
 
     if (!claim) throw new BadRequestException('Claim not found');
     if (claim.workflowStage !== 'maker_checker_review') throw new BadRequestException('Claim is not in maker-checker review stage');
-    if (claim.assignedTo !== makerId) throw new ForbiddenException('You are not assigned to this claim');
+    if (claim.assignedTo && claim.assignedTo !== makerId) throw new ForbiddenException('You are not assigned to this claim');
 
     await this.prisma.claimApproval.create({
       data: {
         claimId,
-        level: 'maker',
-        approvalStage: 'first_approval',
+        level: 'maker_checker',
+        approvalStage: 'maker_checker_approval',
         approvedBy: makerId,
         decision: 'approved',
         comments,
@@ -106,7 +106,7 @@ export class MakerCheckerService {
     const updatedClaim = await this.prisma.claim.update({
       where: { id: claimId },
       data: {
-        workflowStage: 'maker_checker_review',
+        workflowStage: 'claims_officer_review',
         assignedTo: null,
         reviewedAt: new Date(),
       },
@@ -118,47 +118,47 @@ export class MakerCheckerService {
         fromStatus: claim.status,
         toStatus: 'under_review',
         changedBy: makerId,
-        reason: 'Approved by maker, pending checker review',
+        reason: 'Maker-checker verified — forwarded to claims officer for final approval',
       },
     });
 
     await this.audit.record({
       actor: { userId: makerId },
-      action: 'maker_approved',
+      action: 'maker_checker_approved',
       entity: 'claim',
       entityId: claimId,
       oldValue: { workflowStage: claim.workflowStage, assignedTo: claim.assignedTo },
-      newValue: { workflowStage: 'maker_checker_review', assignedTo: null },
+      newValue: { workflowStage: 'claims_officer_review', assignedTo: null },
       metadata: { claimNumber: claim.claimNumber, decision: 'approved', comments },
     });
 
-    // ─── Notifications: recipient (checkers) + actor (maker) ──────────
-    const checkerIds = await this.findCheckers();
+    // ─── Notifications: fire-and-forget so the API response is not held up by SMTP ──
+    const officerIds = await this.findClaimsOfficers();
     const makerNotes = comments?.trim() ?? '';
-    await this.emailUsersHtml(checkerIds, {
-      subject: `Invoice awaiting second-level review: ${claim.claimNumber}`,
-      badgeText: 'Review Required', badgeStyle: 'blue',
-      title: 'Invoice in Checker Queue',
-      subtitle: `Passed first-level review · awaiting your verification`,
+    void this.emailUsersHtml(officerIds, {
+      subject: `Invoice ready for final approval: ${claim.claimNumber}`,
+      badgeText: 'Action Required', badgeStyle: 'blue',
+      title: 'Invoice in Claims Officer Queue',
+      subtitle: 'Maker-checker verification complete · awaiting your final decision',
       claimNumber: claim.claimNumber,
       providerName: claim.provider?.name ?? 'Unknown provider',
       invoiceAmount: claim.invoiceAmount ?? undefined,
       bodyLines: [
-        `Invoice <strong style="color:#e4e4e7">${claim.claimNumber}</strong> has been approved at first-level (maker) review and is now awaiting your second-level verification.`,
-        'Please review the submission in the Checker Queue and either approve or return it for corrections.',
+        `Invoice <strong style="color:#e4e4e7">${claim.claimNumber}</strong> has passed maker-checker verification and is now awaiting your final approval decision.`,
+        'Please review the submission in the Claims Officer Queue and approve or reject it.',
       ],
-      ...(makerNotes ? { reasonLabel: "Maker's notes", reasonText: makerNotes } : {}),
-      ctaText: 'Open Checker Queue', ctaUrl: `${this.appUrl}/workflow`,
+      ...(makerNotes ? { reasonLabel: "Maker-checker notes", reasonText: makerNotes } : {}),
+      ctaText: 'Open Claims Officer Queue', ctaUrl: `${this.appUrl}/workflow/claims-officer`,
     });
-    await this.emailUserHtml(makerId, {
-      subject: `You approved claim ${claim.claimNumber}`,
-      badgeText: 'Submitted', badgeStyle: 'green',
-      title: 'Claim Forwarded to Checker',
+    void this.emailUserHtml(makerId, {
+      subject: `You verified claim ${claim.claimNumber}`,
+      badgeText: 'Verified', badgeStyle: 'green',
+      title: 'Claim Forwarded to Claims Officer',
       claimNumber: claim.claimNumber,
       providerName: claim.provider?.name ?? 'Unknown provider',
       bodyLines: [
-        `You approved claim <strong style="color:#e4e4e7">${claim.claimNumber}</strong> and forwarded it to the Checker Queue.`,
-        'The checker team has been notified and will complete second-level verification.',
+        `You verified claim <strong style="color:#e4e4e7">${claim.claimNumber}</strong> and forwarded it to the Claims Officer Queue for final approval.`,
+        'The claims officer team has been notified.',
       ],
       ...(makerNotes ? { reasonLabel: "Your notes", reasonText: makerNotes } : {}),
     });
@@ -174,7 +174,7 @@ export class MakerCheckerService {
 
     if (!claim) throw new BadRequestException('Claim not found');
     if (claim.workflowStage !== 'maker_checker_review') throw new BadRequestException('Claim is not in maker-checker review stage');
-    if (claim.assignedTo !== makerId) throw new ForbiddenException('You are not assigned to this claim');
+    if (claim.assignedTo && claim.assignedTo !== makerId) throw new ForbiddenException('You are not assigned to this claim');
 
     await this.prisma.claimApproval.create({
       data: {
@@ -1278,7 +1278,7 @@ export class MakerCheckerService {
     if (orphans.length === 0) return { routed: 0, claims: [] };
 
     const officers = await this.prisma.user.findMany({
-      where: { role: 'claims_officer', isActive: true },
+      where: { role: 'maker_checker', isActive: true },
       select: {
         id: true,
         name: true,
@@ -1336,6 +1336,70 @@ export class MakerCheckerService {
     }
 
     return { routed: routed.length, claims: routed };
+  }
+
+  /**
+   * Mark a maker_checker user as on leave and redistribute their open claims.
+   * Claims go to their designated reliever; if none is set, they are spread
+   * across other active maker_checker users by workload.
+   */
+  async setUserLeave(userId: string, isOnLeave: boolean, relieverId?: string | null, actorId?: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new BadRequestException('User not found');
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        isOnLeave,
+        ...(relieverId !== undefined ? { relieverId } : {}),
+      },
+    });
+
+    if (!isOnLeave) return { redistributed: 0 };
+
+    // Find the reliever: explicit reliever first, else any active maker_checker.
+    const candidates = await this.prisma.user.findMany({
+      where: {
+        isActive: true,
+        isOnLeave: false,
+        id: { not: userId },
+        role: 'maker_checker',
+      },
+      select: {
+        id: true,
+        name: true,
+        _count: { select: { claimsAssigned: { where: { workflowStage: 'maker_checker_review' } } } },
+      },
+    });
+
+    if (candidates.length === 0) return { redistributed: 0 };
+
+    // Prefer designated reliever; fall back to least-loaded active user.
+    const preferred = relieverId ? candidates.find(c => c.id === relieverId) : null;
+    candidates.sort((a, b) => a._count.claimsAssigned - b._count.claimsAssigned);
+
+    const openClaims = await this.prisma.claim.findMany({
+      where: { assignedTo: userId, workflowStage: 'maker_checker_review' },
+      select: { id: true, claimNumber: true },
+    });
+
+    let cursor = 0;
+    for (const claim of openClaims) {
+      const target = preferred ?? candidates[cursor % candidates.length];
+      cursor++;
+      await this.prisma.claim.update({ where: { id: claim.id }, data: { assignedTo: target.id } });
+      await this.prisma.claimStatusHistory.create({
+        data: {
+          claimId: claim.id,
+          fromStatus: 'under_review',
+          toStatus: 'under_review',
+          changedBy: actorId ?? null,
+          reason: `Reassigned to ${target.name} — ${user.name} is on leave`,
+        },
+      });
+    }
+
+    return { redistributed: openClaims.length };
   }
 
   async getApprovalHistory(claimId: string) {

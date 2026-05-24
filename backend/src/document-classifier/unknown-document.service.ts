@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -24,6 +24,7 @@ export class UnknownDocumentService {
     mimeType: string;
     claimId?: string;
     uploadedBy?: string;
+    classificationReason?: string;
   }) {
     const client = this.getClient();
     let guessedType: string | undefined;
@@ -96,15 +97,16 @@ export class UnknownDocumentService {
 
     const record = await this.prisma.unknownDocument.create({
       data: {
-        filePath:        permanentPath,
-        fileName:        params.fileName,
-        mimeType:        params.mimeType,
-        claimId:         params.claimId,
-        uploadedBy:      params.uploadedBy,
+        filePath:              permanentPath,
+        fileName:              params.fileName,
+        mimeType:              params.mimeType,
+        claimId:               params.claimId,
+        uploadedBy:            params.uploadedBy,
+        classificationReason:  params.classificationReason,
         guessedType,
         guessedProvider,
-        rawExtract:      rawExtract ?? {},
-        status:          'pending',
+        rawExtract:            rawExtract ?? {},
+        status:                'pending',
       },
     });
 
@@ -183,6 +185,78 @@ export class UnknownDocumentService {
     const mime = ({ '.pdf': 'application/pdf', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png' })[ext] || 'application/octet-stream';
     res.set({ 'Content-Type': mime, 'Content-Disposition': `inline; filename="${doc.fileName}"` });
     fs.createReadStream(doc.filePath).pipe(res);
+  }
+
+  async promoteToTemplate(id: string, templateId: string, reviewedBy: string): Promise<{ templateId: string }> {
+    const doc = await this.findOne(id);
+    if (!fs.existsSync(doc.filePath)) {
+      throw new BadRequestException('Source file no longer exists on disk');
+    }
+
+    const template = await this.prisma.ocrTemplate.findUnique({ where: { id: templateId } });
+    if (!template) throw new NotFoundException(`Template ${templateId} not found`);
+
+    const templatesDir = path.join(process.cwd(), 'uploads', 'templates');
+    fs.mkdirSync(templatesDir, { recursive: true });
+    const ext = path.extname(doc.filePath);
+    const destName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+    const destPath = path.join(templatesDir, destName);
+    fs.copyFileSync(doc.filePath, destPath);
+
+    // Remove old sample file if present
+    if (template.sampleFilePath && fs.existsSync(template.sampleFilePath)) {
+      try { fs.unlinkSync(template.sampleFilePath); } catch (_) {}
+    }
+
+    await this.prisma.ocrTemplate.update({
+      where: { id: templateId },
+      data: { sampleFilePath: destPath, sampleFileName: doc.fileName },
+    });
+
+    await this.prisma.unknownDocument.update({
+      where: { id },
+      data: { status: 'template_created', reviewedBy, reviewedAt: new Date() },
+    });
+
+    return { templateId };
+  }
+
+  async createTemplateFromUnknown(
+    id: string,
+    templateData: { name: string; documentType: string; description?: string; providerType?: string; specificProvider?: string },
+    reviewedBy: string,
+  ): Promise<{ templateId: string }> {
+    const doc = await this.findOne(id);
+    if (!fs.existsSync(doc.filePath)) {
+      throw new BadRequestException('Source file no longer exists on disk');
+    }
+
+    const templatesDir = path.join(process.cwd(), 'uploads', 'templates');
+    fs.mkdirSync(templatesDir, { recursive: true });
+    const ext = path.extname(doc.filePath);
+    const destName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+    const destPath = path.join(templatesDir, destName);
+    fs.copyFileSync(doc.filePath, destPath);
+
+    const template = await this.prisma.ocrTemplate.create({
+      data: {
+        name:            templateData.name,
+        documentType:    templateData.documentType,
+        description:     templateData.description,
+        providerType:    templateData.providerType,
+        specificProvider: templateData.specificProvider,
+        fieldDefinitions: {},
+        sampleFilePath:  destPath,
+        sampleFileName:  doc.fileName,
+      },
+    });
+
+    await this.prisma.unknownDocument.update({
+      where: { id },
+      data: { status: 'template_created', reviewedBy, reviewedAt: new Date() },
+    });
+
+    return { templateId: template.id };
   }
 
   async remove(id: string) {

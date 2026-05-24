@@ -34,7 +34,7 @@ export class WorkflowService {
       if (role === 'admin' || role === 'claims_officer') {
         if (assignedTo) where.assignedTo = assignedTo;
       } else if (role === 'maker_checker') {
-        where.OR = [{ assignedTo: userId }, { assignedTo: null }];
+        where.assignedTo = userId;
       } else if (role === 'fraud_officer') {
         // Fraud officers only work the fraud_review stage.
         if (stage !== 'fraud_review') return { claims: [], total: 0 };
@@ -51,6 +51,7 @@ export class WorkflowService {
         include: {
           provider: true,
           documents: true,
+          assignedUser: { select: { id: true, name: true, email: true } },
           _count: {
             select: { approvals: true },
           },

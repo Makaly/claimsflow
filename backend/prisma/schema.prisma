@@ -38,6 +38,10 @@ model User {
   updatedAt             DateTime                @updatedAt
   createdBy             String?
   updatedBy             String?
+  isOnLeave             Boolean                 @default(false)
+  relieverId            String?
+  reliever              User?                   @relation("UserReliever", fields: [relieverId], references: [id])
+  relievingFor          User[]                  @relation("UserReliever")
   // GDPR Art. 17 — soft-erasure marker. When set, login is blocked and PII
   // is replaced with anonymised tokens but referential integrity for legally
   // retained claim records (Insurance Act 2017 s.83 — 7 year retention) is
@@ -678,9 +682,10 @@ model UnknownDocument {
   status          String    @default("pending")
   reviewedBy      String?
   reviewedAt      DateTime?
-  notes           String?
-  claimId         String?
-  uploadedBy      String?
+  notes                String?
+  classificationReason String?
+  claimId              String?
+  uploadedBy           String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 

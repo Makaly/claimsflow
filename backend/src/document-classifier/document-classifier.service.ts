@@ -42,6 +42,33 @@ export class DocumentClassifierService {
   private readonly logger = new Logger(DocumentClassifierService.name);
   private client: Anthropic | null = null;
 
+  // ── Template cache ────────────────────────────────────────────────────────────
+  // Avoids a full DB round-trip (with zones) on every document upload.
+  // TTL: 5 minutes. Invalidated immediately on any template or zone mutation.
+  private templateCache: { templates: any[]; loadedAt: number } | null = null;
+  private readonly CACHE_TTL_MS = 5 * 60 * 1000;
+
+  private async getActiveTemplates(): Promise<any[]> {
+    const now = Date.now();
+    if (this.templateCache && (now - this.templateCache.loadedAt) < this.CACHE_TTL_MS) {
+      this.logger.debug(`Template cache hit (${this.templateCache.templates.length} templates)`);
+      return this.templateCache.templates;
+    }
+    const templates = await this.prisma.ocrTemplate.findMany({
+      where: { isActive: true },
+      include: { zones: true },
+      orderBy: { usageCount: 'desc' }, // most-used templates first → faster average match
+    });
+    this.templateCache = { templates, loadedAt: now };
+    this.logger.log(`Template cache refreshed: ${templates.length} template(s) loaded`);
+    return templates;
+  }
+
+  invalidateTemplateCache() {
+    this.templateCache = null;
+    this.logger.debug('Template cache invalidated');
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly unknownDocService: UnknownDocumentService,
@@ -117,12 +144,14 @@ export class DocumentClassifierService {
       data.sampleFileName = file.originalname;
     }
 
-    return this.prisma.ocrTemplate.create({ data });
+    const result = await this.prisma.ocrTemplate.create({ data });
+    this.invalidateTemplateCache();
+    return result;
   }
 
   async update(id: string, dto: Partial<CreateTemplateDto>) {
     await this.findOne(id);
-    return this.prisma.ocrTemplate.update({
+    const result = await this.prisma.ocrTemplate.update({
       where: { id },
       data: {
         ...(dto.name !== undefined && { name: dto.name }),
@@ -132,6 +161,8 @@ export class DocumentClassifierService {
         ...(dto.specificProvider !== undefined && { specificProvider: dto.specificProvider }),
       },
     });
+    this.invalidateTemplateCache();
+    return result;
   }
 
   async delete(id: string) {
@@ -140,14 +171,16 @@ export class DocumentClassifierService {
     if (template.sampleFilePath && fs.existsSync(template.sampleFilePath)) {
       try { fs.unlinkSync(template.sampleFilePath); } catch (_) {}
     }
-    return this.prisma.ocrTemplate.delete({ where: { id } });
+    const result = await this.prisma.ocrTemplate.delete({ where: { id } });
+    this.invalidateTemplateCache();
+    return result;
   }
 
   // ── Zone CRUD ────────────────────────────────────────────────────────────────
 
   async addZone(templateId: string, dto: CreateZoneDto) {
     await this.findOne(templateId);
-    return this.prisma.documentZone.create({
+    const result = await this.prisma.documentZone.create({
       data: {
         templateId,
         fieldName:       dto.fieldName,
@@ -166,12 +199,14 @@ export class DocumentClassifierService {
         updatedByName:   dto.updatedByName,
       },
     });
+    this.invalidateTemplateCache();
+    return result;
   }
 
   async updateZone(zoneId: string, dto: Partial<CreateZoneDto>) {
     const zone = await this.prisma.documentZone.findUnique({ where: { id: zoneId } });
     if (!zone) throw new NotFoundException(`Zone ${zoneId} not found`);
-    return this.prisma.documentZone.update({
+    const result = await this.prisma.documentZone.update({
       where: { id: zoneId },
       data: {
         ...(dto.fieldName        !== undefined && { fieldName:       dto.fieldName }),
@@ -189,12 +224,16 @@ export class DocumentClassifierService {
         updatedByName: dto.updatedByName,
       },
     });
+    this.invalidateTemplateCache();
+    return result;
   }
 
   async deleteZone(zoneId: string) {
     const zone = await this.prisma.documentZone.findUnique({ where: { id: zoneId } });
     if (!zone) throw new NotFoundException(`Zone ${zoneId} not found`);
-    return this.prisma.documentZone.delete({ where: { id: zoneId } });
+    const result = await this.prisma.documentZone.delete({ where: { id: zoneId } });
+    this.invalidateTemplateCache();
+    return result;
   }
 
   // ── Shared helper ────────────────────────────────────────────────────────────
@@ -427,10 +466,7 @@ Focus on: invoice/claim numbers, dates, amounts, patient demographics, provider 
     const emptyClaimFieldMap: Record<string, string> = {};
     const empty = { templateId: null as string | null, fields: {}, confidence: {}, validation: [], claimFieldMap: emptyClaimFieldMap };
 
-    const templates = await this.prisma.ocrTemplate.findMany({
-      where: { isActive: true },
-      include: { zones: true },
-    });
+    const templates = await this.getActiveTemplates();
     if (!templates.length) return empty;
 
     // ── Route to Gemini ───────────────────────────────────────────────────────
@@ -443,6 +479,7 @@ Focus on: invoice/claim numbers, dates, amounts, patient demographics, provider 
             const rec = await this.unknownDocService.recordUnknown({
               filePath, fileName: context?.fileName || require('path').basename(filePath),
               mimeType: mimetype, claimId: context?.claimId, uploadedBy: context?.uploadedBy,
+              classificationReason: 'AI classifier (Gemini) could not match this document to any known template.',
             });
             return { ...empty, unknownDocumentId: rec.id };
           } catch {}
@@ -575,12 +612,16 @@ Focus on: invoice/claim numbers, dates, amounts, patient demographics, provider 
     if (!matchedId) {
       this.logger.log(`No template matched (model returned "${rawTemplateId}") — recording unknown document`);
       try {
+        const reason = rawTemplateId && rawTemplateId !== 'none'
+          ? `AI classifier returned an unrecognised template ID ("${rawTemplateId}") — no matching template found.`
+          : 'AI classifier could not match this document to any known template.';
         const rec = await this.unknownDocService.recordUnknown({
           filePath,
           fileName:   context?.fileName || require('path').basename(filePath),
           mimeType:   mimetype,
           claimId:    context?.claimId,
           uploadedBy: context?.uploadedBy,
+          classificationReason: reason,
         });
         return { ...empty, unknownDocumentId: rec.id };
       } catch (err) {

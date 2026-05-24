@@ -38,6 +38,7 @@ import TermsOfService from '@/pages/TermsOfService'
 import PrivacyPolicy from '@/pages/PrivacyPolicy'
 import DocumentClassifierEditor from '@/pages/DocumentClassifierEditor'
 import UnknownDocuments from '@/pages/UnknownDocuments'
+import UnknownDocumentReview from '@/pages/UnknownDocumentReview'
 import ScanStation from '@/pages/ScanStation'
 import PolicyPlans from '@/pages/PolicyPlans'
 import MLLabelling from '@/pages/MLLabelling'
@@ -151,6 +152,7 @@ function AppRoutes() {
         <Route path="/settings" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><Settings /></ProtectedRoute>} />
         <Route path="/settings/document-classifiers/:id" element={<ProtectedRoute allowedRoles={['admin']}><DocumentClassifierEditor /></ProtectedRoute>} />
         <Route path="/unknown-documents" element={<ProtectedRoute allowedRoles={['admin','maker_checker']}><UnknownDocuments /></ProtectedRoute>} />
+        <Route path="/unknown-documents/:id" element={<ProtectedRoute allowedRoles={['admin','maker_checker']}><UnknownDocumentReview /></ProtectedRoute>} />
         <Route path="/2fa-setup" element={<TwoFactorSetup />} />
         <Route path="/appeals" element={<ProtectedRoute><Appeals /></ProtectedRoute>} />
         <Route path="/payment" element={<ProtectedRoute allowedRoles={['admin','finance','claims_officer']}><Payment /></ProtectedRoute>} />

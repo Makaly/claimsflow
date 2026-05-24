@@ -1,14 +1,18 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
+import {
   AlertTriangle, FileQuestion, Loader2, RefreshCw,
-  CheckCircle2, ExternalLink, Eye, Search, Sparkles, Trash2,
+  CheckCircle2, ExternalLink, Eye, Sparkles, PlusCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import api from '@/services/api'
@@ -24,8 +28,28 @@ interface UnknownDoc {
   reviewedBy: string | null
   reviewedAt: string | null
   notes: string | null
+  classificationReason: string | null
   createdAt: string
 }
+
+interface TemplateOption {
+  id: string
+  name: string
+  documentType: string
+  specificProvider: string | null
+}
+
+const DOCUMENT_TYPES = [
+  { value: 'invoice',              label: 'Invoice' },
+  { value: 'inpatient_invoice',    label: 'Inpatient Invoice' },
+  { value: 'prescription',        label: 'Prescription' },
+  { value: 'lab_result',          label: 'Lab Result' },
+  { value: 'medical_report',      label: 'Medical Report' },
+  { value: 'discharge_summary',   label: 'Discharge Summary' },
+  { value: 'claim_form',          label: 'Claim Form' },
+  { value: 'authorization_letter', label: 'Authorization Letter' },
+  { value: 'other',               label: 'Other' },
+]
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   pending:          { label: 'Pending Review', color: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' },
@@ -42,58 +66,19 @@ export default function UnknownDocuments() {
   const [page, setPage]         = useState(1)
   const [reviewingId, setReviewingId] = useState<string | null>(null)
   const [notes, setNotes]       = useState('')
-  const [viewingId, setViewingId]       = useState<string | null>(null)
-  const [deletingId, setDeletingId]     = useState<string | null>(null)
-  const [missingFileIds, setMissingFileIds] = useState<Set<string>>(new Set())
-  const blobUrlsRef = useRef<Record<string, string>>({})
   const limit = 15
 
-  const viewFile = async (doc: UnknownDoc) => {
-    if (missingFileIds.has(doc.id)) return
-    setViewingId(doc.id)
-    try {
-      if (blobUrlsRef.current[doc.id]) {
-        window.open(blobUrlsRef.current[doc.id], '_blank')
-        return
-      }
-      let blob: Blob
-      try {
-        const { data } = await api.get(`/unknown-documents/${doc.id}/file`, { responseType: 'blob' })
-        blob = data
-      } catch (err: any) {
-        if (err?.response?.status === 404) {
-          setMissingFileIds(prev => new Set([...prev, doc.id]))
-          toast.error('Original file no longer on disk', {
-            description: 'This record can be safely deleted — the source file was in a temporary folder that has been cleaned up.',
-          })
-        } else {
-          throw err
-        }
-        return
-      }
-      const url = URL.createObjectURL(blob)
-      blobUrlsRef.current[doc.id] = url
-      window.open(url, '_blank')
-    } catch (err: any) {
-      toast.error('Could not load file', { description: err.message })
-    } finally {
-      setViewingId(null)
-    }
-  }
-
-  const deleteRecord = async (id: string) => {
-    setDeletingId(id)
-    try {
-      await api.delete(`/unknown-documents/${id}`)
-      toast.success('Record deleted')
-      setDocs(prev => prev.filter(d => d.id !== id))
-      setTotal(prev => prev - 1)
-    } catch (err: any) {
-      toast.error('Delete failed', { description: err?.response?.data?.message || err.message })
-    } finally {
-      setDeletingId(null)
-    }
-  }
+  // Add-to-classifier dialog state
+  const [classifierDoc, setClassifierDoc]       = useState<UnknownDoc | null>(null)
+  const [classifierMode, setClassifierMode]     = useState<'existing' | 'new'>('existing')
+  const [templates, setTemplates]               = useState<TemplateOption[]>([])
+  const [templatesLoading, setTemplatesLoading] = useState(false)
+  const [selectedTemplateId, setSelectedTemplateId] = useState('')
+  const [newName, setNewName]                   = useState('')
+  const [newDocType, setNewDocType]             = useState('')
+  const [newDescription, setNewDescription]     = useState('')
+  const [newProvider, setNewProvider]           = useState('')
+  const [promoting, setPromoting]               = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -117,8 +102,53 @@ export default function UnknownDocuments() {
     load()
   }
 
-  const openInClassifier = (doc: UnknownDoc) => {
-    navigate('/settings?tab=document-classifiers')
+  const openAddToClassifier = async (doc: UnknownDoc) => {
+    setClassifierDoc(doc)
+    setClassifierMode('existing')
+    setSelectedTemplateId('')
+    setNewName(doc.guessedProvider || '')
+    setNewDocType('')
+    setNewDescription('')
+    setNewProvider(doc.guessedProvider || '')
+    setTemplatesLoading(true)
+    try {
+      const { data } = await api.get<TemplateOption[]>('/document-classifiers')
+      setTemplates(data)
+    } catch {
+      setTemplates([])
+    } finally {
+      setTemplatesLoading(false)
+    }
+  }
+
+  const submitAddToClassifier = async () => {
+    if (!classifierDoc) return
+    setPromoting(true)
+    try {
+      let templateId: string
+      if (classifierMode === 'existing') {
+        if (!selectedTemplateId) { toast.error('Select a template first'); return }
+        const { data } = await api.post(`/unknown-documents/${classifierDoc.id}/promote-to-template`, { templateId: selectedTemplateId })
+        templateId = data.templateId
+        toast.success('Document added as sample to template')
+      } else {
+        if (!newName.trim() || !newDocType) { toast.error('Template name and document type are required'); return }
+        const { data } = await api.post(`/unknown-documents/${classifierDoc.id}/create-template`, {
+          name: newName.trim(), documentType: newDocType,
+          description: newDescription || undefined,
+          specificProvider: newProvider || undefined,
+        })
+        templateId = data.templateId
+        toast.success('New classifier template created')
+      }
+      setClassifierDoc(null)
+      load()
+      navigate(`/settings/document-classifiers/${templateId}`)
+    } catch (err: any) {
+      toast.error('Failed', { description: err?.response?.data?.message || err.message })
+    } finally {
+      setPromoting(false)
+    }
   }
 
   return (
@@ -191,34 +221,13 @@ export default function UnknownDocuments() {
                     </p>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
-                    {missingFileIds.has(doc.id) ? (
-                      <>
-                        <span className="inline-flex items-center gap-1 h-7 px-2 rounded-md border border-red-200 bg-red-50 text-red-600 text-xs font-medium">
-                          <AlertTriangle className="h-3 w-3" /> File Missing
-                        </span>
-                        <Button size="sm" variant="outline"
-                          className="h-7 text-xs gap-1.5 border-red-200 text-red-600 hover:bg-red-50"
-                          onClick={() => deleteRecord(doc.id)}
-                          disabled={deletingId === doc.id}>
-                          {deletingId === doc.id
-                            ? <Loader2 className="h-3 w-3 animate-spin" />
-                            : <><Trash2 className="h-3 w-3" /> Delete Record</>
-                          }
-                        </Button>
-                      </>
-                    ) : (
-                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
-                        onClick={() => viewFile(doc)}
-                        disabled={viewingId === doc.id}>
-                        {viewingId === doc.id
-                          ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…</>
-                          : <><Eye className="h-3.5 w-3.5" /> View File</>
-                        }
-                      </Button>
-                    )}
                     <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
-                      onClick={() => openInClassifier(doc)}>
-                      <ExternalLink className="h-3.5 w-3.5" /> Open in Classifier
+                      onClick={() => navigate(`/unknown-documents/${doc.id}`)}>
+                      <Eye className="h-3.5 w-3.5" /> View File
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
+                      onClick={() => openAddToClassifier(doc)}>
+                      <PlusCircle className="h-3.5 w-3.5" /> Add to Classifier
                     </Button>
                     {doc.status === 'pending' && (
                       <Button size="sm" variant="default" className="h-7 text-xs gap-1.5"
@@ -229,6 +238,17 @@ export default function UnknownDocuments() {
                     )}
                   </div>
                 </div>
+
+                {/* Classification reason */}
+                {doc.classificationReason && (
+                  <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2 flex items-start gap-2">
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
+                    <div className="min-w-0 text-xs text-amber-800 dark:text-amber-200">
+                      <span className="font-semibold">Why unknown: </span>
+                      {doc.classificationReason}
+                    </div>
+                  </div>
+                )}
 
                 {/* AI guess */}
                 {(doc.guessedType || doc.guessedProvider) && (
@@ -288,6 +308,121 @@ export default function UnknownDocuments() {
           <Button variant="outline" size="sm" disabled={page >= Math.ceil(total / limit)} onClick={() => setPage((p) => p + 1)}>Next</Button>
         </div>
       )}
+
+      {/* Add to Classifier dialog */}
+      <Dialog open={!!classifierDoc} onOpenChange={(v) => !v && setClassifierDoc(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <PlusCircle className="h-4 w-4" />
+              Add to Classifier
+            </DialogTitle>
+            <DialogDescription>
+              Use <span className="font-medium text-foreground">{classifierDoc?.fileName}</span> as the
+              sample document for a classifier template. Then draw zones to teach the AI where each field lives.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 mt-1">
+            {/* Mode toggle */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setClassifierMode('existing')}
+                className={`rounded-lg border p-3 text-left text-sm transition-colors ${classifierMode === 'existing' ? 'border-primary bg-primary/5 font-medium' : 'border-input hover:bg-muted/50'}`}
+              >
+                <div className="font-medium text-xs mb-0.5">Existing template</div>
+                <div className="text-xs text-muted-foreground">Add as sample to a template that already exists</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setClassifierMode('new')}
+                className={`rounded-lg border p-3 text-left text-sm transition-colors ${classifierMode === 'new' ? 'border-primary bg-primary/5 font-medium' : 'border-input hover:bg-muted/50'}`}
+              >
+                <div className="font-medium text-xs mb-0.5">New template</div>
+                <div className="text-xs text-muted-foreground">Create a brand-new classifier from this document</div>
+              </button>
+            </div>
+
+            {classifierMode === 'existing' ? (
+              <div className="space-y-2">
+                <Label>Select template</Label>
+                {templatesLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Loading templates…
+                  </div>
+                ) : (
+                  <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose a template…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {templates.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          <span className="font-medium">{t.name}</span>
+                          {t.specificProvider && <span className="text-muted-foreground ml-1">· {t.specificProvider}</span>}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  The document file will replace the template's current sample. Existing zones are preserved.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label>Template name <span className="text-red-500">*</span></Label>
+                  <Input
+                    placeholder="e.g. Nairobi Hospital Invoice"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Document type <span className="text-red-500">*</span></Label>
+                  <Select value={newDocType} onValueChange={setNewDocType}>
+                    <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+                    <SelectContent>
+                      {DOCUMENT_TYPES.map((dt) => (
+                        <SelectItem key={dt.value} value={dt.value}>{dt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Provider name</Label>
+                  <Input
+                    placeholder="e.g. Nairobi Hospital"
+                    value={newProvider}
+                    onChange={(e) => setNewProvider(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Description</Label>
+                  <Textarea
+                    rows={2}
+                    placeholder="Describe what makes this document unique…"
+                    value={newDescription}
+                    onChange={(e) => setNewDescription(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="mt-2">
+            <Button variant="outline" onClick={() => setClassifierDoc(null)} disabled={promoting}>Cancel</Button>
+            <Button onClick={submitAddToClassifier} disabled={promoting} className="gap-1.5">
+              {promoting
+                ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…</>
+                : <><ExternalLink className="h-3.5 w-3.5" /> Save &amp; Open Zone Editor</>
+              }
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

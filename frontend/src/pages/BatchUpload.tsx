@@ -3844,29 +3844,87 @@ export default function BatchUpload() {
                               </div>
                             )}
                             {scanners.length > 0 && (
-                              <div className="grid grid-cols-2 gap-3 pt-1">
+                              <div className="space-y-3 pt-1">
+                                {/* Paper Source — auto-detected from scanner capabilities */}
                                 <div className="space-y-1.5">
-                                  <Label className="text-xs">Resolution</Label>
-                                  <Select value={scanDpi} onValueChange={setScanDpi}>
+                                  <div className="flex items-center gap-1.5">
+                                    <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+                                    <Label className="text-xs">Paper Source</Label>
+                                    {scannerCapsLoading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+                                  </div>
+                                  <Select value={scanSource} onValueChange={v => setScanSource(v as ScanSource)}>
                                     <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                                     <SelectContent>
-                                      <SelectItem value="75">75 DPI — Draft</SelectItem>
-                                      <SelectItem value="150">150 DPI — Fast</SelectItem>
-                                      <SelectItem value="300">300 DPI — Standard</SelectItem>
-                                      <SelectItem value="600">600 DPI — High quality</SelectItem>
+                                      {(!scannerCaps || scannerCaps.sources.includes('flatbed')) && (
+                                        <SelectItem value="flatbed">Flatbed (Glass)</SelectItem>
+                                      )}
+                                      {(!scannerCaps || scannerCaps.sources.includes('feeder')) && (
+                                        <SelectItem value="feeder">Document Feeder (ADF)</SelectItem>
+                                      )}
+                                      {(!scannerCaps || scannerCaps.sources.includes('feeder-duplex')) && (
+                                        <SelectItem value="feeder-duplex">Feeder — Both Sides (Duplex)</SelectItem>
+                                      )}
+                                      <SelectItem value="auto">Auto Detect</SelectItem>
                                     </SelectContent>
                                   </Select>
                                 </div>
+
+                                {/* Resolution + Color Mode */}
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div className="space-y-1.5">
+                                    <Label className="text-xs">Resolution</Label>
+                                    <Select value={scanDpi} onValueChange={setScanDpi}>
+                                      <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="75">75 DPI — Draft</SelectItem>
+                                        <SelectItem value="150">150 DPI — Fast</SelectItem>
+                                        <SelectItem value="200">200 DPI — Balanced</SelectItem>
+                                        <SelectItem value="300">300 DPI — Standard</SelectItem>
+                                        <SelectItem value="600">600 DPI — High quality</SelectItem>
+                                        <SelectItem value="1200">1200 DPI — Archival</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div className="space-y-1.5">
+                                    <Label className="text-xs">Color Mode</Label>
+                                    <Select value={scanMode} onValueChange={setScanMode}>
+                                      <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="Color">Color</SelectItem>
+                                        <SelectItem value="Gray">Grayscale</SelectItem>
+                                        <SelectItem value="Lineart">Black &amp; White</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                </div>
+
+                                {/* Paper Size */}
                                 <div className="space-y-1.5">
-                                  <Label className="text-xs">Color Mode</Label>
-                                  <Select value={scanMode} onValueChange={setScanMode}>
+                                  <Label className="text-xs">Paper Size</Label>
+                                  <Select value={scanPaperSize} onValueChange={v => setScanPaperSize(v as ScanPaperSize)}>
                                     <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                                     <SelectContent>
-                                      <SelectItem value="Color">Color</SelectItem>
-                                      <SelectItem value="Gray">Grayscale</SelectItem>
-                                      <SelectItem value="Lineart">Black &amp; White</SelectItem>
+                                      <SelectItem value="auto">Auto Detect</SelectItem>
+                                      <SelectItem value="a4">A4  (210 × 297 mm)</SelectItem>
+                                      <SelectItem value="a5">A5  (148 × 210 mm)</SelectItem>
+                                      <SelectItem value="letter">Letter  (8.5 × 11 in)</SelectItem>
+                                      <SelectItem value="legal">Legal  (8.5 × 14 in)</SelectItem>
                                     </SelectContent>
                                   </Select>
+                                </div>
+
+                                {/* Toggles — Skip Blank Pages */}
+                                <div className="rounded-lg border bg-muted/30 divide-y">
+                                  <div className="flex items-center justify-between px-3 py-2.5">
+                                    <div className="flex items-center gap-2">
+                                      <FileX className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                      <div>
+                                        <p className="text-xs font-medium leading-tight">Skip blank pages</p>
+                                        <p className="text-[10px] text-muted-foreground leading-tight">Automatically remove empty pages from the scan</p>
+                                      </div>
+                                    </div>
+                                    <Switch checked={scanSkipBlank} onCheckedChange={setScanSkipBlank} />
+                                  </div>
                                 </div>
                               </div>
                             )}

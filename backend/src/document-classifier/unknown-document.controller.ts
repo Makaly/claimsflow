@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Patch, Delete, Param, Body, Query, Res,
+  Controller, Get, Patch, Post, Delete, Param, Body, Query, Res,
   UseGuards, Request, HttpCode, HttpStatus,
 } from '@nestjs/common';
 import { Response } from 'express';
@@ -56,6 +56,26 @@ export class UnknownDocumentController {
   @HttpCode(HttpStatus.OK)
   markTemplateCreated(@Param('id') id: string, @Request() req: any) {
     return this.service.markTemplateCreated(id, req.user.id);
+  }
+
+  @Post(':id/promote-to-template')
+  @HttpCode(HttpStatus.OK)
+  promoteToTemplate(
+    @Param('id') id: string,
+    @Body() body: { templateId: string },
+    @Request() req: any,
+  ) {
+    return this.service.promoteToTemplate(id, body.templateId, req.user.id);
+  }
+
+  @Post(':id/create-template')
+  @HttpCode(HttpStatus.OK)
+  createTemplateFromUnknown(
+    @Param('id') id: string,
+    @Body() body: { name: string; documentType: string; description?: string; providerType?: string; specificProvider?: string },
+    @Request() req: any,
+  ) {
+    return this.service.createTemplateFromUnknown(id, body, req.user.id);
   }
 
   @Delete(':id')

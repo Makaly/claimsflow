@@ -249,6 +249,19 @@ export class WorkflowController {
     return this.makerCheckerService.rerouteOrphans(req?.user?.userId);
   }
 
+  @Post('set-leave')
+  async setUserLeave(
+    @Body() body: { userId: string; isOnLeave: boolean; relieverId?: string },
+    @Request() req: any,
+  ) {
+    return this.makerCheckerService.setUserLeave(
+      body.userId,
+      body.isOnLeave,
+      body.relieverId,
+      req?.user?.userId,
+    );
+  }
+
   // Completeness Validation
   @Post('validate-completeness/:claimId')
   async validateCompleteness(@Param('claimId') claimId: string) {
@@ -290,6 +303,11 @@ export class WorkflowController {
   @Get('reviewer-workload')
   async getReviewerWorkload(@Query('reviewerId') reviewerId?: string) {
     return this.assignmentService.getReviewerWorkload(reviewerId);
+  }
+
+  @Get('maker-checker-workload')
+  async getMakerCheckerWorkload() {
+    return this.assignmentService.getMakerCheckerWorkload();
   }
 
   @Get('pending-assignment')

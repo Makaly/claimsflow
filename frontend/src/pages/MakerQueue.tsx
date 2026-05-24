@@ -5,6 +5,7 @@ import {
   ScanLine, Sparkles, MessageSquare, Send, Mail, AlertOctagon,
   Ban, Building2, User, Calendar, RefreshCw, Paperclip, History,
   X, MailOpen, Stethoscope, CreditCard, MapPin, ShieldAlert,
+  Pencil, Check, ChevronDown,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -70,6 +71,7 @@ interface MakerClaim {
   treatment?: string
   fraudSignals?: Array<{ level: string; title: string; detail?: string }>
   submittedAt: string
+  assignedUser?: { id: string; name: string; email: string }
 }
 
 const DEMO_CLAIMS: MakerClaim[] = [
@@ -144,6 +146,87 @@ export default function MakerQueue() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
 
+  // ── Inline editing ────────────────────────────────────────────────────────
+  type EditDraft = {
+    memberName: string; memberNumber: string; patientId: string
+    invoiceAmount: string; invoiceNumber: string; invoiceDate: string
+    serviceDate: string; diagnosis: string; diagnosisCode: string; treatment: string
+  }
+  const [isEditing, setIsEditing] = useState(false)
+  const [editDraft, setEditDraft] = useState<EditDraft | null>(null)
+  const [savingEdits, setSavingEdits] = useState(false)
+  const [editSaved, setEditSaved] = useState(false)
+  // field audit history
+  const [fieldHistory, setFieldHistory] = useState<any[]>([])
+  const [historyField, setHistoryField] = useState<string | null>(null)
+  const [historyLoading, setHistoryLoading] = useState(false)
+
+  const startEditing = () => {
+    if (!selectedClaim) return
+    setEditDraft({
+      memberName:    selectedClaim.memberName || '',
+      memberNumber:  selectedClaim.memberNumber || '',
+      patientId:     selectedClaim.patientId || '',
+      invoiceAmount: String(selectedClaim.invoiceAmount || ''),
+      invoiceNumber: selectedClaim.invoiceNumber || '',
+      invoiceDate:   selectedClaim.invoiceDate ? selectedClaim.invoiceDate.slice(0, 10) : '',
+      serviceDate:   selectedClaim.serviceDate ? selectedClaim.serviceDate.slice(0, 10) : '',
+      diagnosis:     selectedClaim.diagnosis || '',
+      diagnosisCode: selectedClaim.diagnosisCode || '',
+      treatment:     selectedClaim.treatment || '',
+    })
+    setIsEditing(true)
+    setEditSaved(false)
+  }
+
+  const cancelEditing = () => { setIsEditing(false); setEditDraft(null) }
+
+  const saveEdits = async () => {
+    if (!selectedClaim || !editDraft) return
+    setSavingEdits(true)
+    try {
+      const payload: Record<string, any> = {}
+      if (editDraft.memberName   !== (selectedClaim.memberName   || '')) payload.memberName   = editDraft.memberName
+      if (editDraft.memberNumber !== (selectedClaim.memberNumber || '')) payload.memberNumber  = editDraft.memberNumber
+      if (editDraft.patientId    !== (selectedClaim.patientId    || '')) payload.patientId     = editDraft.patientId
+      if (editDraft.invoiceNumber !== (selectedClaim.invoiceNumber || '')) payload.invoiceNumber = editDraft.invoiceNumber
+      if (editDraft.invoiceDate  !== (selectedClaim.invoiceDate   ? selectedClaim.invoiceDate.slice(0,10) : '')) payload.invoiceDate = editDraft.invoiceDate || null
+      if (editDraft.serviceDate  !== (selectedClaim.serviceDate   ? selectedClaim.serviceDate.slice(0,10) : '')) payload.serviceDate = editDraft.serviceDate || null
+      if (editDraft.diagnosis    !== (selectedClaim.diagnosis     || '')) payload.diagnosis    = editDraft.diagnosis
+      if (editDraft.diagnosisCode !== (selectedClaim.diagnosisCode || '')) payload.diagnosisCode = editDraft.diagnosisCode
+      if (editDraft.treatment    !== (selectedClaim.treatment     || '')) payload.treatment    = editDraft.treatment
+      const amt = parseFloat(editDraft.invoiceAmount)
+      if (!isNaN(amt) && amt !== selectedClaim.invoiceAmount) payload.invoiceAmount = amt
+
+      if (Object.keys(payload).length > 0) {
+        await api.patch(`/claims/${selectedClaim.id}`, payload)
+        // Reflect changes in local state
+        setSelectedClaim(prev => prev ? { ...prev, ...payload, invoiceAmount: payload.invoiceAmount ?? prev.invoiceAmount } : prev)
+        setClaims(prev => prev.map(c => c.id === selectedClaim.id ? { ...c, ...payload, invoiceAmount: payload.invoiceAmount ?? c.invoiceAmount } : c))
+      }
+      setIsEditing(false)
+      setEditDraft(null)
+      setEditSaved(true)
+      setTimeout(() => setEditSaved(false), 3000)
+    } catch { /* error shown inline */ } finally { setSavingEdits(false) }
+  }
+
+  const openFieldHistory = async (field: string) => {
+    if (!selectedClaim) return
+    setHistoryField(field)
+    setHistoryLoading(true)
+    try {
+      const { data } = await api.get(`/claims/${selectedClaim.id}/audit-trail`)
+      const entries: any[] = Array.isArray(data) ? data : data?.entries ?? []
+      const relevant = entries.filter(e => {
+        const nv = e.newValue ?? e.after ?? {}
+        const ov = e.oldValue ?? e.before ?? {}
+        return field in nv || field in ov
+      })
+      setFieldHistory(relevant)
+    } catch { setFieldHistory([]) } finally { setHistoryLoading(false) }
+  }
+
   // ── Confirmed fraud cases ─────────────────────────────────────────────────
   const [fraudClaims, setFraudClaims] = useState<any[]>([])
   const [fraudLoading, setFraudLoading] = useState(false)
@@ -197,6 +280,8 @@ export default function MakerQueue() {
   useEffect(() => {
     const load = async () => {
       try {
+        // Sweep any unassigned initial_review claims into maker_checker_review before loading.
+        await api.post('/workflow/reroute-orphans').catch(() => {})
         const { data: resData } = await api.get('/workflow/claims/maker_checker_review')
         // Backend returns { claims, total } — frontend was ignoring this shape and always
         // rendering empty. Normalise here.
@@ -232,6 +317,7 @@ export default function MakerQueue() {
           treatment: c.treatment,
           fraudSignals: c.fraudSignals || [],
           submittedAt: c.submittedAt,
+          assignedUser: c.assignedUser || undefined,
         })))
       } catch {
         setClaims([])
@@ -465,6 +551,7 @@ export default function MakerQueue() {
                   <TableHead>Member</TableHead>
                   <TableHead>Provider</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
+                  <TableHead>Assigned To</TableHead>
                   <TableHead>Priority</TableHead>
                   <TableHead>Docs</TableHead>
                   <TableHead>OCR</TableHead>
@@ -510,6 +597,9 @@ export default function MakerQueue() {
                       </TableCell>
                       <TableCell className="text-sm">{claim.provider?.name}</TableCell>
                       <TableCell className="text-right font-medium">{formatCurrency(claim.invoiceAmount)}</TableCell>
+                      <TableCell>
+                        <span className="text-xs font-medium">{claim.assignedUser?.name ?? <span className="text-muted-foreground">Unassigned</span>}</span>
+                      </TableCell>
                       <TableCell>
                         <Badge className={getPriorityColor(claim.priority)} variant="secondary">{claim.priority}</Badge>
                       </TableCell>
@@ -573,7 +663,7 @@ export default function MakerQueue() {
         <DialogContent className="max-w-[min(1400px,95vw)] w-[min(1400px,95vw)] h-[92vh] p-0 gap-0 overflow-hidden flex flex-col">
           <DialogHeader className="px-5 pt-4 pb-3 border-b shrink-0">
             <DialogTitle>
-              {actionType === 'approve' ? 'Approve & Forward to Checker'
+              {actionType === 'approve' ? 'Verify & Forward to Claims Officer'
                : actionType === 'reject' ? 'Reject Claim'
                : actionType === 'escalate_fraud' ? 'Escalate to Fraud Team'
                : 'Claim Details'}
@@ -621,7 +711,42 @@ export default function MakerQueue() {
                   </div>
                 </div>
 
+                {/* ── Edit toolbar ── */}
+                <div className="px-4 pt-3 pb-1 flex items-center justify-between gap-2 border-b">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Indexed Data</p>
+                  <div className="flex items-center gap-2">
+                    {editSaved && <span className="text-xs text-emerald-600 flex items-center gap-1"><Check className="h-3 w-3" />Saved</span>}
+                    {isEditing ? (
+                      <>
+                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={cancelEditing}>Cancel</Button>
+                        <Button size="sm" className="h-7 px-3 text-xs" onClick={saveEdits} disabled={savingEdits}>
+                          {savingEdits ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Check className="h-3 w-3 mr-1" />}Save
+                        </Button>
+                      </>
+                    ) : (
+                      <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1" onClick={startEditing}>
+                        <Pencil className="h-3 w-3" />Edit
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
                 <div className="p-4 space-y-4">
+                  {/* helper: editable field row */}
+                  {(() => {
+                    const E = editDraft
+                    const changed = (field: keyof typeof editDraft, orig: string) =>
+                      E && E[field] !== orig ? 'ring-1 ring-amber-400' : ''
+                    const HistBtn = ({ field }: { field: string }) => (
+                      <button
+                        className="ml-auto text-muted-foreground hover:text-foreground transition-colors"
+                        title="View field history"
+                        onClick={() => openFieldHistory(field)}
+                      ><History className="h-3 w-3" /></button>
+                    )
+
+                    return (<>
+
                   {/* ── Member & Patient ── */}
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
@@ -630,20 +755,42 @@ export default function MakerQueue() {
                     <div className="rounded-xl border bg-card divide-y overflow-hidden">
                       <div className="grid grid-cols-2 divide-x">
                         <div className="px-3 py-2">
-                          <p className="text-[10px] text-muted-foreground mb-0.5">Full Name</p>
-                          <p className="text-sm font-semibold truncate">{selectedClaim.memberName || '—'}</p>
+                          <div className="flex items-center gap-1 mb-0.5">
+                            <p className="text-[10px] text-muted-foreground">Full Name</p>
+                            <HistBtn field="memberName" />
+                          </div>
+                          {isEditing && E ? (
+                            <input className={`w-full text-sm font-semibold bg-transparent border-b outline-none pb-0.5 ${changed('memberName', selectedClaim.memberName || '')}`}
+                              value={E.memberName} onChange={ev => setEditDraft(d => d && ({ ...d, memberName: ev.target.value }))} />
+                          ) : (
+                            <p className="text-sm font-semibold truncate">{selectedClaim.memberName || '—'}</p>
+                          )}
                         </div>
                         <div className="px-3 py-2">
-                          <p className="text-[10px] text-muted-foreground mb-0.5">Member #</p>
-                          <p className="text-sm font-mono font-semibold">{selectedClaim.memberNumber || '—'}</p>
+                          <div className="flex items-center gap-1 mb-0.5">
+                            <p className="text-[10px] text-muted-foreground">Member #</p>
+                            <HistBtn field="memberNumber" />
+                          </div>
+                          {isEditing && E ? (
+                            <input className={`w-full text-sm font-mono font-semibold bg-transparent border-b outline-none pb-0.5 ${changed('memberNumber', selectedClaim.memberNumber || '')}`}
+                              value={E.memberNumber} onChange={ev => setEditDraft(d => d && ({ ...d, memberNumber: ev.target.value }))} />
+                          ) : (
+                            <p className="text-sm font-mono font-semibold">{selectedClaim.memberNumber || '—'}</p>
+                          )}
                         </div>
                       </div>
-                      {selectedClaim.patientId && (
-                        <div className="px-3 py-2">
-                          <p className="text-[10px] text-muted-foreground mb-0.5">Patient ID</p>
-                          <p className="text-sm font-mono">{selectedClaim.patientId}</p>
+                      <div className="px-3 py-2">
+                        <div className="flex items-center gap-1 mb-0.5">
+                          <p className="text-[10px] text-muted-foreground">Patient ID</p>
+                          <HistBtn field="patientId" />
                         </div>
-                      )}
+                        {isEditing && E ? (
+                          <input className={`w-full text-sm font-mono bg-transparent border-b outline-none pb-0.5 ${changed('patientId', selectedClaim.patientId || '')}`}
+                            value={E.patientId} onChange={ev => setEditDraft(d => d && ({ ...d, patientId: ev.target.value }))} />
+                        ) : (
+                          <p className="text-sm font-mono">{selectedClaim.patientId || '—'}</p>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -665,30 +812,56 @@ export default function MakerQueue() {
                     </p>
                     <div className="rounded-xl border bg-card overflow-hidden">
                       <div className="px-3 py-2.5 bg-emerald-50/50 dark:bg-emerald-950/10 border-b">
-                        <p className="text-[10px] text-muted-foreground mb-0.5">Invoice Amount</p>
-                        <p className="text-xl font-black text-emerald-700 dark:text-emerald-400 tabular-nums">{formatCurrency(selectedClaim.invoiceAmount)}</p>
+                        <div className="flex items-center gap-1 mb-0.5">
+                          <p className="text-[10px] text-muted-foreground">Invoice Amount</p>
+                          <HistBtn field="invoiceAmount" />
+                        </div>
+                        {isEditing && E ? (
+                          <input type="number" className={`w-full text-xl font-black text-emerald-700 dark:text-emerald-400 bg-transparent border-b outline-none pb-0.5 ${changed('invoiceAmount', String(selectedClaim.invoiceAmount))}`}
+                            value={E.invoiceAmount} onChange={ev => setEditDraft(d => d && ({ ...d, invoiceAmount: ev.target.value }))} />
+                        ) : (
+                          <p className="text-xl font-black text-emerald-700 dark:text-emerald-400 tabular-nums">{formatCurrency(selectedClaim.invoiceAmount)}</p>
+                        )}
                       </div>
                       <div className="grid grid-cols-2 divide-x divide-y">
-                        {selectedClaim.invoiceNumber && (
-                          <div className="px-3 py-2">
-                            <p className="text-[10px] text-muted-foreground mb-0.5">Invoice #</p>
-                            <p className="text-xs font-mono font-semibold">{selectedClaim.invoiceNumber}</p>
+                        <div className="px-3 py-2">
+                          <div className="flex items-center gap-1 mb-0.5">
+                            <p className="text-[10px] text-muted-foreground">Invoice #</p>
+                            <HistBtn field="invoiceNumber" />
                           </div>
-                        )}
-                        {selectedClaim.invoiceDate && (
-                          <div className="px-3 py-2">
-                            <p className="text-[10px] text-muted-foreground mb-0.5">Invoice Date</p>
-                            <p className="text-xs font-semibold">{formatDate(selectedClaim.invoiceDate)}</p>
+                          {isEditing && E ? (
+                            <input className={`w-full text-xs font-mono font-semibold bg-transparent border-b outline-none pb-0.5 ${changed('invoiceNumber', selectedClaim.invoiceNumber || '')}`}
+                              value={E.invoiceNumber} onChange={ev => setEditDraft(d => d && ({ ...d, invoiceNumber: ev.target.value }))} />
+                          ) : (
+                            <p className="text-xs font-mono font-semibold">{selectedClaim.invoiceNumber || '—'}</p>
+                          )}
+                        </div>
+                        <div className="px-3 py-2">
+                          <div className="flex items-center gap-1 mb-0.5">
+                            <p className="text-[10px] text-muted-foreground">Invoice Date</p>
+                            <HistBtn field="invoiceDate" />
                           </div>
-                        )}
-                        {selectedClaim.serviceDate && (
-                          <div className="px-3 py-2">
-                            <p className="text-[10px] text-muted-foreground mb-0.5">Service Date</p>
-                            <p className={`text-xs font-semibold ${selectedClaim.invoiceDate && new Date(selectedClaim.invoiceDate) > new Date(selectedClaim.serviceDate) ? 'text-red-600' : ''}`}>
-                              {formatDate(selectedClaim.serviceDate)}
+                          {isEditing && E ? (
+                            <input type="date" className={`w-full text-xs font-semibold bg-transparent border-b outline-none pb-0.5 ${changed('invoiceDate', selectedClaim.invoiceDate ? selectedClaim.invoiceDate.slice(0,10) : '')}`}
+                              value={E.invoiceDate} onChange={ev => setEditDraft(d => d && ({ ...d, invoiceDate: ev.target.value }))} />
+                          ) : (
+                            <p className="text-xs font-semibold">{selectedClaim.invoiceDate ? formatDate(selectedClaim.invoiceDate) : '—'}</p>
+                          )}
+                        </div>
+                        <div className="px-3 py-2">
+                          <div className="flex items-center gap-1 mb-0.5">
+                            <p className="text-[10px] text-muted-foreground">Service Date</p>
+                            <HistBtn field="serviceDate" />
+                          </div>
+                          {isEditing && E ? (
+                            <input type="date" className={`w-full text-xs font-semibold bg-transparent border-b outline-none pb-0.5 ${changed('serviceDate', selectedClaim.serviceDate ? selectedClaim.serviceDate.slice(0,10) : '')}`}
+                              value={E.serviceDate} onChange={ev => setEditDraft(d => d && ({ ...d, serviceDate: ev.target.value }))} />
+                          ) : (
+                            <p className={`text-xs font-semibold ${selectedClaim.invoiceDate && selectedClaim.serviceDate && new Date(selectedClaim.invoiceDate) > new Date(selectedClaim.serviceDate) ? 'text-red-600' : ''}`}>
+                              {selectedClaim.serviceDate ? formatDate(selectedClaim.serviceDate) : '—'}
                             </p>
-                          </div>
-                        )}
+                          )}
+                        </div>
                         {selectedClaim.slaDeadline && (
                           <div className="px-3 py-2">
                             <p className="text-[10px] text-muted-foreground mb-0.5">SLA Deadline</p>
@@ -702,27 +875,47 @@ export default function MakerQueue() {
                   </div>
 
                   {/* ── Clinical ── */}
-                  {(selectedClaim.diagnosis || selectedClaim.diagnosisCode || selectedClaim.treatment) && (
-                    <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
-                        <Stethoscope className="h-3 w-3" /> Clinical
-                      </p>
-                      <div className="rounded-xl border bg-card divide-y overflow-hidden">
-                        {selectedClaim.diagnosis && (
-                          <div className="px-3 py-2.5">
-                            <p className="text-[10px] text-muted-foreground mb-0.5">Diagnosis</p>
-                            <p className="text-xs font-semibold">{selectedClaim.diagnosis}{selectedClaim.diagnosisCode && <span className="ml-1.5 font-mono text-muted-foreground">({selectedClaim.diagnosisCode})</span>}</p>
-                          </div>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
+                      <Stethoscope className="h-3 w-3" /> Clinical
+                    </p>
+                    <div className="rounded-xl border bg-card divide-y overflow-hidden">
+                      <div className="px-3 py-2.5">
+                        <div className="flex items-center gap-1 mb-0.5">
+                          <p className="text-[10px] text-muted-foreground">Diagnosis</p>
+                          <HistBtn field="diagnosis" />
+                        </div>
+                        {isEditing && E ? (
+                          <input className={`w-full text-xs font-semibold bg-transparent border-b outline-none pb-0.5 ${changed('diagnosis', selectedClaim.diagnosis || '')}`}
+                            value={E.diagnosis} onChange={ev => setEditDraft(d => d && ({ ...d, diagnosis: ev.target.value }))} />
+                        ) : (
+                          <p className="text-xs font-semibold">{selectedClaim.diagnosis || '—'}{selectedClaim.diagnosisCode && <span className="ml-1.5 font-mono text-muted-foreground">({selectedClaim.diagnosisCode})</span>}</p>
                         )}
-                        {selectedClaim.treatment && (
-                          <div className="px-3 py-2.5">
-                            <p className="text-[10px] text-muted-foreground mb-0.5">Treatment</p>
-                            <p className="text-xs">{selectedClaim.treatment}</p>
-                          </div>
+                      </div>
+                      {isEditing && E && (
+                        <div className="px-3 py-2.5">
+                          <p className="text-[10px] text-muted-foreground mb-0.5">ICD Code</p>
+                          <input className={`w-full text-xs font-mono bg-transparent border-b outline-none pb-0.5 ${changed('diagnosisCode', selectedClaim.diagnosisCode || '')}`}
+                            value={E.diagnosisCode} onChange={ev => setEditDraft(d => d && ({ ...d, diagnosisCode: ev.target.value }))} placeholder="e.g. H28" />
+                        </div>
+                      )}
+                      <div className="px-3 py-2.5">
+                        <div className="flex items-center gap-1 mb-0.5">
+                          <p className="text-[10px] text-muted-foreground">Treatment</p>
+                          <HistBtn field="treatment" />
+                        </div>
+                        {isEditing && E ? (
+                          <textarea rows={2} className={`w-full text-xs bg-transparent border-b outline-none pb-0.5 resize-none ${changed('treatment', selectedClaim.treatment || '')}`}
+                            value={E.treatment} onChange={ev => setEditDraft(d => d && ({ ...d, treatment: ev.target.value }))} />
+                        ) : (
+                          <p className="text-xs">{selectedClaim.treatment || '—'}</p>
                         )}
                       </div>
                     </div>
-                  )}
+                  </div>
+
+                    </>)
+                  })()}
 
                   {/* ── Fraud signals ── */}
                   {(selectedClaim.fraudSignals?.length ?? 0) > 0 && (
@@ -745,6 +938,52 @@ export default function MakerQueue() {
                   )}
                 </div>{/* end p-4 space-y-4 */}
 
+                {/* ── Field history panel ── */}
+                {historyField && (
+                  <div className="border-t bg-muted/30 px-4 py-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold flex items-center gap-1.5">
+                        <History className="h-3.5 w-3.5 text-muted-foreground" />
+                        History: <span className="font-mono text-primary">{historyField}</span>
+                      </p>
+                      <button onClick={() => setHistoryField(null)} className="text-muted-foreground hover:text-foreground">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    {historyLoading ? (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+                        <Loader2 className="h-3 w-3 animate-spin" /> Loading history…
+                      </div>
+                    ) : fieldHistory.length === 0 ? (
+                      <p className="text-xs text-muted-foreground py-1">No changes recorded for this field.</p>
+                    ) : (
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {fieldHistory.map((entry: any, i: number) => {
+                          const nv = entry.newValue ?? entry.after ?? {}
+                          const ov = entry.oldValue ?? entry.before ?? {}
+                          const newVal = nv[historyField] ?? '—'
+                          const oldVal = ov[historyField] ?? '—'
+                          const actor  = entry.actor?.name ?? entry.performedBy ?? entry.changedBy ?? 'System'
+                          const at     = entry.createdAt ?? entry.timestamp
+                          return (
+                            <div key={i} className="rounded-lg border bg-card px-3 py-2 text-xs space-y-1">
+                              <div className="flex items-center justify-between text-muted-foreground">
+                                <span className="font-medium text-foreground">{actor}</span>
+                                <span>{at ? new Date(at).toLocaleString('en-KE', { dateStyle: 'short', timeStyle: 'short' }) : '—'}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="line-through text-red-500/80 font-mono">{String(oldVal)}</span>
+                                <span className="text-muted-foreground">→</span>
+                                <span className="text-emerald-600 font-semibold font-mono">{String(newVal)}</span>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Comment/reason input (not shown in view mode) */}
                 {actionType !== 'view' && (
                   <div className="px-4 pb-4">
@@ -754,7 +993,7 @@ export default function MakerQueue() {
                         <Label className="flex items-center gap-2 text-sm font-semibold">
                           <MessageSquare className={`h-3.5 w-3.5 ${actionType === 'approve' ? 'text-emerald-600' : 'text-red-600'}`} />
                           {actionType === 'approve'
-                            ? 'Maker-Checker Notes'
+                            ? 'Verification Notes'
                             : actionType === 'escalate_fraud'
                               ? 'Reason for Fraud Escalation'
                               : 'Rejection Reason'}
@@ -780,7 +1019,7 @@ export default function MakerQueue() {
                       <p className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
                         <Mail className="h-3 w-3 mt-0.5 shrink-0" />
                         {actionType === 'approve'
-                          ? 'These notes are saved to the audit trail and emailed to the checker team. You will also receive a confirmation email.'
+                          ? 'These notes are saved to the audit trail and emailed to the claims officer team. You will also receive a confirmation email.'
                           : 'This reason is permanently recorded. The provider/branch will be emailed, and you will receive a confirmation.'}
                       </p>
                     </div>
@@ -836,7 +1075,7 @@ export default function MakerQueue() {
                 {submitting
                   ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   : <Send className="mr-2 h-4 w-4" />}
-                {submitting ? 'Forwarding…' : 'Approve & Forward'}
+                {submitting ? 'Forwarding…' : 'Verify & Forward to Claims Officer'}
               </Button>
             )}
             {actionType === 'reject' && (

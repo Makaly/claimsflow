@@ -238,4 +238,59 @@ export class AssignmentService {
       completed: completedMap.get(r.assignedTo!) ?? 0,
     }));
   }
+
+  async getMakerCheckerWorkload() {
+    const users = await this.prisma.user.findMany({
+      where: { role: 'maker_checker', deletedAt: null },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        isActive: true,
+        isOnLeave: true,
+        relieverId: true,
+        reliever: { select: { id: true, name: true } },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    const userIds = users.map((u) => u.id);
+
+    const [open, urgent, completed] = await Promise.all([
+      this.prisma.claim.groupBy({
+        by: ['assignedTo'],
+        where: { assignedTo: { in: userIds }, workflowStage: 'maker_checker_review' },
+        _count: { id: true },
+      }),
+      this.prisma.claim.groupBy({
+        by: ['assignedTo'],
+        where: { assignedTo: { in: userIds }, workflowStage: 'maker_checker_review', priority: 'urgent' },
+        _count: { id: true },
+      }),
+      this.prisma.claim.groupBy({
+        by: ['assignedTo'],
+        where: {
+          assignedTo: { in: userIds },
+          workflowStage: { in: ['claims_officer_review', 'completed'] },
+        },
+        _count: { id: true },
+      }),
+    ]);
+
+    const openMap      = new Map(open.map((r) => [r.assignedTo, r._count.id]));
+    const urgentMap    = new Map(urgent.map((r) => [r.assignedTo, r._count.id]));
+    const completedMap = new Map(completed.map((r) => [r.assignedTo, r._count.id]));
+
+    return users.map((u) => ({
+      id:        u.id,
+      name:      u.name,
+      email:     u.email,
+      isActive:  u.isActive,
+      isOnLeave: u.isOnLeave,
+      reliever:  u.reliever ?? null,
+      open:      openMap.get(u.id) ?? 0,
+      urgent:    urgentMap.get(u.id) ?? 0,
+      completed: completedMap.get(u.id) ?? 0,
+    }));
+  }
 }
