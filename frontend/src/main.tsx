@@ -4,6 +4,8 @@ import * as pdfjsLib from 'pdfjs-dist'
 import App from './App'
 import './index.css'
 import { installFetchProxy } from './lib/installFetchProxy'
+// C5: initialise i18n before any component renders
+import './lib/i18n'
 
 // Wrap window.fetch before any component mounts. Rewrites the older raw
 // fetch('/api/...') call sites that still live in some components onto the

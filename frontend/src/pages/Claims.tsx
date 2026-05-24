@@ -723,6 +723,58 @@ function claimNumSubseq(claimNumber: string, query: string): boolean {
   return true
 }
 
+// C4: Clinical Discrepancies panel — shown on claim detail when NLP finds conflicts
+function ClinicalDiscrepanciesPanel({ claimId }: { claimId: string }) {
+  const [data, setData] = useState<{
+    discrepancies: string[]
+    redFlags: string[]
+    icd10Hints: { code: string; description: string }[]
+    drugMentions: string[]
+    usedGeminiFallback?: boolean
+  } | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    setData(null)
+    if (!claimId) return
+    setLoading(true)
+    api.get(`/clinical-nlp/claims/${claimId}/analyze`)
+      .then(r => setData(r.data))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [claimId])
+
+  if (loading) return null
+  if (!data) return null
+  const hasIssues = data.discrepancies.length > 0 || data.redFlags.length > 0
+  if (!hasIssues && data.icd10Hints.length === 0 && data.drugMentions.length === 0) return null
+
+  return (
+    <div className={`rounded-lg border p-3 space-y-2 text-xs ${hasIssues ? 'border-red-200 bg-red-50' : 'border-blue-100 bg-blue-50'}`}>
+      <p className="font-semibold flex items-center gap-1 text-sm">
+        <Brain className="h-4 w-4 text-purple-500" />
+        Clinical Discrepancies {data.usedGeminiFallback && <Badge variant="outline" className="text-[9px] ml-1">Gemini</Badge>}
+      </p>
+      {data.discrepancies.map((d, i) => (
+        <div key={i} className="flex items-start gap-1 text-red-700"><AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />{d}</div>
+      ))}
+      {data.redFlags.map((f, i) => (
+        <div key={i} className="flex items-start gap-1 text-orange-700"><AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />{f}</div>
+      ))}
+      {data.icd10Hints.length > 0 && (
+        <div className="flex flex-wrap gap-1 pt-1">
+          {data.icd10Hints.map((h, i) => (
+            <Badge key={i} variant="outline" className="font-mono text-[10px]">{h.code} – {h.description}</Badge>
+          ))}
+        </div>
+      )}
+      {data.drugMentions.length > 0 && (
+        <p className="text-muted-foreground">Drugs mentioned: {data.drugMentions.join(', ')}</p>
+      )}
+    </div>
+  )
+}
+
 export default function Claims() {
   const { claims, addClaim, deleteClaim, deleteClaims, fetchFromServer } = useClaimsStore()
   const { user } = useAuthStore()
@@ -2705,6 +2757,9 @@ export default function Claims() {
                           </Section>
                         )
                       })()}
+
+                      {/* C4: Clinical Discrepancies panel */}
+                      <ClinicalDiscrepanciesPanel claimId={selectedClaim.id} />
 
                       {/* Metadata */}
                       <Section icon={<Hash className="h-3.5 w-3.5 text-slate-400" />} label="Metadata" color="bg-muted/30">

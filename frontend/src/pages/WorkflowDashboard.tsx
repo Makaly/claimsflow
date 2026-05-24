@@ -4,7 +4,7 @@ import { useAuthStore } from '@/store/authStore'
 import {
   GitBranch, UserCheck, UserCog, CheckCircle, Clock,
   AlertTriangle, ArrowRight, Users, Loader2, RefreshCw,
-  Plane, AlertCircle,
+  Plane, AlertCircle, Zap,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -16,6 +16,25 @@ import {
 } from 'recharts'
 import { formatCurrency } from '@/lib/utils'
 import api from '@/services/api'
+
+// C3: Green-lane KPI mini-card
+function GreenLaneKpi() {
+  const [summary, setSummary] = useState<{ total: number; byRule: Record<string, number> } | null>(null)
+  useEffect(() => {
+    api.get('/workflow/green-lane/daily-summary').then(r => setSummary(r.data)).catch(() => {})
+  }, [])
+  return (
+    <Card>
+      <CardContent className="p-4 flex items-center gap-3">
+        <Zap className="h-8 w-8 text-emerald-500 opacity-75" />
+        <div>
+          <p className="text-xs text-muted-foreground">Auto-Approved (Green Lane, 24h)</p>
+          <p className="text-2xl font-bold text-emerald-600">{summary?.total ?? '—'}</p>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
 
 interface WorkflowStats {
   initial_review: number
@@ -357,6 +376,9 @@ export default function WorkflowDashboard() {
             </Button>
           </CardContent>
         </Card>
+
+        {/* C3: Green-lane KPI card */}
+        <GreenLaneKpi />
 
         <Card className="lg:col-span-2">
           <CardHeader>

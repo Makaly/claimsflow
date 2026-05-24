@@ -1,0 +1,8 @@
+drugA,drugB,severity,description
+warfarin,aspirin,HIGH,Increased bleeding risk — monitor INR closely
+warfarin,ibuprofen,HIGH,NSAIDs potentiate anticoagulation — avoid combination
+warfarin,ciprofloxacin,MODERATE,Fluoroquinolones may elevate INR
+metformin,furosemide,MODERATE,Loop diuretics may impair glycaemic control
+lisinopril,furosemide,LOW,Additive hypotension — titrate carefully
+tramadol,prednisolone,LOW,CNS depression risk — monitor sedation
+# STUB — replace with licensed drug interaction database in production

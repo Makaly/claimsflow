@@ -65,6 +65,8 @@
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^3.11.174",
     "qrcode.react": "^3.1.0",
+    "i18next": "^23.11.5",
+    "react-i18next": "^14.1.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-dropzone": "^14.2.3",

@@ -58,6 +58,9 @@ const MLLabelling           = lazy(() => import('@/pages/MLLabelling'))
 const ZoneAnalytics         = lazy(() => import('@/pages/ZoneAnalytics'))
 const TwoFactorSetup        = lazy(() => import('@/pages/TwoFactorSetup'))
 const NPSDashboard          = lazy(() => import('@/pages/NPSDashboard'))
+const TelemedicineBooking   = lazy(() => import('@/pages/TelemedicineBooking'))
+const PBMLookup             = lazy(() => import('@/pages/PBMLookup'))
+const ChronicCohorts        = lazy(() => import('@/pages/ChronicCohorts'))
 
 // Shared fallback spinner — keep lightweight (no external deps)
 function PageFallback() {
@@ -192,6 +195,9 @@ function AppRoutes() {
         <Route path="/scan-metering" element={<ProtectedRoute allowedRoles={['admin','finance','provider_admin','claims_officer','maker_checker','fraud_officer']}><ScanMeteringDashboard /></ProtectedRoute>} />
         <Route path="/nps" element={<ProtectedRoute allowedRoles={['admin','finance','claims_officer']}><NPSDashboard /></ProtectedRoute>} />
         <Route path="/bank-reconciliation" element={<ProtectedRoute allowedRoles={['admin','finance']}><BankReconciliation /></ProtectedRoute>} />
+        <Route path="/telemedicine" element={<ProtectedRoute><TelemedicineBooking /></ProtectedRoute>} />
+        <Route path="/pbm" element={<ProtectedRoute allowedRoles={['admin','claims_officer','fraud_officer']}><PBMLookup /></ProtectedRoute>} />
+        <Route path="/reports/chronic-cohorts" element={<ProtectedRoute allowedRoles={['admin','claims_officer','fraud_officer']}><ChronicCohorts /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

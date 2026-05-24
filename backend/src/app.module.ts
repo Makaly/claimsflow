@@ -40,6 +40,12 @@ import { NpsModule } from './nps/nps.module';
 import { ErpModule } from './erp/erp.module';
 import { BankReconModule } from './bank-recon/bank-recon.module';
 import { CoverageCalculatorModule } from './coverage-calculator/coverage-calculator.module';
+import { AssistantModule } from './assistant/assistant.module';
+import { ClinicalNlpModule } from './clinical-nlp/clinical-nlp.module';
+import { HmisModule } from './integrations/hmis/hmis.module';
+import { TelemedicineModule } from './telemedicine/telemedicine.module';
+import { PbmModule } from './pbm/pbm.module';
+import { ChronicDiseaseModule } from './chronic-disease/chronic-disease.module';
 
 @Module({
   imports: [
@@ -93,6 +99,12 @@ import { CoverageCalculatorModule } from './coverage-calculator/coverage-calcula
     ErpModule,
     BankReconModule,
     CoverageCalculatorModule,
+    AssistantModule,
+    ClinicalNlpModule,
+    HmisModule,
+    TelemedicineModule,
+    PbmModule,
+    ChronicDiseaseModule,
   ],
   controllers: [AppController],
   providers: [

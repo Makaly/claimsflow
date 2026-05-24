@@ -1,0 +1,66 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "claims": "Claims",
+    "providers": "Providers",
+    "documents": "Documents",
+    "batchUpload": "Batch Upload",
+    "workflow": "Workflow",
+    "reports": "Reports",
+    "profile": "Profile",
+    "settings": "Settings",
+    "logout": "Logout"
+  },
+  "login": {
+    "title": "Sign in to ClaimsFlow",
+    "subtitle": "CIC Insurance Group PLC",
+    "email": "Email address",
+    "password": "Password",
+    "forgotPassword": "Forgot password?",
+    "submit": "Sign in",
+    "noAccount": "Don't have an account?",
+    "register": "Register"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "welcome": "Welcome back, {{name}}",
+    "totalClaims": "Total Claims",
+    "pendingClaims": "Pending Claims",
+    "approvedClaims": "Approved Claims",
+    "rejectedClaims": "Rejected Claims"
+  },
+  "batchUpload": {
+    "title": "Batch Upload",
+    "dragDrop": "Drag & drop files here, or click to select",
+    "upload": "Upload",
+    "processing": "Processing...",
+    "success": "Upload successful",
+    "error": "Upload failed"
+  },
+  "profile": {
+    "title": "Profile",
+    "personalInfo": "Personal Information",
+    "security": "Security",
+    "language": "Language",
+    "timezone": "Timezone",
+    "save": "Save changes",
+    "saved": "Changes saved",
+    "selectLanguage": "Select language"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "view": "View",
+    "close": "Close",
+    "search": "Search",
+    "filter": "Filter",
+    "export": "Export",
+    "refresh": "Refresh"
+  }
+}
