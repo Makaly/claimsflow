@@ -2298,15 +2298,16 @@ export default function DocumentClassifierEditor() {
                   <div className="flex-1 overflow-y-auto p-4 space-y-3">
                     {(() => {
                       const DOC_TYPES = [
-                        { value: 'invoice',           label: 'Invoice / Bill',      icon: '🧾' },
-                        { value: 'lab_result',        label: 'Lab Results',         icon: '🔬' },
-                        { value: 'prescription',      label: 'Prescription',        icon: '💊' },
-                        { value: 'discharge_summary', label: 'Discharge Summary',   icon: '🏥' },
-                        { value: 'medical_report',    label: 'Medical Report',      icon: '📋' },
-                        { value: 'claim_form',        label: 'Claim Form',          icon: '📝' },
-                        { value: 'pre_auth',          label: 'Pre-Authorization',   icon: '✅' },
-                        { value: 'referral',          label: 'Referral Letter',     icon: '📨' },
-                        { value: 'supporting',        label: 'Supporting Document', icon: '📎' },
+                        { value: 'invoice',            label: 'Invoice / Bill',      icon: '🧾' },
+                        { value: 'lab_result',         label: 'Lab Results',         icon: '🔬' },
+                        { value: 'prescription',       label: 'Prescription',        icon: '💊' },
+                        { value: 'discharge_summary',  label: 'Discharge Summary',   icon: '🏥' },
+                        { value: 'medical_report',     label: 'Medical Report',      icon: '📋' },
+                        { value: 'claim_form',         label: 'Claim Form',          icon: '📝' },
+                        { value: 'medical_claim_form', label: 'Medical Claim Form',  icon: '🏨' },
+                        { value: 'pre_auth',           label: 'Pre-Authorization',   icon: '✅' },
+                        { value: 'referral',           label: 'Referral Letter',     icon: '📨' },
+                        { value: 'supporting',         label: 'Supporting Document', icon: '📎' },
                       ]
 
                       if (splitRanges.length === 0) return (

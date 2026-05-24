@@ -766,15 +766,16 @@ export default function Documents() {
                 {splitRanges.map((range, i) => {
                   const color = SEGMENT_COLORS[i % SEGMENT_COLORS.length]
                   const DOC_TYPES = [
-                    { value: 'invoice',           label: 'Invoice / Bill',      icon: '🧾' },
-                    { value: 'lab_result',        label: 'Lab Results',         icon: '🔬' },
-                    { value: 'prescription',      label: 'Prescription',        icon: '💊' },
-                    { value: 'discharge_summary', label: 'Discharge Summary',   icon: '🏥' },
-                    { value: 'medical_report',    label: 'Medical Report',      icon: '📋' },
-                    { value: 'claim_form',        label: 'Claim Form',          icon: '📝' },
-                    { value: 'pre_auth',          label: 'Pre-Authorization',   icon: '✅' },
-                    { value: 'referral',          label: 'Referral Letter',     icon: '📨' },
-                    { value: 'supporting',        label: 'Supporting Document', icon: '📎' },
+                    { value: 'invoice',            label: 'Invoice / Bill',      icon: '🧾' },
+                    { value: 'lab_result',         label: 'Lab Results',         icon: '🔬' },
+                    { value: 'prescription',       label: 'Prescription',        icon: '💊' },
+                    { value: 'discharge_summary',  label: 'Discharge Summary',   icon: '🏥' },
+                    { value: 'medical_report',     label: 'Medical Report',      icon: '📋' },
+                    { value: 'claim_form',         label: 'Claim Form',          icon: '📝' },
+                    { value: 'medical_claim_form', label: 'Medical Claim Form',  icon: '🏨' },
+                    { value: 'pre_auth',           label: 'Pre-Authorization',   icon: '✅' },
+                    { value: 'referral',           label: 'Referral Letter',     icon: '📨' },
+                    { value: 'supporting',         label: 'Supporting Document', icon: '📎' },
                   ]
                   const docLabel = DOC_TYPES.find(d => d.value === range.documentType)
                   return (
