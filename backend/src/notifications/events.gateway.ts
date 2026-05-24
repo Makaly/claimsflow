@@ -28,6 +28,11 @@ const wsCorsOrigin: (string | RegExp)[] | RegExp = (() => {
 @WebSocketGateway({
   cors: { origin: wsCorsOrigin, credentials: true },
   namespace: '/events',
+  // Heartbeat tuning: ping every 25 s, allow 60 s before declaring the client dead.
+  // Default values (25 s / 20 s) cause false disconnects on slow mobile networks
+  // and Render free-tier instances that can pause for up to 30 s under load.
+  pingInterval: 25_000,
+  pingTimeout: 60_000,
 })
 export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;

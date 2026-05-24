@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { Layout } from '@/components/Layout'
 import { useAuthStore } from '@/store/authStore'
 import { useClaimsStore } from '@/store/claimsStore'
@@ -8,42 +8,63 @@ import Login from '@/pages/Login'
 import Register from '@/pages/Register'
 import ForgotPassword from '@/pages/ForgotPassword'
 import ResetPassword from '@/pages/ResetPassword'
-import Appeals from '@/pages/Appeals'
-import Payment from '@/pages/Payment'
-import SystemConfigPage from '@/pages/SystemConfigPage'
-import AgingDashboard from '@/pages/AgingDashboard'
 import Dashboard from '@/pages/Dashboard'
 import Claims from '@/pages/Claims'
-import Providers from '@/pages/Providers'
 import Documents from '@/pages/Documents'
-import BatchUpload from '@/pages/BatchUpload'
-import WorkflowDashboard from '@/pages/WorkflowDashboard'
-import MakerQueue from '@/pages/MakerQueue'
-import CheckerQueue from '@/pages/CheckerQueue'
-import ClaimsOfficerQueue from '@/pages/ClaimsOfficerQueue'
-import FraudQueue from '@/pages/FraudQueue'
-import ProviderApprovals from '@/pages/ProviderApprovals'
-import UserManagement from '@/pages/UserManagement'
-import Roles from '@/pages/Roles'
-import Permissions from '@/pages/Permissions'
-import ActivityLogs from '@/pages/ActivityLogs'
-import Reports from '@/pages/Reports'
-import ProviderScorecard from '@/pages/ProviderScorecard'
-import PreAuth from '@/pages/PreAuth'
 import Profile from '@/pages/Profile'
-import Settings from '@/pages/Settings'
-import TwoFactorSetup from '@/pages/TwoFactorSetup'
-import Branches from '@/pages/Branches'
 import TermsOfService from '@/pages/TermsOfService'
 import PrivacyPolicy from '@/pages/PrivacyPolicy'
-import DocumentClassifierEditor from '@/pages/DocumentClassifierEditor'
-import UnknownDocuments from '@/pages/UnknownDocuments'
-import UnknownDocumentReview from '@/pages/UnknownDocumentReview'
-import ScanStation from '@/pages/ScanStation'
-import PolicyPlans from '@/pages/PolicyPlans'
-import MLLabelling from '@/pages/MLLabelling'
-import ZoneAnalytics from '@/pages/ZoneAnalytics'
-import ScanMeteringDashboard from '@/pages/ScanMeteringDashboard'
+
+// ── Role-split lazy chunks ────────────────────────────────────────────────────
+// Each group is a separate Vite chunk (configured in vite.config.ts).
+// Routes shared by multiple roles are kept in the baseline bundle above.
+
+// Admin chunk
+const UserManagement        = lazy(() => import('@/pages/UserManagement'))
+const Roles                 = lazy(() => import('@/pages/Roles'))
+const Permissions           = lazy(() => import('@/pages/Permissions'))
+const Settings              = lazy(() => import('@/pages/Settings'))
+const SystemConfigPage      = lazy(() => import('@/pages/SystemConfigPage'))
+const DocumentClassifierEditor = lazy(() => import('@/pages/DocumentClassifierEditor'))
+const UnknownDocuments      = lazy(() => import('@/pages/UnknownDocuments'))
+const UnknownDocumentReview = lazy(() => import('@/pages/UnknownDocumentReview'))
+
+// Finance chunk
+const Payment               = lazy(() => import('@/pages/Payment'))
+const ScanMeteringDashboard = lazy(() => import('@/pages/ScanMeteringDashboard'))
+
+// Provider chunk
+const ProviderApprovals     = lazy(() => import('@/pages/ProviderApprovals'))
+const Providers             = lazy(() => import('@/pages/Providers'))
+const Branches              = lazy(() => import('@/pages/Branches'))
+const PreAuth               = lazy(() => import('@/pages/PreAuth'))
+const ScanStation           = lazy(() => import('@/pages/ScanStation'))
+
+// Claims-officer chunk
+const WorkflowDashboard     = lazy(() => import('@/pages/WorkflowDashboard'))
+const MakerQueue            = lazy(() => import('@/pages/MakerQueue'))
+const CheckerQueue          = lazy(() => import('@/pages/CheckerQueue'))
+const ClaimsOfficerQueue    = lazy(() => import('@/pages/ClaimsOfficerQueue'))
+const FraudQueue            = lazy(() => import('@/pages/FraudQueue'))
+const ActivityLogs          = lazy(() => import('@/pages/ActivityLogs'))
+const Reports               = lazy(() => import('@/pages/Reports'))
+const ProviderScorecard     = lazy(() => import('@/pages/ProviderScorecard'))
+const AgingDashboard        = lazy(() => import('@/pages/AgingDashboard'))
+const Appeals               = lazy(() => import('@/pages/Appeals'))
+const BatchUpload           = lazy(() => import('@/pages/BatchUpload'))
+const PolicyPlans           = lazy(() => import('@/pages/PolicyPlans'))
+const MLLabelling           = lazy(() => import('@/pages/MLLabelling'))
+const ZoneAnalytics         = lazy(() => import('@/pages/ZoneAnalytics'))
+const TwoFactorSetup        = lazy(() => import('@/pages/TwoFactorSetup'))
+
+// Shared fallback spinner — keep lightweight (no external deps)
+function PageFallback() {
+  return (
+    <div className="flex items-center justify-center min-h-[40vh] text-muted-foreground text-sm animate-pulse">
+      Loading…
+    </div>
+  )
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -127,7 +148,9 @@ function AppRoutes() {
       <Route
         element={
           <ProtectedRoute>
-            <Layout />
+            <Suspense fallback={<PageFallback />}>
+              <Layout />
+            </Suspense>
           </ProtectedRoute>
         }
       >

@@ -224,6 +224,36 @@ export class DocumentClassifierController {
     return this.service.splitTemplateSample(id, body.pageRanges, req.user?.userId);
   }
 
+  // ── Confusion matrix & retraining wiring ─────────────────────────────────────
+
+  /**
+   * GET /document-classifiers/confusion-matrix
+   * Computes a confusion matrix from reviewed UnknownDocument labels.
+   * Rows = true label (guessedType), columns = predicted label (guessedType on
+   * first-pass triage). Counts only records with status='template_created' or
+   * 'reviewed' where the human has validated the type.
+   */
+  @Get('confusion-matrix')
+  async getConfusionMatrix() {
+    const reviewed = await this.service.getReviewedLabels();
+    return this.service.buildConfusionMatrix(reviewed);
+  }
+
+  /**
+   * POST /document-classifiers/retrain
+   * Pulls all reviewed+labelled UnknownDocuments and triggers a lightweight
+   * refitting pass via the ML sidecar. The actual training happens in the
+   * background; this endpoint returns the label set used as training data.
+   *
+   * TODO: wire to the real ML sidecar /retrain endpoint once the sidecar
+   * exposes a document-type classifier route (see ml-sidecar/main.py).
+   */
+  @Post('retrain')
+  @Roles('admin')
+  async triggerRetrain() {
+    return this.service.triggerRetrain();
+  }
+
   // ── Zone analytics & feedback ─────────────────────────────────────────────────
 
   @Get('zone-analytics')

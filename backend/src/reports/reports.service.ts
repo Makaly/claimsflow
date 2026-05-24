@@ -248,7 +248,7 @@ export class ReportsService {
           where,
           select: {
             status: true, invoiceAmount: true, ocrConfidence: true,
-            isComplete: true, resubmissionCount: true,
+            isComplete: true, resubmissionCount: true, requiresManualReview: true,
             fraudSignals: true, submittedAt: true, approvedAt: true,
           },
         },
@@ -267,17 +267,37 @@ export class ReportsService {
       const withFraud = claims.filter(c => Array.isArray(c.fraudSignals) && (c.fraudSignals as any[]).length > 0).length;
       const totalAmount = claims.reduce((s, c) => s + (c.invoiceAmount || 0), 0);
       const approvalRate = decided > 0 ? +(approved / decided * 100).toFixed(1) : 0;
+      const rejectionRate = decided > 0 ? +(rejected / decided * 100).toFixed(1) : 0;
       const fraudRate = total > 0 ? +(withFraud / total * 100).toFixed(1) : 0;
       const incompleteRate = total > 0 ? +(incomplete / total * 100).toFixed(1) : 0;
       const resubmissionRate = total > 0 ? +(resubmitted / total * 100).toFixed(1) : 0;
-      // Score: 0-100; penalise fraud and incompleteness, reward approval rate
-      const score = Math.max(0, Math.min(100, Math.round(
-        approvalRate * 0.5 - fraudRate * 2 - incompleteRate * 0.3 - resubmissionRate * 0.2 + 50,
+
+      // OCR re-key rate: claims that required manual review after OCR
+      const ocrRekeyCount = claims.filter(c => c.requiresManualReview).length;
+      const ocrRekeyRate = total > 0 ? +(ocrRekeyCount / total * 100).toFixed(1) : 0;
+
+      // quality_score: penalise rejection, fraud, and OCR re-key (0–100)
+      const quality_score = Math.max(0, Math.min(100, Math.round(
+        100 - rejectionRate * 0.5 - fraudRate * 2 - ocrRekeyRate * 0.3,
       )));
+
+      // volume_score: normalised claims count; capped at 500/month = 100
+      // Providers with more claims and higher amounts score higher on volume.
+      const volume_score = Math.min(100, Math.round((total / 500) * 100));
+
+      // blended_score: backward-compatible composite (weighted 60% quality, 40% volume)
+      const score = Math.round(quality_score * 0.6 + volume_score * 0.4);
+
       return {
         providerId: p.id, providerName: p.name, providerType: p.type,
-        totalClaims: total, approved, rejected, approvalRate, totalAmount: +totalAmount.toFixed(2),
-        fraudRate, incompleteRate, resubmissionRate, score,
+        totalClaims: total, approved, rejected, approvalRate, rejectionRate,
+        totalAmount: +totalAmount.toFixed(2),
+        fraudRate, incompleteRate, resubmissionRate, ocrRekeyRate,
+        // Split scores
+        quality_score,
+        volume_score,
+        // Blended score preserved for backward compatibility
+        score,
         riskLevel: fraudRate > 15 ? 'high' : fraudRate > 8 ? 'medium' : 'low',
       };
     }).filter(Boolean).sort((a, b) => b!.score - a!.score);

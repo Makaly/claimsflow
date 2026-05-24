@@ -1171,4 +1171,83 @@ Return an empty array if everything looks correct. Only flag genuine issues, not
 
     return result;
   }
+
+  // ── Confusion matrix & retraining wiring ─────────────────────────────────────
+
+  /** Fetch reviewed UnknownDocuments that have a guessedType label. */
+  async getReviewedLabels() {
+    return this.prisma.unknownDocument.findMany({
+      where: {
+        status: { in: ['reviewed', 'template_created'] },
+        guessedType: { not: null },
+      },
+      select: { id: true, guessedType: true, guessedProvider: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /**
+   * Build a confusion matrix from reviewed labels.
+   * Since there is only one label per document (guessedType from AI triage),
+   * we treat guessedType as both the "true" class and the "predicted" class for
+   * now. A richer matrix will be possible once reviewers can set a corrected label
+   * (TODO: add a correctedType field to UnknownDocument in a follow-up migration).
+   *
+   * Returns: { labels, matrix (NxN count), perClassAccuracy, totalSamples }
+   */
+  buildConfusionMatrix(records: Array<{ guessedType: string | null }>) {
+    const labels = [...new Set(records.map(r => r.guessedType ?? 'Unknown'))].sort();
+    const idx = Object.fromEntries(labels.map((l, i) => [l, i]));
+    const matrix: number[][] = labels.map(() => labels.map(() => 0));
+
+    for (const r of records) {
+      const label = r.guessedType ?? 'Unknown';
+      const i = idx[label];
+      if (i !== undefined) matrix[i][i]++;
+    }
+
+    const perClassAccuracy = labels.map((l, i) => {
+      const rowSum = matrix[i].reduce((s, v) => s + v, 0);
+      return { label: l, correct: matrix[i][i], total: rowSum, accuracy: rowSum > 0 ? matrix[i][i] / rowSum : null };
+    });
+
+    return { labels, matrix, perClassAccuracy, totalSamples: records.length };
+  }
+
+  /**
+   * Assemble the label set and POST to the ML sidecar /retrain endpoint.
+   * The sidecar is responsible for the actual model update. This method just
+   * wires the data pipeline.
+   *
+   * TODO: update ML sidecar (ml-sidecar/main.py) to expose POST /retrain-classifier
+   * accepting { labels: Array<{ documentType, guessedProvider }> }
+   */
+  async triggerRetrain() {
+    const labels = await this.getReviewedLabels();
+    const payload = labels.map(r => ({
+      documentType: r.guessedType,
+      guessedProvider: r.guessedProvider,
+      reviewedAt: r.createdAt,
+    }));
+
+    const sidecarUrl = process.env.ML_SIDECAR_URL || 'http://localhost:8001';
+    let sidecarStatus: string;
+
+    try {
+      const resp = await fetch(`${sidecarUrl}/retrain-classifier`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ labels: payload }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      sidecarStatus = resp.ok ? 'accepted' : `sidecar_error_${resp.status}`;
+    } catch (err: any) {
+      // Sidecar endpoint not yet implemented — expected during initial rollout
+      sidecarStatus = `sidecar_unavailable: ${err?.message?.slice(0, 80)}`;
+      this.logger.warn(`Retrain sidecar call failed: ${err?.message}`);
+    }
+
+    this.logger.log(`Retrain triggered: ${payload.length} labels, sidecar=${sidecarStatus}`);
+    return { labelCount: payload.length, sidecarStatus, labels: payload };
+  }
 }

@@ -454,6 +454,9 @@ model Claim {
   @@index([slaBreached])
   @@index([fraudVerdict])
   @@index([tenantId])
+  // v2-T4.2 composite hot-path indexes
+  @@index([status, assignedTo, createdAt(sort: Desc)], map: "claims_status_assigned_created_idx")
+  @@index([providerId, createdAt(sort: Desc)], map: "claims_provider_created_idx")
   @@map("claims")
 }
 
@@ -686,6 +689,7 @@ model UnknownDocument {
   classificationReason String?
   claimId              String?
   uploadedBy           String?
+  linkedTemplateId     String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -878,6 +882,8 @@ model ActivityLog {
   @@index([action])
   @@index([entity])
   @@index([createdAt])
+  // v2-T4.2 composite index for entity timeline queries
+  @@index([entity, entityId, createdAt(sort: Desc)], map: "activity_logs_entity_created_idx")
   @@map("activity_logs")
 }
 

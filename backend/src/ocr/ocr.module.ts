@@ -8,6 +8,8 @@ import { ClaudeVisionService } from './claude-vision.service';
 import { GeminiVisionService } from './gemini-vision.service';
 import { VisionRouterService } from './vision-router.service';
 import { DocumentClassifierModule } from '../document-classifier/document-classifier.module';
+import { PrismaModule } from '../prisma/prisma.module';
+import { ImagePreprocessService } from './image-preprocess.service';
 import { AnomalyScoringService } from '../claims/anomaly-scoring.service';
 import { LineItemFraudService } from '../claims/line-item-fraud.service';
 import { ClaimTypeConfigService } from '../claims/claim-type-config.service';
@@ -16,6 +18,7 @@ import { ClaimTypeConfigService } from '../claims/claim-type-config.service';
   imports: [
     BullModule.registerQueue({ name: 'ocr' }),
     DocumentClassifierModule,
+    PrismaModule,
   ],
   controllers: [OcrController],
   providers: [
@@ -25,10 +28,11 @@ import { ClaimTypeConfigService } from '../claims/claim-type-config.service';
     ClaudeVisionService,
     GeminiVisionService,
     VisionRouterService,
+    ImagePreprocessService,
     AnomalyScoringService,
     LineItemFraudService,
     ClaimTypeConfigService,
   ],
-  exports: [OcrService, OllamaOcrService, VisionRouterService],
+  exports: [OcrService, OllamaOcrService, VisionRouterService, ImagePreprocessService],
 })
 export class OcrModule {}

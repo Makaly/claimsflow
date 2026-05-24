@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { RefreshCw, Loader2, BarChart3, TrendingUp, ShieldAlert, Users } from 'lucide-react'
+import { RefreshCw, Loader2, BarChart3, TrendingUp, ShieldAlert, Users, Star, Activity } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -21,10 +21,16 @@ interface ProviderScore {
   approved: number
   rejected: number
   approvalRate: number
+  rejectionRate: number
   totalAmount: number
   fraudRate: number
   incompleteRate: number
   resubmissionRate: number
+  ocrRekeyRate: number
+  // Split scores (v2-T3.4)
+  quality_score: number
+  volume_score: number
+  // Blended — backward compat
   score: number
   riskLevel: 'high' | 'medium' | 'low'
 }
@@ -163,6 +169,30 @@ export default function ProviderScorecard() {
             </div>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Avg Quality Score</CardTitle>
+            <Star className="h-4 w-4 text-amber-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">
+              {loading ? '—' : `${providers.length > 0 ? Math.round(providers.reduce((s, p) => s + p.quality_score, 0) / providers.length) : 0}/100`}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Avg Volume Score</CardTitle>
+            <Activity className="h-4 w-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">
+              {loading ? '—' : `${providers.length > 0 ? Math.round(providers.reduce((s, p) => s + p.volume_score, 0) / providers.length) : 0}/100`}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {loading ? (
@@ -221,13 +251,14 @@ export default function ProviderScorecard() {
                     <TableHead className="w-12 text-center">Rank</TableHead>
                     <TableHead>Provider</TableHead>
                     <TableHead>Type</TableHead>
-                    <TableHead className="text-center">Score</TableHead>
-                    <TableHead className="text-right">Approval Rate</TableHead>
-                    <TableHead className="text-right">Fraud Rate</TableHead>
-                    <TableHead className="text-right">Incomplete Rate</TableHead>
-                    <TableHead className="text-right">Resubmission Rate</TableHead>
-                    <TableHead className="text-right">Total Claims</TableHead>
-                    <TableHead className="text-center">Risk Level</TableHead>
+                    <TableHead className="text-center">Blended</TableHead>
+                    <TableHead className="text-center">Quality</TableHead>
+                    <TableHead className="text-center">Volume</TableHead>
+                    <TableHead className="text-right">Approval</TableHead>
+                    <TableHead className="text-right">Fraud</TableHead>
+                    <TableHead className="text-right">OCR Re-key</TableHead>
+                    <TableHead className="text-right">Claims</TableHead>
+                    <TableHead className="text-center">Risk</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -246,14 +277,23 @@ export default function ProviderScorecard() {
                       <TableCell className="text-center">
                         {scoreBadge(p.score)}
                       </TableCell>
+                      <TableCell className="text-center">
+                        {scoreBadge(p.quality_score ?? p.score)}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {scoreBadge(p.volume_score ?? 0)}
+                      </TableCell>
                       <TableCell className="text-right text-sm">{pct(p.approvalRate)}</TableCell>
                       <TableCell className="text-right text-sm">
-                        <span className={p.fraudRate > 0.05 ? 'text-red-500 font-semibold' : ''}>
+                        <span className={p.fraudRate > 5 ? 'text-red-500 font-semibold' : ''}>
                           {pct(p.fraudRate)}
                         </span>
                       </TableCell>
-                      <TableCell className="text-right text-sm">{pct(p.incompleteRate)}</TableCell>
-                      <TableCell className="text-right text-sm">{pct(p.resubmissionRate)}</TableCell>
+                      <TableCell className="text-right text-sm">
+                        <span className={p.ocrRekeyRate > 20 ? 'text-amber-600 font-semibold' : ''}>
+                          {pct(p.ocrRekeyRate ?? 0)}
+                        </span>
+                      </TableCell>
                       <TableCell className="text-right text-sm">{p.totalClaims.toLocaleString()}</TableCell>
                       <TableCell className="text-center">
                         {riskBadge(p.riskLevel)}

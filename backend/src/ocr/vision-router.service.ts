@@ -3,6 +3,7 @@ import { ClaudeVisionService } from './claude-vision.service';
 import { GeminiVisionService } from './gemini-vision.service';
 import { OllamaOcrService } from './ollama-ocr.service';
 import { ParsedInvoice } from './ocr.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 export type VisionProvider = 'claude' | 'gemini' | 'ollama' | 'tesseract';
 
@@ -18,6 +19,11 @@ export interface VisionModelOption {
 
 // How long to skip a provider after a quota/credit failure (ms).
 const CIRCUIT_OPEN_MS = 5 * 60 * 1000; // 5 minutes
+
+// Default confidence thresholds — overridable via system-config keys:
+//   ocr_gemini_confidence_threshold   (float 0–1, default 0.70)
+//   ocr_arbitration_agreement_required (bool, default true)
+const DEFAULT_GEMINI_CONF_THRESHOLD = 0.70;
 
 // HTTP status codes / error message patterns that indicate a quota or billing
 // problem rather than a transient network error. These trip the circuit breaker.
@@ -42,12 +48,102 @@ export class VisionRouterService {
     private readonly claude: ClaudeVisionService,
     private readonly gemini: GeminiVisionService,
     private readonly ollama: OllamaOcrService,
+    private readonly prisma: PrismaService,
   ) {}
 
   /** Returns true when a provider's circuit is open (i.e. it is being skipped). */
   private isCircuitOpen(provider: VisionProvider): boolean {
     const openUntil = this.circuitOpenUntil.get(provider) ?? 0;
     return Date.now() < openUntil;
+  }
+
+  /** Fetch the Gemini confidence threshold from system-config, with fallback. */
+  private async getGeminiConfThreshold(): Promise<number> {
+    try {
+      const cfg = await this.prisma.systemConfig.findUnique({ where: { key: 'ocr_gemini_confidence_threshold' } });
+      if (cfg) {
+        const v = parseFloat(cfg.value);
+        if (!isNaN(v) && v >= 0 && v <= 1) return v;
+      }
+    } catch { /* non-fatal */ }
+    return DEFAULT_GEMINI_CONF_THRESHOLD;
+  }
+
+  /**
+   * When Gemini returns low confidence, run Ollama as a second opinion.
+   * Arbitration: if both providers agree on invoiceAmount (within 1%) and
+   * patientName, use Gemini (higher field coverage). Otherwise use Ollama
+   * if its confidence is higher, else keep Gemini. Falls back to Tesseract
+   * (returns null to signal caller) if Ollama is also unavailable.
+   */
+  async extractWithFallbackChain(
+    filePath: string,
+    mimetype: string,
+    modelOverride?: string,
+  ): Promise<{ result: ParsedInvoice | null; provider: string }> {
+    const threshold = await this.getGeminiConfThreshold();
+
+    // Step 1: Gemini primary pass
+    let geminiResult: ParsedInvoice | null = null;
+    if (this.gemini.isAvailable() && !this.isCircuitOpen('gemini')) {
+      try {
+        geminiResult = await this.gemini.extract(filePath, mimetype, modelOverride);
+      } catch (err: any) {
+        if (isQuotaOrBillingError(err)) this.tripCircuit('gemini');
+        this.logger.warn(`Gemini primary pass failed: ${err?.message}`);
+      }
+    }
+
+    // If Gemini returned a confident result, short-circuit
+    if (geminiResult && geminiResult.confidence >= threshold) {
+      return { result: geminiResult, provider: 'gemini' };
+    }
+
+    const geminiConf = geminiResult?.confidence ?? 0;
+    this.logger.log(`Gemini confidence ${geminiConf.toFixed(2)} < threshold ${threshold} — requesting Ollama second opinion`);
+
+    // Step 2: Ollama second-opinion pass
+    let ollamaResult: ParsedInvoice | null = null;
+    if (!this.isCircuitOpen('ollama')) {
+      try {
+        const available = await this.ollama.isAvailable();
+        if (available) {
+          ollamaResult = (mimetype === 'application/pdf' || filePath.endsWith('.pdf'))
+            ? await this.ollama.extractFromPdf(filePath)
+            : await this.ollama.extractFromImageFile(filePath);
+        }
+      } catch (err: any) {
+        this.logger.warn(`Ollama second-opinion pass failed: ${err?.message}`);
+      }
+    }
+
+    if (!ollamaResult) {
+      // No second opinion available — return Gemini if we got anything, else null for Tesseract
+      return { result: geminiResult, provider: geminiResult ? 'gemini' : 'tesseract' };
+    }
+
+    // Step 3: Arbitrate by agreement
+    if (geminiResult) {
+      const amountsAgree = geminiResult.invoiceAmount > 0 && ollamaResult.invoiceAmount > 0
+        && Math.abs(geminiResult.invoiceAmount - ollamaResult.invoiceAmount) / geminiResult.invoiceAmount < 0.01;
+      const namesAgree = geminiResult.patientName && ollamaResult.patientName
+        && geminiResult.patientName.toLowerCase().trim() === ollamaResult.patientName.toLowerCase().trim();
+
+      if (amountsAgree && namesAgree) {
+        // Agreement: prefer Gemini (richer structured output)
+        this.logger.log('Gemini↔Ollama agree — using Gemini result');
+        return { result: geminiResult, provider: 'gemini+ollama-agreed' };
+      }
+      // Disagreement: use whichever has higher confidence
+      if (ollamaResult.confidence > geminiResult.confidence) {
+        this.logger.log(`Disagreement — Ollama wins (${ollamaResult.confidence.toFixed(2)} vs ${geminiResult.confidence.toFixed(2)})`);
+        return { result: ollamaResult, provider: 'ollama' };
+      }
+      this.logger.log(`Disagreement — Gemini wins (${geminiResult.confidence.toFixed(2)} vs ${ollamaResult.confidence.toFixed(2)})`);
+      return { result: geminiResult, provider: 'gemini' };
+    }
+
+    return { result: ollamaResult, provider: 'ollama' };
   }
 
   /** Trip the circuit for a provider after a quota/billing failure. */

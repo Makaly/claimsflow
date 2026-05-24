@@ -1,9 +1,13 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AdjudicationService } from './adjudication.service';
 
 @Injectable()
 export class PolicyService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private adjudication: AdjudicationService,
+  ) {}
 
   // ── Policy Plans ──
   async createPlan(dto: any) {
@@ -21,7 +25,10 @@ export class PolicyService {
   async updatePlan(id: string, dto: any) {
     const plan = await this.prisma.policyPlan.findUnique({ where: { id } });
     if (!plan) throw new NotFoundException('Policy plan not found');
-    return this.prisma.policyPlan.update({ where: { id }, data: dto });
+    const updated = await this.prisma.policyPlan.update({ where: { id }, data: dto });
+    // Invalidate cached plan rules so next adjudication picks up new benefit limits
+    await this.adjudication.invalidatePlanCache(id).catch(() => {});
+    return updated;
   }
 
   async deactivatePlan(id: string) {
