@@ -33,7 +33,6 @@ model User {
   savedSignatures       Json?                   @default("[]")
   providerId            String?
   branchId              String?
-  tenantId              String?
   passwordResetToken    String?
   passwordResetExpiry   DateTime?
   createdAt             DateTime                @default(now())
@@ -1264,12 +1263,14 @@ model Tenant {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  users         User[]
-  providers     Provider[]
-  claims        Claim[]
-  documents     Document[]
-  paymentAdvices PaymentAdvice[]
-  activityLogs  ActivityLog[]
+  users            User[]
+  providers        Provider[]
+  claims           Claim[]
+  documents        Document[]
+  paymentAdvices   PaymentAdvice[]
+  activityLogs     ActivityLog[]
+  ocrExtractions   OcrExtraction[]
+  batchSubmissions BatchSubmission[]
 
   @@index([slug])
   @@index([active])
@@ -1745,26 +1746,3 @@ model NotificationQueue {
   @@map("notifications_queue")
 }
 
-/// Phase 4 — multi-tenant scaffolding. Nullable `tenantId` columns on the
-/// core scoped entities (User, Provider, Claim, Document, OcrExtraction,
-/// BatchSubmission) so a future SaaS rollout can populate them without
-/// breaking today's single-organisation deployment.
-model Tenant {
-  id        String   @id @default(uuid())
-  name      String
-  slug      String   @unique
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  users             User[]
-  providers         Provider[]
-  claims            Claim[]
-  documents         Document[]
-  ocrExtractions    OcrExtraction[]
-  batchSubmissions  BatchSubmission[]
-
-  @@index([slug])
-  @@index([isActive])
-  @@map("tenants")
-}

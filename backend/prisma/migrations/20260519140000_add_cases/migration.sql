@@ -2,8 +2,8 @@
 
 CREATE TABLE "cases" (
     "id"         UUID        NOT NULL DEFAULT gen_random_uuid(),
-    "claim_id"   UUID        NOT NULL,
-    "owner_id"   UUID,
+    "claim_id"   TEXT        NOT NULL,
+    "owner_id"   TEXT,
     "status"     TEXT        NOT NULL DEFAULT 'open',   -- open|on-hold|resolved|escalated
     "sla_due_at" TIMESTAMPTZ,
     "opened_at"  TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -25,7 +25,7 @@ CREATE INDEX "cases_sla_due_at_idx" ON "cases"("sla_due_at");
 CREATE TABLE "case_comments" (
     "id"         UUID        NOT NULL DEFAULT gen_random_uuid(),
     "case_id"    UUID        NOT NULL,
-    "author_id"  UUID,
+    "author_id"  TEXT,
     "body"       TEXT        NOT NULL,
     "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
 
