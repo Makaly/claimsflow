@@ -17,14 +17,10 @@ export class PassportSamlStrategy extends (Strategy ? PassportStrategy(Strategy,
   private readonly logger = new Logger(PassportSamlStrategy.name);
 
   constructor(
-    private config: ConfigService,
-    private authService: AuthService,
+    config: ConfigService,
+    authService: AuthService,
   ) {
-    if (!Strategy) {
-      super();
-      return;
-    }
-    super({
+    super(Strategy ? {
       entryPoint: config.get('SSO_ISSUER'),
       issuer: config.get('SSO_CLIENT_ID'),
       callbackUrl: config.get('SSO_REDIRECT_URL'),
@@ -33,8 +29,14 @@ export class PassportSamlStrategy extends (Strategy ? PassportStrategy(Strategy,
       ...(config.get('SAML_METADATA_URL')
         ? { metadataURL: config.get('SAML_METADATA_URL') }
         : {}),
-    });
+    } : undefined);
+    this.config = config;
+    this.authService = authService;
   }
+
+  // Property declarations needed since constructor params are not `private` above
+  private config: ConfigService;
+  private authService: AuthService;
 
   async validate(profile: any, done: (err: any, user?: any) => void) {
     try {

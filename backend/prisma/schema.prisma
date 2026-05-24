@@ -446,7 +446,10 @@ model Claim {
   tenant                   Tenant?              @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   // D1: flag set when claim originates from a structured HMIS/FHIR feed
   structuredSource         Boolean  @default(false)
+  // T2.3 — signal-lift labelling
+  isLabelled               Boolean  @default(false)
   cases                    Case[]
+  label                    ClaimLabel?
 
   @@index([claimNumber])
   @@index([barcode])
@@ -989,6 +992,27 @@ model PaymentAdvice {
   @@map("payment_advices")
 }
 
+/// B1: Mobile money payout transaction tracking (M-Pesa / Airtel Money)
+model PayoutTransaction {
+  id                         String    @id @default(uuid())
+  adviceId                   String
+  carrier                    String    // 'mpesa' | 'airtel'
+  msisdn                     String?
+  amount                     Float
+  status                     String    @default("pending") // pending | success | failed
+  originatorConversationId   String?
+  carrierRef                 String?
+  lastError                  String?
+  attempts                   Int       @default(0)
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+
+  @@index([adviceId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("payout_transactions")
+}
+
 model PreAuthorisation {
   id              String    @id @default(uuid())
   referenceNumber String    @unique
@@ -1071,6 +1095,7 @@ model ClaimLabel {
   id               String   @id @default(uuid())
   claimId          String   @unique
   label            String // 'legitimate' | 'suspicious' | 'fraud'
+  isFraud          Boolean  @default(false)
   source           String // 'auto_approve' | 'auto_reject' | 'manual_review' | 'fraud_confirmed' | 'appeal_outcome'
   confidence       Float    @default(1.0)
   labelledBy       String?
@@ -1078,6 +1103,8 @@ model ClaimLabel {
   featuresSnapshot Json? // captures the claim features at labelling time
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+
+  claim            Claim    @relation(fields: [claimId], references: [id], onDelete: Cascade)
 
   @@index([label])
   @@index([source])

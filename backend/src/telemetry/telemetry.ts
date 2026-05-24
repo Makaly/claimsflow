@@ -59,25 +59,25 @@ export function bootstrapTelemetry() {
   const claimSubmitHistogram = meter.createHistogram('claim_submit_p95', {
     description: 'End-to-end claim submission latency (ms). SLO: p95 < 3 000 ms.',
     unit: 'ms',
-    boundaries: [100, 250, 500, 1_000, 2_000, 3_000, 5_000, 10_000],
+    advice: { explicitBucketBoundaries: [100, 250, 500, 1_000, 2_000, 3_000, 5_000, 10_000] },
   });
 
   const ocrHistogram = meter.createHistogram('ocr_p95', {
     description: 'OCR extraction latency per document (ms). SLO: p95 < 30 000 ms.',
     unit: 'ms',
-    boundaries: [1_000, 5_000, 10_000, 20_000, 30_000, 60_000, 120_000],
+    advice: { explicitBucketBoundaries: [1_000, 5_000, 10_000, 20_000, 30_000, 60_000, 120_000] },
   });
 
   const fraudScoreHistogram = meter.createHistogram('fraud_score_p95', {
     description: 'Fraud anomaly scoring latency per claim (ms). SLO: p95 < 2 000 ms.',
     unit: 'ms',
-    boundaries: [50, 100, 250, 500, 1_000, 2_000, 5_000],
+    advice: { explicitBucketBoundaries: [50, 100, 250, 500, 1_000, 2_000, 5_000] },
   });
 
   const claimCycleHistogram = meter.createHistogram('claim_cycle_time', {
     description: 'Full claim lifecycle from submission to final decision (hours). SLO: p95 < 72 h.',
     unit: 'h',
-    boundaries: [1, 4, 8, 24, 48, 72, 120, 240],
+    advice: { explicitBucketBoundaries: [1, 4, 8, 24, 48, 72, 120, 240] },
   });
   /* eslint-enable @typescript-eslint/no-unused-vars */
 

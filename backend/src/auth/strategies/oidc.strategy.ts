@@ -18,14 +18,10 @@ export class PassportOidcStrategy extends (Strategy ? PassportStrategy(Strategy,
   private readonly logger = new Logger(PassportOidcStrategy.name);
 
   constructor(
-    private config: ConfigService,
-    private authService: AuthService,
+    config: ConfigService,
+    authService: AuthService,
   ) {
-    if (!Strategy) {
-      super();
-      return;
-    }
-    super({
+    super(Strategy ? {
       issuer: config.get('SSO_ISSUER'),
       authorizationURL: `${config.get('SSO_ISSUER')}/authorize`,
       tokenURL: `${config.get('SSO_ISSUER')}/token`,
@@ -34,8 +30,14 @@ export class PassportOidcStrategy extends (Strategy ? PassportStrategy(Strategy,
       clientSecret: config.get('SSO_CLIENT_SECRET'),
       callbackURL: config.get('SSO_REDIRECT_URL'),
       scope: ['openid', 'email', 'profile'],
-    });
+    } : undefined);
+    this.config = config;
+    this.authService = authService;
   }
+
+  // Property declarations needed since constructor params are not `private` above
+  private config: ConfigService;
+  private authService: AuthService;
 
   async validate(
     _issuer: string,

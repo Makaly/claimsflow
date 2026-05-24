@@ -61,11 +61,7 @@ export class CorrespondenceService {
 
     // Optionally send via email.
     if (options.send && options.recipientEmail && template.channel !== 'pdf') {
-      await this.email.sendEmail({
-        to: options.recipientEmail,
-        subject,
-        text: body,
-      });
+      await this.email.sendEmail(options.recipientEmail, subject, body);
     }
 
     return { subject, body, pdfBase64: pdfBytes?.toString('base64') ?? null };

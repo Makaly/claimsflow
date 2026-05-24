@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import {
   AlertTriangle, FileQuestion, Loader2, RefreshCw,
-  CheckCircle2, ExternalLink, Eye, Sparkles, PlusCircle,
+  CheckCircle2, ExternalLink, Eye, Sparkles, PlusCircle, Wand2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import api from '@/services/api'
@@ -79,6 +79,20 @@ export default function UnknownDocuments() {
   const [newDescription, setNewDescription]     = useState('')
   const [newProvider, setNewProvider]           = useState('')
   const [promoting, setPromoting]               = useState(false)
+
+  const [openingEditorId, setOpeningEditorId] = useState<string | null>(null)
+
+  const openInZoneEditor = async (docId: string) => {
+    setOpeningEditorId(docId)
+    try {
+      const { data } = await api.post(`/unknown-documents/${docId}/ensure-draft-template`)
+      navigate(`/settings/document-classifiers/${data.templateId}?from=unknown-docs`)
+    } catch (err: any) {
+      toast.error('Could not open zone editor', { description: err?.response?.data?.message || err.message })
+    } finally {
+      setOpeningEditorId(null)
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -224,6 +238,14 @@ export default function UnknownDocuments() {
                     <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
                       onClick={() => navigate(`/unknown-documents/${doc.id}`)}>
                       <Eye className="h-3.5 w-3.5" /> View File
+                    </Button>
+                    <Button size="sm" variant="default" className="h-7 text-xs gap-1.5 bg-indigo-600 hover:bg-indigo-700"
+                      disabled={openingEditorId === doc.id}
+                      onClick={() => openInZoneEditor(doc.id)}>
+                      {openingEditorId === doc.id
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <Wand2 className="h-3.5 w-3.5" />}
+                      {openingEditorId === doc.id ? 'Opening…' : 'Open in Zone Editor'}
                     </Button>
                     <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
                       onClick={() => openAddToClassifier(doc)}>

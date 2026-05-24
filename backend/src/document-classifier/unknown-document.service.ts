@@ -259,6 +259,64 @@ export class UnknownDocumentService {
     return { templateId: template.id };
   }
 
+  async ensureDraftTemplate(id: string, reviewedBy: string): Promise<{ templateId: string; created: boolean }> {
+    const doc = await this.findOne(id);
+
+    // Return existing linked template if still present
+    if ((doc as any).linkedTemplateId) {
+      const existing = await this.prisma.ocrTemplate.findUnique({ where: { id: (doc as any).linkedTemplateId } });
+      if (existing) return { templateId: existing.id, created: false };
+    }
+
+    if (!fs.existsSync(doc.filePath)) {
+      throw new BadRequestException('Source file no longer exists on disk');
+    }
+
+    // Derive a sensible name + document type from the AI guess
+    const guessedType = (doc as any).guessedType as string | undefined;
+    const guessedProvider = (doc as any).guessedProvider as string | undefined;
+    const name = guessedProvider
+      ? `${guessedProvider}${guessedType ? ` – ${guessedType}` : ''}`
+      : guessedType || path.basename(doc.fileName, path.extname(doc.fileName));
+
+    const TYPE_MAP: Record<string, string> = {
+      invoice: 'invoice', 'hospital invoice': 'invoice', 'inpatient invoice': 'inpatient_invoice',
+      prescription: 'prescription', lab: 'lab_result', 'lab result': 'lab_result',
+      'lab report': 'lab_result', medical: 'medical_report', 'medical report': 'medical_report',
+      discharge: 'discharge_summary', 'discharge summary': 'discharge_summary',
+      claim: 'claim_form', 'claim form': 'claim_form',
+      authorization: 'authorization_letter', 'authorization letter': 'authorization_letter',
+    };
+    const lower = (guessedType || '').toLowerCase();
+    const documentType = Object.entries(TYPE_MAP).find(([k]) => lower.includes(k))?.[1] ?? 'other';
+
+    const templatesDir = path.join(process.cwd(), 'uploads', 'templates');
+    fs.mkdirSync(templatesDir, { recursive: true });
+    const ext = path.extname(doc.filePath);
+    const destName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+    const destPath = path.join(templatesDir, destName);
+    fs.copyFileSync(doc.filePath, destPath);
+
+    const template = await this.prisma.ocrTemplate.create({
+      data: {
+        name,
+        documentType,
+        description: `Draft template created from unknown document: ${doc.fileName}`,
+        specificProvider: guessedProvider || undefined,
+        fieldDefinitions: {},
+        sampleFilePath: destPath,
+        sampleFileName: doc.fileName,
+      },
+    });
+
+    await this.prisma.unknownDocument.update({
+      where: { id },
+      data: { linkedTemplateId: template.id, status: 'template_created', reviewedBy, reviewedAt: new Date() },
+    });
+
+    return { templateId: template.id, created: true };
+  }
+
   async remove(id: string) {
     const doc = await this.findOne(id);
     // Clean up the file if it still exists

@@ -936,6 +936,39 @@ Return an empty array if everything looks correct. Only flag genuine issues, not
     return { documents: createdDocs, templateId };
   }
 
+  async createTemplateFromDocument(
+    documentId: string,
+    overrides?: { name?: string; documentType?: string; specificProvider?: string },
+  ): Promise<{ templateId: string }> {
+    const doc = await this.prisma.document.findUnique({ where: { id: documentId } });
+    if (!doc) throw new NotFoundException(`Document ${documentId} not found`);
+    if (!doc.path || !fs.existsSync(doc.path)) {
+      throw new BadRequestException('Document file not found on disk');
+    }
+
+    const templatesDir = path.join(process.cwd(), 'uploads', 'templates');
+    fs.mkdirSync(templatesDir, { recursive: true });
+    const ext = path.extname(doc.path) || '.pdf';
+    const destName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+    const destPath = path.join(templatesDir, destName);
+    fs.copyFileSync(doc.path, destPath);
+
+    const template = await this.prisma.ocrTemplate.create({
+      data: {
+        name:             overrides?.name || doc.originalName || path.basename(doc.path),
+        documentType:     overrides?.documentType || (doc as any).documentType || 'other',
+        specificProvider: overrides?.specificProvider || undefined,
+        description:      `Auto-created from split document: ${doc.originalName}`,
+        fieldDefinitions: {},
+        sampleFilePath:   destPath,
+        sampleFileName:   doc.originalName || path.basename(doc.path),
+      },
+    });
+
+    this.logger.log(`Created classifier template ${template.id} from document ${documentId}`);
+    return { templateId: template.id };
+  }
+
   async mergeTemplateSamples(templateIds: string[], outputName: string, userId: string) {
     const templates = await Promise.all(templateIds.map((id) => this.findOne(id)));
     const samplePaths = templates

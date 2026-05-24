@@ -37,7 +37,7 @@ export class GreenLaneController {
 
   @Post('rules/evaluate/:claimId')
   @Roles('admin', 'claims_officer')
-  evaluate(@Param('claimId') claimId: string) {
+  evaluate(@Param('claimId') claimId: string): Promise<any> {
     return this.service.evaluateClaim(claimId);
   }
 

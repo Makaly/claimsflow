@@ -735,7 +735,7 @@ export default function MakerQueue() {
                   {/* helper: editable field row */}
                   {(() => {
                     const E = editDraft
-                    const changed = (field: keyof typeof editDraft, orig: string) =>
+                    const changed = (field: keyof NonNullable<typeof editDraft>, orig: string) =>
                       E && E[field] !== orig ? 'ring-1 ring-amber-400' : ''
                     const HistBtn = ({ field }: { field: string }) => (
                       <button

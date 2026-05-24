@@ -18,7 +18,7 @@ export class TelemedicineService {
     private doctolibAdapter: DoctolibAdapter,
     private teladocAdapter: TeladocAdapter,
   ) {
-    this.adapters = new Map([
+    this.adapters = new Map<string, TelemedicineAdapter>([
       ['mock', mockAdapter],
       ['doctolib', doctolibAdapter],
       ['teladoc', teladocAdapter],

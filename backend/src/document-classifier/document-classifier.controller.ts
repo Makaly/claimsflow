@@ -215,6 +215,13 @@ export class DocumentClassifierController {
     return this.service.analyzeTemplateSamplePages(id);
   }
 
+  @Post('from-document')
+  createTemplateFromDocument(
+    @Body() body: { documentId: string; name?: string; documentType?: string; specificProvider?: string },
+  ) {
+    return this.service.createTemplateFromDocument(body.documentId, body);
+  }
+
   @Post(':id/split-sample')
   splitTemplateSample(
     @Param('id') id: string,

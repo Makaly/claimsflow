@@ -72,6 +72,7 @@ export class ProviderFraudThresholdsService {
   @Cron(CronExpression.EVERY_1ST_DAY_OF_MONTH_AT_MIDNIGHT)
   async recomputeMonthly() {
     const since = new Date(Date.now() - 180 * 86_400_000);
+    // @ts-ignore — Prisma's having clause hits a circular mapped-type depth limit with large schemas
     const candidates = await this.prisma.claim.groupBy({
       by: ['providerId'],
       where: { submittedAt: { gte: since }, fraudSignals: { not: null } },

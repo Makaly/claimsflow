@@ -8,12 +8,12 @@ export class PbmController {
   constructor(private service: PbmService) {}
 
   @Post('eligibility')
-  checkEligibility(@Body('drugCodes') drugCodes: string[]) {
+  checkEligibility(@Body('drugCodes') drugCodes: string[]): any {
     return this.service.checkEligibility(drugCodes);
   }
 
   @Get('formulary')
-  getFormulary(@Query('tier') tier?: string) {
+  getFormulary(@Query('tier') tier?: string): Promise<any> {
     return this.service.getFormulary(tier ? parseInt(tier) : undefined);
   }
 }

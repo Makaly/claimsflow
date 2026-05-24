@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import * as pdfjsLib from 'pdfjs-dist'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,6 +12,7 @@ import {
 import {
   AlertTriangle, ArrowLeft, CheckCircle2, ExternalLink,
   FileQuestion, Loader2, PlusCircle, Sparkles,
+  ZoomIn, ZoomOut, Maximize2, ChevronLeft, ChevronRight, Wand2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import api from '@/services/api'
@@ -25,6 +27,7 @@ interface UnknownDoc {
   rawExtract: Record<string, string> | null
   status: string
   createdAt: string
+  linkedTemplateId?: string | null
 }
 
 interface TemplateOption {
@@ -52,9 +55,19 @@ export default function UnknownDocumentReview() {
 
   const [doc, setDoc]           = useState<UnknownDoc | null>(null)
   const [docLoading, setDocLoading] = useState(true)
-  const [blobUrl, setBlobUrl]   = useState<string | null>(null)
-  const [fileLoading, setFileLoading] = useState(true)
+
+  // PDF/image rendering
+  const canvasRef    = useRef<HTMLCanvasElement>(null)
+  const viewerRef    = useRef<HTMLDivElement>(null)
+  const [pdfDoc, setPdfDoc]         = useState<pdfjsLib.PDFDocumentProxy | null>(null)
+  const [pageCount, setPageCount]   = useState(0)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pdfLoading, setPdfLoading] = useState(true)
   const [fileMissing, setFileMissing] = useState(false)
+  const [zoom, setZoom]             = useState(1)
+  const renderTaskRef = useRef<pdfjsLib.RenderTask | null>(null)
+  const loadedImageRef = useRef<HTMLImageElement | null>(null)
+  const blobUrlRef    = useRef<string | null>(null)
 
   // Classifier form
   const [templates, setTemplates]   = useState<TemplateOption[]>([])
@@ -66,6 +79,29 @@ export default function UnknownDocumentReview() {
   const [newProvider, setNewProvider] = useState('')
   const [newDescription, setNewDescription] = useState('')
   const [promoting, setPromoting]   = useState(false)
+
+  // Open in Zone Editor
+  const [openingEditor, setOpeningEditor] = useState(false)
+
+  const renderPdfPage = useCallback(
+    async (doc: pdfjsLib.PDFDocumentProxy, pageNum: number, zoomLevel = 1) => {
+      const canvas = canvasRef.current
+      if (!canvas) return
+      if (renderTaskRef.current) { renderTaskRef.current.cancel(); renderTaskRef.current = null }
+      const page = await doc.getPage(pageNum)
+      const scrollViewport = canvas.parentElement?.parentElement
+      const containerWidth = (scrollViewport?.clientWidth || 700) - 32
+      const viewport = page.getViewport({ scale: 1 })
+      const fitScale = containerWidth / viewport.width
+      const scaled = page.getViewport({ scale: fitScale * zoomLevel })
+      canvas.width  = scaled.width
+      canvas.height = scaled.height
+      const ctx = canvas.getContext('2d')!
+      renderTaskRef.current = page.render({ canvasContext: ctx, viewport: scaled })
+      try { await renderTaskRef.current.promise } catch (_) { /* cancelled */ }
+    },
+    [],
+  )
 
   // Load document metadata + templates in parallel
   useEffect(() => {
@@ -79,28 +115,89 @@ export default function UnknownDocumentReview() {
 
       api.get<TemplateOption[]>('/document-classifiers').then(({ data }) => {
         setTemplates(data)
-      }).finally(() => setTemplatesLoading(false)),
+      }).catch(() => {}).finally(() => setTemplatesLoading(false)),
     ])
   }, [id])
 
-  // Fetch file as blob so auth token is included
+  // Fetch file and render with pdfjs
   useEffect(() => {
     if (!id) return
-    setFileLoading(true)
-    api.get(`/unknown-documents/${id}/file`, { responseType: 'blob' })
-      .then(({ data }) => {
-        const url = URL.createObjectURL(data)
-        setBlobUrl(url)
+    setPdfLoading(true)
+    api.get(`/unknown-documents/${id}/file`, { responseType: 'arraybuffer' })
+      .then(async ({ data: arrayBuffer, headers: resHeaders }) => {
+        const contentType = String(resHeaders['content-type'] || '')
+        const isPdf = contentType === 'application/pdf' || id?.endsWith('.pdf')
+        const docMeta = doc
+
+        if (!isPdf || (docMeta && !docMeta.fileName?.endsWith('.pdf') && docMeta.mimeType !== 'application/pdf')) {
+          // Image rendering
+          const blob = new Blob([arrayBuffer], { type: contentType || 'image/jpeg' })
+          const url = URL.createObjectURL(blob)
+          blobUrlRef.current = url
+          const img = new Image()
+          await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = url })
+          loadedImageRef.current = img
+          const canvas = canvasRef.current!
+          const containerWidth = (canvas.parentElement?.parentElement?.clientWidth || 700) - 32
+          const scale = (containerWidth / img.naturalWidth) * zoom
+          canvas.width  = img.naturalWidth  * scale
+          canvas.height = img.naturalHeight * scale
+          canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height)
+          setPageCount(1)
+        } else {
+          // PDF rendering
+          loadedImageRef.current = null
+          const pdfDocument = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise
+          setPdfDoc(pdfDocument)
+          setPageCount(pdfDocument.numPages)
+          setCurrentPage(1)
+          renderPdfPage(pdfDocument, 1, zoom)
+        }
       })
       .catch((err) => {
         if (err?.response?.status === 404) setFileMissing(true)
         else toast.error('Could not load file')
       })
-      .finally(() => setFileLoading(false))
+      .finally(() => setPdfLoading(false))
 
-    return () => { if (blobUrl) URL.revokeObjectURL(blobUrl) }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  // Re-render PDF on page / zoom change
+  useEffect(() => {
+    if (pdfDoc) renderPdfPage(pdfDoc, currentPage, zoom)
+  }, [pdfDoc, currentPage, zoom, renderPdfPage])
+
+  // Re-render image on zoom change
+  useEffect(() => {
+    const img = loadedImageRef.current
+    const canvas = canvasRef.current
+    if (!img || !canvas) return
+    const containerWidth = (canvas.parentElement?.parentElement?.clientWidth || 700) - 32
+    const scale = (containerWidth / img.naturalWidth) * zoom
+    canvas.width  = img.naturalWidth  * scale
+    canvas.height = img.naturalHeight * scale
+    canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height)
+  }, [zoom])
+
+  const zoomIn  = () => setZoom((z) => Math.min(4, +(z + 0.25).toFixed(2)))
+  const zoomOut = () => setZoom((z) => Math.max(0.25, +(z - 0.25).toFixed(2)))
+  const zoomFit = () => setZoom(1)
+
+  const openInZoneEditor = async () => {
+    if (!id) return
+    setOpeningEditor(true)
+    try {
+      const { data } = await api.post(`/unknown-documents/${id}/ensure-draft-template`)
+      navigate(`/settings/document-classifiers/${data.templateId}?from=unknown-docs`)
+    } catch (err: any) {
+      toast.error('Could not open zone editor', { description: err?.response?.data?.message || err.message })
+      setOpeningEditor(false)
+    }
+  }
 
   const submit = async () => {
     if (!id) return
@@ -122,14 +219,12 @@ export default function UnknownDocumentReview() {
         templateId = data.templateId
         toast.success('New classifier template created — opening zone editor')
       }
-      navigate(`/settings/document-classifiers/${templateId}`)
+      navigate(`/settings/document-classifiers/${templateId}?from=unknown-docs`)
     } catch (err: any) {
       toast.error('Failed', { description: err?.response?.data?.message || err.message })
       setPromoting(false)
     }
   }
-
-  const isPdf = doc?.mimeType === 'application/pdf' || doc?.fileName?.endsWith('.pdf')
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden">
@@ -154,39 +249,76 @@ export default function UnknownDocumentReview() {
             {doc.status === 'template_created' ? 'Template Added' : doc.status === 'reviewed' ? 'Reviewed' : 'Pending Review'}
           </span>
         )}
+        <div className="ml-auto shrink-0">
+          <Button
+            className="gap-1.5 h-8 text-sm bg-indigo-600 hover:bg-indigo-700 text-white"
+            disabled={openingEditor || fileMissing}
+            onClick={openInZoneEditor}
+          >
+            {openingEditor ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
+            {openingEditor ? 'Opening…' : 'Open in Zone Editor'}
+          </Button>
+        </div>
       </div>
 
       {/* Two-panel layout */}
       <div className="flex flex-1 overflow-hidden">
 
         {/* ── Left: document viewer ─────────────────────────────────────── */}
-        <div className="flex-1 bg-muted/30 overflow-hidden relative flex items-center justify-center border-r">
-          {fileLoading ? (
-            <div className="flex flex-col items-center gap-3 text-muted-foreground">
-              <Loader2 className="h-8 w-8 animate-spin" />
-              <p className="text-sm">Loading document…</p>
+        <div className="flex flex-col flex-1 overflow-hidden border-r bg-muted/10">
+
+          {/* Viewer toolbar */}
+          <div className="flex items-center gap-2 px-3 py-2 border-b bg-background shrink-0">
+            <Button variant="outline" size="sm" className="h-7 w-7 p-0" onClick={zoomOut} title="Zoom out" disabled={pdfLoading}>
+              <ZoomOut className="h-3.5 w-3.5" />
+            </Button>
+            <span className="text-xs tabular-nums w-10 text-center font-mono">{Math.round(zoom * 100)}%</span>
+            <Button variant="outline" size="sm" className="h-7 w-7 p-0" onClick={zoomIn} title="Zoom in" disabled={pdfLoading}>
+              <ZoomIn className="h-3.5 w-3.5" />
+            </Button>
+            <Button variant="outline" size="sm" className="h-7 text-xs px-2 gap-1" onClick={zoomFit} title="Fit to width" disabled={pdfLoading}>
+              <Maximize2 className="h-3 w-3" /> Fit
+            </Button>
+
+            {pageCount > 1 && (
+              <>
+                <div className="w-px h-5 bg-border mx-1" />
+                <Button variant="outline" size="sm" className="h-7 w-7 p-0"
+                  disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </Button>
+                <span className="text-xs tabular-nums">{currentPage} / {pageCount}</span>
+                <Button variant="outline" size="sm" className="h-7 w-7 p-0"
+                  disabled={currentPage >= pageCount} onClick={() => setCurrentPage((p) => p + 1)}>
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </>
+            )}
+
+            <div className="ml-auto text-xs text-muted-foreground">
+              Use <span className="font-semibold text-indigo-600">Open in Zone Editor</span> to draw zones &amp; split pages
             </div>
-          ) : fileMissing ? (
-            <div className="flex flex-col items-center gap-3 text-muted-foreground text-center px-8">
-              <AlertTriangle className="h-10 w-10 text-amber-400" />
-              <p className="text-sm font-medium">File no longer on disk</p>
-              <p className="text-xs">The source file was in a temporary folder that has been cleaned up.</p>
-            </div>
-          ) : blobUrl ? (
-            isPdf ? (
-              <iframe
-                src={blobUrl}
-                className="w-full h-full border-0"
-                title="Document preview"
-              />
+          </div>
+
+          {/* Canvas area */}
+          <div ref={viewerRef} className="flex-1 overflow-auto p-4 bg-slate-100 dark:bg-slate-900">
+            {pdfLoading ? (
+              <div className="flex items-center justify-center h-full gap-3 text-muted-foreground">
+                <Loader2 className="h-6 w-6 animate-spin" />
+                <span className="text-sm">Loading document…</span>
+              </div>
+            ) : fileMissing ? (
+              <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground text-center px-8">
+                <AlertTriangle className="h-10 w-10 text-amber-400" />
+                <p className="text-sm font-medium">File no longer on disk</p>
+                <p className="text-xs">The source file was in a temporary folder that has been cleaned up.</p>
+              </div>
             ) : (
-              <img
-                src={blobUrl}
-                alt="Document preview"
-                className="max-w-full max-h-full object-contain"
-              />
-            )
-          ) : null}
+              <div className="relative inline-block shadow-md rounded">
+                <canvas ref={canvasRef} className="block rounded" />
+              </div>
+            )}
+          </div>
         </div>
 
         {/* ── Right: classifier panel ───────────────────────────────────── */}
@@ -229,6 +361,26 @@ export default function UnknownDocumentReview() {
                 </div>
               </div>
             )}
+
+            {/* Quick open in zone editor */}
+            <div className="rounded-xl border-2 border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/30 p-4 space-y-2">
+              <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-200 flex items-center gap-2">
+                <Wand2 className="h-4 w-4" /> Full Zone Editor
+              </p>
+              <p className="text-xs text-indigo-700 dark:text-indigo-300 leading-relaxed">
+                Open the full zone editor to draw field zones, test OCR extraction, split multi-page documents, and use AI auto-suggest.
+              </p>
+              <Button
+                className="w-full gap-2 bg-indigo-600 hover:bg-indigo-700 text-white"
+                disabled={openingEditor || fileMissing}
+                onClick={openInZoneEditor}
+              >
+                {openingEditor
+                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Opening…</>
+                  : <><Wand2 className="h-4 w-4" /> Open in Zone Editor</>
+                }
+              </Button>
+            </div>
 
             <Separator />
 

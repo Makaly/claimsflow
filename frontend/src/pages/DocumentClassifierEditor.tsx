@@ -4,7 +4,7 @@
  * Right panel: Zone list with add-zone form (incl. search phrase saved to DB).
  */
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import * as pdfjsLib from 'pdfjs-dist'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -390,6 +390,8 @@ function ZoneSaveForm({ pending, existingFields, existingZones, initialParentZon
 export default function DocumentClassifierEditor() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const fromUnknownDocs = searchParams.get('from') === 'unknown-docs'
 
   const [template, setTemplate]     = useState<OcrTemplate | null>(null)
   const [loading, setLoading]       = useState(true)
@@ -968,8 +970,8 @@ export default function DocumentClassifierEditor() {
     <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-4">
       <AlertCircle className="h-10 w-10 text-destructive" />
       <p className="text-sm">{loadError || 'Template not found'}</p>
-      <Button onClick={() => navigate('/settings?tab=document-classifiers')}>
-        <ArrowLeft className="mr-2 h-4 w-4" /> Back to Settings
+      <Button onClick={() => fromUnknownDocs ? navigate('/unknown-documents') : navigate('/settings?tab=document-classifiers')}>
+        <ArrowLeft className="mr-2 h-4 w-4" /> {fromUnknownDocs ? 'Back to Unknown Docs' : 'Back to Settings'}
       </Button>
     </div>
   )
@@ -981,8 +983,10 @@ export default function DocumentClassifierEditor() {
 
       {/* ── Top bar ── */}
       <div className="flex items-center gap-3 pb-3 shrink-0">
-        <Button variant="ghost" size="sm" onClick={() => navigate('/settings?tab=document-classifiers')} className="gap-1.5 h-8">
-          <ArrowLeft className="h-4 w-4" /> Settings
+        <Button variant="ghost" size="sm"
+          onClick={() => fromUnknownDocs ? navigate('/unknown-documents') : navigate('/settings?tab=document-classifiers')}
+          className="gap-1.5 h-8">
+          <ArrowLeft className="h-4 w-4" /> {fromUnknownDocs ? 'Unknown Docs' : 'Settings'}
         </Button>
         <Separator orientation="vertical" className="h-5" />
         <div className="min-w-0 flex items-center gap-2 flex-wrap">

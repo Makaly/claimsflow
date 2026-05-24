@@ -32,7 +32,7 @@ export class ChronicDiseaseController {
 
   @Get('care-gaps')
   @Roles('admin', 'claims_officer')
-  detectCareGaps(@Query('conditionCode') conditionCode?: string) {
+  detectCareGaps(@Query('conditionCode') conditionCode?: string): Promise<any> {
     return this.service.detectCareGaps(conditionCode);
   }
 

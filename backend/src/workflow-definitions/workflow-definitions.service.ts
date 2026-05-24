@@ -32,12 +32,12 @@ export class WorkflowDefinitionsService {
 
   async create(data: { name: string; dslJsonb: { steps: WorkflowStep[] }; createdBy?: string }) {
     return this.prisma.workflowDefinition.create({
-      data: { name: data.name, dslJsonb: data.dslJsonb, status: 'draft', createdBy: data.createdBy },
+      data: { name: data.name, dslJsonb: data.dslJsonb as any, status: 'draft', createdBy: data.createdBy },
     });
   }
 
   async update(id: string, data: { name?: string; dslJsonb?: { steps: WorkflowStep[] } }) {
-    return this.prisma.workflowDefinition.update({ where: { id }, data });
+    return this.prisma.workflowDefinition.update({ where: { id }, data: data as any });
   }
 
   // Publish: archive any existing published version for the same name, then

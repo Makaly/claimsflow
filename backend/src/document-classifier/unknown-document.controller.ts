@@ -78,6 +78,12 @@ export class UnknownDocumentController {
     return this.service.createTemplateFromUnknown(id, body, req.user.id);
   }
 
+  @Post(':id/ensure-draft-template')
+  @HttpCode(HttpStatus.OK)
+  ensureDraftTemplate(@Param('id') id: string, @Request() req: any) {
+    return this.service.ensureDraftTemplate(id, req.user.id);
+  }
+
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(@Param('id') id: string) {

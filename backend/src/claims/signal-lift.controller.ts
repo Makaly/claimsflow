@@ -30,11 +30,11 @@ export class SignalLiftController {
       where,
       select: {
         fraudSignals: true,
-        labels: { select: { isFraud: true } },
+        label: { select: { isFraud: true } },
       },
     });
 
-    const totalFraud = claims.filter(c => c.labels.some(l => l.isFraud)).length;
+    const totalFraud = claims.filter(c => c.label?.isFraud).length;
     const baseRate = claims.length > 0 ? totalFraud / claims.length : 0;
 
     const signalMap: Record<string, { total: number; fraud: number }> = {};
@@ -43,7 +43,7 @@ export class SignalLiftController {
       const signals: string[] = Array.isArray(claim.fraudSignals)
         ? (claim.fraudSignals as string[])
         : [];
-      const isFraud = claim.labels.some(l => l.isFraud);
+      const isFraud = claim.label?.isFraud ?? false;
       for (const signal of signals) {
         if (!signalMap[signal]) signalMap[signal] = { total: 0, fraud: 0 };
         signalMap[signal].total++;
