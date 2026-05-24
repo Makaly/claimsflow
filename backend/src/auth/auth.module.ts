@@ -11,6 +11,9 @@ import { LocalStrategy } from './strategies/local.strategy';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { TwoFactorController } from './two-factor.controller';
 import { TwoFactorService } from './two-factor.service';
+import { SsoController } from './sso.controller';
+import { PassportOidcStrategy } from './strategies/oidc.strategy';
+import { PassportSamlStrategy } from './strategies/saml.strategy';
 
 @Module({
   imports: [
@@ -27,8 +30,8 @@ import { TwoFactorService } from './two-factor.service';
     ]),
     NotificationsModule,
   ],
-  controllers: [AuthController, UsersController, TwoFactorController],
-  providers: [AuthService, JwtStrategy, LocalStrategy, TwoFactorService, ConfigService],
+  controllers: [AuthController, UsersController, TwoFactorController, SsoController],
+  providers: [AuthService, JwtStrategy, LocalStrategy, TwoFactorService, ConfigService, PassportOidcStrategy, PassportSamlStrategy],
   exports: [AuthService, TwoFactorService],
 })
 export class AuthModule {}

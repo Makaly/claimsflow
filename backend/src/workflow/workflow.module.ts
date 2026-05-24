@@ -7,12 +7,13 @@ import { SlaService } from './sla.service';
 import { WorkflowController } from './workflow.controller';
 import { GreenLaneService } from './green-lane.service';
 import { GreenLaneController } from './green-lane.controller';
+import { BulkOperationsController } from './bulk-operations.controller';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
   imports: [NotificationsModule, PrismaModule],
-  controllers: [WorkflowController, GreenLaneController],
+  controllers: [WorkflowController, GreenLaneController, BulkOperationsController],
   providers: [
     WorkflowService,
     MakerCheckerService,

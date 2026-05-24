@@ -6,6 +6,7 @@ import { getRedisConnection } from './config/redis.config';
 import { APP_FILTER, APP_INTERCEPTOR, APP_GUARD } from '@nestjs/core';
 import { GlobalHttpExceptionFilter } from './common/filters/http-exception.filter';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
+import { TenantMiddleware } from './tenant/tenant.middleware';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { CommonModule } from './common/common.module';
@@ -46,6 +47,12 @@ import { HmisModule } from './integrations/hmis/hmis.module';
 import { TelemedicineModule } from './telemedicine/telemedicine.module';
 import { PbmModule } from './pbm/pbm.module';
 import { ChronicDiseaseModule } from './chronic-disease/chronic-disease.module';
+import { DrModule } from './dr/dr.module';
+import { FeatureFlagsModule } from './feature-flags/feature-flags.module';
+import { TenantModule } from './tenant/tenant.module';
+import { CasesModule } from './cases/cases.module';
+import { CorrespondenceModule } from './correspondence/correspondence.module';
+import { WorkflowDefinitionsModule } from './workflow-definitions/workflow-definitions.module';
 
 @Module({
   imports: [
@@ -105,6 +112,12 @@ import { ChronicDiseaseModule } from './chronic-disease/chronic-disease.module';
     TelemedicineModule,
     PbmModule,
     ChronicDiseaseModule,
+    DrModule,
+    FeatureFlagsModule,
+    TenantModule,
+    CasesModule,
+    CorrespondenceModule,
+    WorkflowDefinitionsModule,
   ],
   controllers: [AppController],
   providers: [
@@ -126,5 +139,6 @@ import { ChronicDiseaseModule } from './chronic-disease/chronic-disease.module';
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer.apply(RequestIdMiddleware).forRoutes('*');
+    consumer.apply(TenantMiddleware).forRoutes('*');
   }
 }

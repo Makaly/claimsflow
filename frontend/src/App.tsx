@@ -28,6 +28,7 @@ const SystemConfigPage      = lazy(() => import('@/pages/SystemConfigPage'))
 const DocumentClassifierEditor = lazy(() => import('@/pages/DocumentClassifierEditor'))
 const UnknownDocuments      = lazy(() => import('@/pages/UnknownDocuments'))
 const UnknownDocumentReview = lazy(() => import('@/pages/UnknownDocumentReview'))
+const FeatureFlagsAdmin     = lazy(() => import('@/pages/FeatureFlagsAdmin'))
 
 // Finance chunk
 const Payment               = lazy(() => import('@/pages/Payment'))
@@ -61,6 +62,10 @@ const NPSDashboard          = lazy(() => import('@/pages/NPSDashboard'))
 const TelemedicineBooking   = lazy(() => import('@/pages/TelemedicineBooking'))
 const PBMLookup             = lazy(() => import('@/pages/PBMLookup'))
 const ChronicCohorts        = lazy(() => import('@/pages/ChronicCohorts'))
+const CaseList              = lazy(() => import('@/pages/CaseList'))
+const CaseDetail            = lazy(() => import('@/pages/CaseDetail'))
+const LetterTemplates       = lazy(() => import('@/pages/LetterTemplates'))
+const WorkflowDesigner      = lazy(() => import('@/pages/WorkflowDesigner'))
 
 // Shared fallback spinner — keep lightweight (no external deps)
 function PageFallback() {
@@ -198,6 +203,11 @@ function AppRoutes() {
         <Route path="/telemedicine" element={<ProtectedRoute><TelemedicineBooking /></ProtectedRoute>} />
         <Route path="/pbm" element={<ProtectedRoute allowedRoles={['admin','claims_officer','fraud_officer']}><PBMLookup /></ProtectedRoute>} />
         <Route path="/reports/chronic-cohorts" element={<ProtectedRoute allowedRoles={['admin','claims_officer','fraud_officer']}><ChronicCohorts /></ProtectedRoute>} />
+        <Route path="/feature-flags" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><FeatureFlagsAdmin /></ProtectedRoute>} />
+        <Route path="/cases" element={<ProtectedRoute allowedRoles={CIC_STAFF}><CaseList /></ProtectedRoute>} />
+        <Route path="/cases/:id" element={<ProtectedRoute allowedRoles={CIC_STAFF}><CaseDetail /></ProtectedRoute>} />
+        <Route path="/letter-templates" element={<ProtectedRoute allowedRoles={['admin','claims_officer']}><LetterTemplates /></ProtectedRoute>} />
+        <Route path="/workflow-designer" element={<ProtectedRoute allowedRoles={['admin','claims_officer']}><WorkflowDesigner /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

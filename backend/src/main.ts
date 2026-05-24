@@ -1,3 +1,8 @@
+import { bootstrapTelemetry } from './telemetry/telemetry';
+// Telemetry must be the first thing that runs so auto-instrumentation patches
+// http/pg/redis before NestFactory loads any module.
+bootstrapTelemetry();
+
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';

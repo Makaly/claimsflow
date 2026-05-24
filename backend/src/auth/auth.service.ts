@@ -356,6 +356,52 @@ export class AuthService {
     return { message: 'Password reset successfully. You can now log in.' };
   }
 
+  // E3: SSO — create or update a local user from an IdP profile.
+  // Matching is always by email so a user who previously signed in with a
+  // password can seamlessly transition to SSO without a new account.
+  async findOrCreateSsoUser(profile: {
+    email: string;
+    name: string;
+    provider: 'oidc' | 'saml' | 'mock';
+    externalId: string;
+  }) {
+    const existing = await this.prisma.user.findUnique({ where: { email: profile.email } });
+    if (existing) {
+      if (!existing.isActive) throw new UnauthorizedException('Account is deactivated');
+      await this.prisma.user.update({
+        where: { id: existing.id },
+        data: { lastLogin: new Date() },
+      });
+      return existing;
+    }
+
+    // Provision new user. SSO users get a random unusable password; they can
+    // never log in via the local form — the IdP is the single source of truth.
+    const dummyPassword = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
+    return this.prisma.user.create({
+      data: {
+        email: profile.email,
+        name: profile.name,
+        password: dummyPassword,
+        role: 'user',
+        isActive: true,
+        lastLogin: new Date(),
+      },
+    });
+  }
+
+  // E3: IdP leaver webhook — deactivate the local user when IdP fires the
+  // off-boarding event (e.g. Azure AD "User deleted" lifecycle notification).
+  async deactivateSsoUser(email: string) {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) return { message: 'User not found — no action taken' };
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { isActive: false },
+    });
+    return { message: 'User deactivated', userId: user.id };
+  }
+
   private generateToken(userId: string, email: string): string {
     const payload = { sub: userId, email };
     return this.jwtService.sign(payload);
