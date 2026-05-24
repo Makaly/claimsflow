@@ -52,6 +52,8 @@ const navigation: NavItem[] = [
   { type: 'separator', name: 'Finance', roles: ['admin', 'finance', 'claims_officer'] as Role[] },
   { name: 'Payment Settlement', href: '/payment', icon: CreditCard, roles: ['admin', 'finance', 'claims_officer'] },
   { name: 'Scan Metering',      href: '/scan-metering', icon: ScanLine, roles: ['admin', 'finance', 'provider_admin', 'claims_officer', 'maker_checker', 'fraud_officer'] },
+  { name: 'Bank Reconciliation', href: '/bank-reconciliation', icon: CreditCard, roles: ['admin', 'finance'] as Role[] },
+  { name: 'NPS Dashboard',      href: '/nps', icon: BarChart3, roles: ['admin', 'finance', 'claims_officer'] as Role[] },
   { type: 'separator', name: 'Admin', roles: ['admin'] },
   { name: 'Users', href: '/users', icon: Users, roles: ['admin'] },
   { name: 'Roles', href: '/roles', icon: ShieldCheck, roles: ['admin'] },

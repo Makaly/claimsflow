@@ -1212,6 +1212,89 @@ model ModelVersion {
   @@map("model_versions")
 }
 
+// ── B3: Bank Reconciliation ─────────────────────────────────────────────────
+
+/// One row per bank statement line imported from MT940, camt.053, or CSV.
+model BankStatementLine {
+  id            String   @id @default(uuid())
+  uploadId      String   // groups lines from the same file upload
+  format        String   // "mt940" | "camt053" | "csv"
+  reference     String?
+  amount        Float
+  currency      String   @default("KES")
+  valueDate     DateTime
+  description   String?
+  status        String   @default("unreconciled") // "unreconciled" | "matched" | "written_off"
+  matchedClaimId String?
+  matchedAt     DateTime?
+  matchedBy     String?
+  writeOffReason String?
+  createdAt     DateTime @default(now())
+
+  @@index([uploadId])
+  @@index([status])
+  @@index([reference])
+  @@index([valueDate])
+  @@map("bank_statement_lines")
+}
+
+// ── B2: ERP/GL ─────────────────────────────────────────────────────────────
+
+/// Maps a claim-type/benefit-category to a GL account code.
+model GlAccountMapping {
+  id          String   @id @default(uuid())
+  claimType   String   // "inpatient" | "outpatient" | "dental" | "optical" | "maternity"
+  accountCode String
+  accountName String
+  description String?
+  isActive    Boolean  @default(true)
+  updatedBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([claimType])
+  @@index([claimType])
+  @@map("gl_account_mappings")
+}
+
+/// Append-only log of every GL posting batch. Replay-safe via batchKey uniqueness.
+model GlPostingLog {
+  id          String   @id @default(uuid())
+  batchKey    String   @unique // ISO date "YYYY-MM-DD" for daily batch
+  postedAt    DateTime @default(now())
+  claimCount  Int
+  totalAmount Float
+  target      String   // "csv" | "sap" | "oracle" | "sage"
+  status      String   @default("success") // "success" | "failed"
+  errorMsg    String?
+  outputPath  String?
+
+  @@index([batchKey])
+  @@index([postedAt])
+  @@map("gl_posting_logs")
+}
+
+// ── A4: NPS ────────────────────────────────────────────────────────────────
+
+model NpsResponse {
+  id          String   @id @default(uuid())
+  claimId     String?
+  memberId    String?
+  score       Int      // 0-10
+  comment     String?
+  channel     String   @default("in_app") // "in_app" | "whatsapp" | "email"
+  claimType   String?
+  providerId  String?
+  rejectionReason String?
+  createdAt   DateTime @default(now())
+
+  @@index([claimId])
+  @@index([memberId])
+  @@index([createdAt])
+  @@index([score])
+  @@map("nps_responses")
+}
+
 /// Per-provider scan-billing config. One row per Provider; created on
 /// demand when an admin first views/edits the provider's scan settings,
 /// or implicitly when the first ScanEvent for that provider arrives.

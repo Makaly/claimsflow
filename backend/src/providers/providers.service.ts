@@ -689,4 +689,28 @@ export class ProvidersService {
       },
     });
   }
+
+  // ── A3: Monthly statement ──────────────────────────────────────────────
+
+  async getStatementClaims(providerId: string, from: Date, to: Date) {
+    return this.prisma.claim.findMany({
+      where: {
+        providerId,
+        status: { in: ['approved', 'paid'] },
+        approvedAt: { gte: from, lt: to },
+      },
+      select: {
+        id: true,
+        claimNumber: true,
+        patientName: true,
+        memberNumber: true,
+        invoiceAmount: true,
+        invoiceNumber: true,
+        status: true,
+        approvedAt: true,
+        paidAt: true,
+      },
+      orderBy: { approvedAt: 'asc' },
+    });
+  }
 }

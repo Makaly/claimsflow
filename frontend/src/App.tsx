@@ -32,6 +32,7 @@ const UnknownDocumentReview = lazy(() => import('@/pages/UnknownDocumentReview')
 // Finance chunk
 const Payment               = lazy(() => import('@/pages/Payment'))
 const ScanMeteringDashboard = lazy(() => import('@/pages/ScanMeteringDashboard'))
+const BankReconciliation    = lazy(() => import('@/pages/BankReconciliation'))
 
 // Provider chunk
 const ProviderApprovals     = lazy(() => import('@/pages/ProviderApprovals'))
@@ -56,6 +57,7 @@ const PolicyPlans           = lazy(() => import('@/pages/PolicyPlans'))
 const MLLabelling           = lazy(() => import('@/pages/MLLabelling'))
 const ZoneAnalytics         = lazy(() => import('@/pages/ZoneAnalytics'))
 const TwoFactorSetup        = lazy(() => import('@/pages/TwoFactorSetup'))
+const NPSDashboard          = lazy(() => import('@/pages/NPSDashboard'))
 
 // Shared fallback spinner — keep lightweight (no external deps)
 function PageFallback() {
@@ -188,6 +190,8 @@ function AppRoutes() {
         <Route path="/ml-labelling" element={<ProtectedRoute allowedRoles={['admin','claims_officer','fraud_officer']}><MLLabelling /></ProtectedRoute>} />
         <Route path="/zone-analytics" element={<ProtectedRoute allowedRoles={['admin','claims_officer','fraud_officer','maker_checker']}><ZoneAnalytics /></ProtectedRoute>} />
         <Route path="/scan-metering" element={<ProtectedRoute allowedRoles={['admin','finance','provider_admin','claims_officer','maker_checker','fraud_officer']}><ScanMeteringDashboard /></ProtectedRoute>} />
+        <Route path="/nps" element={<ProtectedRoute allowedRoles={['admin','finance','claims_officer']}><NPSDashboard /></ProtectedRoute>} />
+        <Route path="/bank-reconciliation" element={<ProtectedRoute allowedRoles={['admin','finance']}><BankReconciliation /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -47,6 +47,7 @@ import { extractInvoicesFromPdf } from '@/lib/pdfTextExtract'
 import { cacheFile, restoreAsFiles, restoreFileByName } from '@/lib/fileCache'
 import { DocumentViewer } from '@/components/DocumentViewer'
 import { EligibilityBadge } from '@/components/EligibilityBadge'
+import { CoverageBreakdown } from '@/components/CoverageBreakdown'
 import AnomalyScoreBadge from '@/components/AnomalyScoreBadge'
 import { Pagination } from '@/components/Pagination'
 import {
@@ -2754,6 +2755,17 @@ export default function Claims() {
                           </div>
                         )}
                       </Section>
+
+                      {/* B4: Coverage Breakdown — shows when member number is present */}
+                      {selectedClaim.memberNumber && (
+                        <div className="px-2 pb-2">
+                          <CoverageBreakdown
+                            memberId={selectedClaim.memberNumber}
+                            claimId={selectedClaim.id}
+                            invoiceAmount={selectedClaim.invoiceAmount}
+                          />
+                        </div>
+                      )}
 
                     </div>
                     </TooltipProvider>
