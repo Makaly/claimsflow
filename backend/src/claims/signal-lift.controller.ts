@@ -4,6 +4,10 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 
+/**
+ * T2.3 — Signal-lift report: for each fraud signal, how much does flagging
+ * that signal improve fraud-detection rate vs. the base rate?
+ */
 @Controller('fraud-thresholds/signal-lift')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class SignalLiftController {
@@ -15,41 +19,35 @@ export class SignalLiftController {
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
   ) {
-    const labelWhere: any = {};
+    const where: any = { isLabelled: true };
     if (dateFrom || dateTo) {
-      labelWhere.createdAt = {};
-      if (dateFrom) labelWhere.createdAt.gte = new Date(dateFrom);
-      if (dateTo) labelWhere.createdAt.lte = new Date(dateTo);
+      where.createdAt = {};
+      if (dateFrom) where.createdAt.gte = new Date(dateFrom);
+      if (dateTo) where.createdAt.lte = new Date(dateTo);
     }
 
-    const labels = await this.prisma.claimLabel.findMany({
-      where: labelWhere,
-      select: { claimId: true, label: true },
-    });
-    if (labels.length === 0) {
-      return { baseRate: 0, totalClaims: 0, totalFraud: 0, signals: [] };
-    }
-
-    const claimIds = labels.map(l => l.claimId);
     const claims = await this.prisma.claim.findMany({
-      where: { id: { in: claimIds } },
-      select: { id: true, fraudSignals: true },
+      where,
+      select: {
+        fraudSignals: true,
+        labels: { select: { isFraud: true } },
+      },
     });
-    const signalsByClaim = new Map<string, string[]>(
-      claims.map(c => [c.id, extractSignalNames(c.fraudSignals)]),
-    );
 
-    const totalFraud = labels.filter(l => l.label === 'fraud').length;
-    const baseRate = labels.length > 0 ? totalFraud / labels.length : 0;
+    const totalFraud = claims.filter(c => c.labels.some(l => l.isFraud)).length;
+    const baseRate = claims.length > 0 ? totalFraud / claims.length : 0;
 
     const signalMap: Record<string, { total: number; fraud: number }> = {};
-    for (const l of labels) {
-      const signals = signalsByClaim.get(l.claimId) ?? [];
-      const isFraud = l.label === 'fraud';
+
+    for (const claim of claims) {
+      const signals: string[] = Array.isArray(claim.fraudSignals)
+        ? (claim.fraudSignals as string[])
+        : [];
+      const isFraud = claim.labels.some(l => l.isFraud);
       for (const signal of signals) {
         if (!signalMap[signal]) signalMap[signal] = { total: 0, fraud: 0 };
-        signalMap[signal].total += 1;
-        if (isFraud) signalMap[signal].fraud += 1;
+        signalMap[signal].total++;
+        if (isFraud) signalMap[signal].fraud++;
       }
     }
 
@@ -58,22 +56,11 @@ export class SignalLiftController {
       total,
       fraud,
       fraudRate: total > 0 ? fraud / total : 0,
-      lift: baseRate > 0 && total > 0 ? fraud / total / baseRate : null,
+      lift: baseRate > 0 ? (total > 0 ? fraud / total : 0) / baseRate : null,
     }));
+
     rows.sort((a, b) => (b.lift ?? 0) - (a.lift ?? 0));
 
-    return { baseRate, totalClaims: labels.length, totalFraud, signals: rows };
+    return { baseRate, totalClaims: claims.length, totalFraud, signals: rows };
   }
-}
-
-function extractSignalNames(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return [];
-  const names: string[] = [];
-  for (const entry of raw) {
-    if (typeof entry === 'string') names.push(entry);
-    else if (entry && typeof entry === 'object' && typeof (entry as any).title === 'string') {
-      names.push((entry as any).title);
-    }
-  }
-  return names;
 }
