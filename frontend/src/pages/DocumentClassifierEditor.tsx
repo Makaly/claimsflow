@@ -459,6 +459,7 @@ export default function DocumentClassifierEditor() {
   const [thumbnails, setThumbnails]             = useState<string[]>([])
   const [thumbsLoading, setThumbsLoading]       = useState(false)
   const [splitResult, setSplitResult]           = useState<Array<{ id: string; originalName: string; documentType: string | null }> | null>(null)
+  const [openingEditorForDoc, setOpeningEditorForDoc] = useState<string | null>(null)
 
   const SEGMENT_COLORS = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#f97316','#6366f1']
 
@@ -2066,292 +2067,380 @@ export default function DocumentClassifierEditor() {
         </div>
       </div>
 
-      {/* ── Split & Categorize dialog — two-panel redesign ── */}
+      {/* ── Split & Categorize dialog ── */}
       <Dialog open={splitDialogOpen} onOpenChange={(o) => { if (!o) closeSplitDialog() }}>
-        <DialogContent className="max-w-5xl p-0 gap-0 overflow-hidden" style={{ height: '82vh' }}>
+        <DialogContent className="max-w-5xl p-0 gap-0 overflow-hidden rounded-2xl" style={{ height: '86vh' }}>
           <DialogTitle className="sr-only">Split &amp; Categorize Document</DialogTitle>
 
-          {/* ── Success state ── */}
+          {/* ══ SUCCESS STATE ══ */}
           {splitResult && (
-            <div className="flex flex-col items-center justify-center h-full gap-6 px-10">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
-                <CheckCircle2 className="h-8 w-8 text-emerald-600" />
-              </div>
-              <div className="text-center">
-                <h3 className="text-lg font-semibold">{splitResult.length} document{splitResult.length !== 1 ? 's' : ''} created</h3>
-                <p className="text-sm text-muted-foreground mt-1">Your split documents are now in the Documents page</p>
-              </div>
-              <div className="w-full max-w-sm space-y-2">
-                {splitResult.map((doc, i) => {
-                  const color = SEGMENT_COLORS[i % SEGMENT_COLORS.length]
-                  return (
-                    <div key={doc.id} className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5">
-                      <div className="h-8 w-8 rounded-md flex items-center justify-center text-sm font-bold text-white shrink-0"
-                        style={{ background: color }}>{i + 1}</div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{doc.originalName}</p>
-                        <p className="text-[11px] text-muted-foreground capitalize">{doc.documentType?.replace(/_/g, ' ') || 'document'}</p>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-              <div className="flex gap-3">
-                <Button variant="outline" onClick={closeSplitDialog}>Close</Button>
-                <Button className="gap-2 bg-violet-600 hover:bg-violet-700" onClick={() => { closeSplitDialog(); navigate('/documents') }}>
-                  <FileText className="h-4 w-4" /> View in Documents
+            <div className="flex flex-col h-full overflow-hidden">
+              {/* Header */}
+              <div className="flex items-center gap-3 px-6 py-4 border-b bg-emerald-50 dark:bg-emerald-950/30 shrink-0">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500 shrink-0">
+                  <CheckCircle2 className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-emerald-800 dark:text-emerald-200">
+                    {splitResult.length} document{splitResult.length !== 1 ? 's' : ''} created successfully
+                  </h2>
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                    Each part is saved. Open in the zone editor to draw fields, or view all in Documents.
+                  </p>
+                </div>
+                <Button variant="ghost" size="icon" className="ml-auto h-7 w-7" onClick={closeSplitDialog}>
+                  <XIcon className="h-4 w-4" />
                 </Button>
               </div>
-            </div>
-          )}
 
-          {/* ── Main split UI (hidden after success) ── */}
-          {!splitResult && <>
-          {/* ── Header ── */}
-          <div className="flex items-center justify-between px-5 py-3.5 border-b bg-background shrink-0">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-100 dark:bg-violet-900/30">
-                <Scissors className="h-4 w-4 text-violet-600" />
-              </div>
-              <div>
-                <h2 className="text-sm font-semibold leading-tight">Split &amp; Categorize</h2>
-                <p className="text-[11px] text-muted-foreground leading-tight">{template?.sampleFileName} · {pageCount} pages</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {analysisDone && (
-                <span className="flex items-center gap-1 text-[11px] text-emerald-600 font-medium">
-                  <CheckCircle2 className="h-3.5 w-3.5" /> {splitRanges.length} section{splitRanges.length !== 1 ? 's' : ''} identified
-                </span>
-              )}
-              <Button
-                size="sm"
-                onClick={handleAnalyzePages}
-                disabled={analyzingPages}
-                className={analysisDone
-                  ? 'h-8 gap-1.5 text-xs bg-violet-50 text-violet-700 border border-violet-300 hover:bg-violet-100 shadow-none'
-                  : 'h-8 gap-1.5 text-xs bg-violet-600 hover:bg-violet-700'
-                }
-                variant={analysisDone ? 'outline' : 'default'}
-              >
-                {analyzingPages
-                  ? <><RefreshCw className="h-3.5 w-3.5 animate-spin" />Analyzing…</>
-                  : <><Sparkles className="h-3.5 w-3.5" />{analysisDone ? 'Re-analyze' : 'Auto-Categorize with AI'}</>
-                }
-              </Button>
-            </div>
-          </div>
-
-          {/* ── Two-panel body ── */}
-          <div className="flex flex-1 overflow-hidden min-h-0">
-
-            {/* ── Left: Page thumbnail grid ── */}
-            <div className="w-[52%] border-r flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-900/40">
-              <div className="px-4 py-2.5 border-b bg-background/80 shrink-0">
-                <p className="text-[11px] font-medium text-muted-foreground">
-                  Pages — bordered by section colour
-                </p>
-              </div>
-              <div className="flex-1 overflow-y-auto p-3">
-                {thumbsLoading ? (
-                  <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
-                    <Loader2 className="h-6 w-6 animate-spin" />
-                    <p className="text-xs">Rendering page previews…</p>
-                  </div>
-                ) : thumbnails.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
-                    <FileText className="h-10 w-10 opacity-20" />
-                    <p className="text-xs">No preview available</p>
-                  </div>
-                ) : (
-                  <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))' }}>
-                    {thumbnails.map((thumb, i) => {
-                      const page = i + 1
-                      const segIdx = getPageSegmentIdx(page)
-                      const color = segIdx >= 0 ? SEGMENT_COLORS[segIdx % SEGMENT_COLORS.length] : '#cbd5e1'
-                      const bgTint = segIdx >= 0 ? color + '18' : 'transparent'
-                      return (
-                        <div key={i} className="flex flex-col items-center gap-1">
-                          <div
-                            className="relative rounded-md overflow-hidden shadow-sm transition-transform hover:scale-105 cursor-default"
-                            style={{ border: `2.5px solid ${color}`, background: bgTint, width: '100%' }}
-                          >
-                            {/* Segment colour bar */}
-                            <div style={{ height: 4, background: color, width: '100%' }} />
-                            {thumb ? (
-                              <img
-                                src={thumb}
-                                alt={`p${page}`}
-                                style={{ width: '100%', aspectRatio: '3/4', objectFit: 'cover', display: 'block' }}
-                              />
-                            ) : (
-                              <div style={{ aspectRatio: '3/4', background: '#f1f5f9' }} className="flex items-center justify-center">
-                                <FileText className="h-5 w-5 text-muted-foreground/40" />
-                              </div>
-                            )}
-                            {/* Segment badge */}
-                            {segIdx >= 0 && (
-                              <div
-                                className="absolute top-1 right-1 text-white text-[9px] font-bold rounded-full flex items-center justify-center"
-                                style={{ background: color, width: 16, height: 16 }}
-                              >
-                                {segIdx + 1}
-                              </div>
-                            )}
-                          </div>
-                          <span className="text-[10px] tabular-nums font-medium" style={{ color }}>p.{page}</span>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* ── Right: Section definitions ── */}
-            <div className="flex-1 flex flex-col overflow-hidden">
-              <div className="px-4 py-2.5 border-b bg-background/80 shrink-0 flex items-center justify-between">
-                <p className="text-[11px] font-medium text-muted-foreground">
-                  Sections · {splitRanges.length} defined
-                </p>
-                <button
-                  className="text-[11px] text-violet-600 font-medium hover:text-violet-800 flex items-center gap-1"
-                  onClick={() => setSplitRanges(prev => [...prev, {
-                    start: Math.max(1, (prev[prev.length - 1]?.end ?? 0) + 1),
-                    end: pageCount,
-                    name: `section_${prev.length + 1}`,
-                  }])}
-                >
-                  <Plus className="h-3.5 w-3.5" /> Add Section
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
-                {splitRanges.map((range, i) => {
+              {/* Split docs list */}
+              <div className="flex-1 overflow-y-auto p-5 space-y-3">
+                {splitResult.map((doc, i) => {
                   const color = SEGMENT_COLORS[i % SEGMENT_COLORS.length]
-                  const DOC_TYPES = [
-                    { value: 'invoice',           label: 'Invoice / Bill',        icon: '🧾' },
-                    { value: 'lab_result',        label: 'Lab Results',           icon: '🔬' },
-                    { value: 'prescription',      label: 'Prescription',          icon: '💊' },
-                    { value: 'discharge_summary', label: 'Discharge Summary',     icon: '🏥' },
-                    { value: 'medical_report',    label: 'Medical Report',        icon: '📋' },
-                    { value: 'claim_form',        label: 'Claim Form',            icon: '📝' },
-                    { value: 'pre_auth',          label: 'Pre-Authorization',     icon: '✅' },
-                    { value: 'referral',          label: 'Referral Letter',       icon: '📨' },
-                    { value: 'supporting',        label: 'Supporting Document',   icon: '📎' },
-                  ]
-                  const docLabel = DOC_TYPES.find(d => d.value === range.documentType)
+                  const isOpening = openingEditorForDoc === doc.id
+                  const DOC_ICON: Record<string, string> = {
+                    invoice: '🧾', inpatient_invoice: '🧾', lab_result: '🔬',
+                    prescription: '💊', discharge_summary: '🏥', medical_report: '📋',
+                    claim_form: '📝', pre_auth: '✅', referral: '📨', supporting: '📎',
+                  }
+                  const icon = DOC_ICON[doc.documentType || ''] || '📄'
                   return (
-                    <div
-                      key={i}
-                      className="rounded-xl border bg-card shadow-sm overflow-hidden"
-                      style={{ borderTop: `3px solid ${color}` }}
+                    <div key={doc.id}
+                      className="flex items-center gap-4 rounded-xl border bg-card px-4 py-3 shadow-sm hover:shadow-md transition-shadow"
+                      style={{ borderLeft: `4px solid ${color}` }}
                     >
-                      {/* Section header */}
-                      <div className="flex items-center gap-2.5 px-3 pt-2.5 pb-2">
-                        <div
-                          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white text-[11px] font-bold"
-                          style={{ background: color }}
-                        >
-                          {i + 1}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[11px] font-semibold text-foreground truncate">
-                            {docLabel ? `${docLabel.icon} ${docLabel.label}` : 'Uncategorized section'}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground">
-                            Pages {range.start}–{range.end} · {Math.max(0, range.end - range.start + 1)} page{range.end - range.start !== 0 ? 's' : ''}
-                          </p>
-                        </div>
-                        {splitRanges.length > 1 && (
-                          <button
-                            className="text-muted-foreground/50 hover:text-destructive transition-colors"
-                            onClick={() => setSplitRanges(prev => prev.filter((_, j) => j !== i))}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        )}
+                      {/* Index badge */}
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white text-sm font-bold shadow-sm"
+                        style={{ background: color }}>
+                        {i + 1}
                       </div>
 
-                      {/* Section body */}
-                      <div className="px-3 pb-3 space-y-2">
-                        {/* Document type */}
-                        <Select
-                          value={range.documentType || ''}
-                          onValueChange={(v) => { const u = [...splitRanges]; u[i] = { ...u[i], documentType: v }; setSplitRanges(u) }}
-                        >
-                          <SelectTrigger className="h-8 text-xs bg-muted/40 border-muted-foreground/20">
-                            <SelectValue placeholder="Select document type…" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {DOC_TYPES.map(opt => (
-                              <SelectItem key={opt.value} value={opt.value}>
-                                {opt.icon} {opt.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-
-                        {/* Page range + file name */}
-                        <div className="flex items-center gap-1.5">
-                          <div className="flex items-center gap-1 rounded-md border bg-muted/30 px-2 py-1">
-                            <span className="text-[10px] text-muted-foreground font-medium">p.</span>
-                            <input
-                              type="number" min={1} max={pageCount} value={range.start}
-                              onChange={(e) => { const u = [...splitRanges]; u[i] = { ...u[i], start: +e.target.value || 1 }; setSplitRanges(u) }}
-                              className="w-10 text-center text-xs bg-transparent border-none outline-none font-mono"
-                            />
-                            <span className="text-muted-foreground text-xs">–</span>
-                            <input
-                              type="number" min={1} max={pageCount} value={range.end}
-                              onChange={(e) => { const u = [...splitRanges]; u[i] = { ...u[i], end: +e.target.value || 1 }; setSplitRanges(u) }}
-                              className="w-10 text-center text-xs bg-transparent border-none outline-none font-mono"
-                            />
-                          </div>
-                          <input
-                            value={range.name}
-                            onChange={(e) => { const u = [...splitRanges]; u[i] = { ...u[i], name: e.target.value }; setSplitRanges(u) }}
-                            placeholder="File name…"
-                            className="h-7 flex-1 text-[11px] rounded-md border border-input bg-muted/30 px-2 focus:outline-none focus:ring-1 focus:ring-ring"
-                          />
-                        </div>
+                      {/* Doc info */}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold truncate flex items-center gap-1.5">
+                          <span>{icon}</span>
+                          <span>{doc.originalName}</span>
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5 capitalize">
+                          {doc.documentType?.replace(/_/g, ' ') || 'Unclassified document'}
+                        </p>
                       </div>
+
+                      {/* Open in Zone Editor */}
+                      <Button
+                        size="sm"
+                        className="shrink-0 h-8 gap-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white"
+                        disabled={isOpening || !!openingEditorForDoc}
+                        onClick={async () => {
+                          setOpeningEditorForDoc(doc.id)
+                          try {
+                            const { data } = await api.post('/document-classifiers/from-document', {
+                              documentId: doc.id,
+                              documentType: doc.documentType || undefined,
+                              name: doc.originalName,
+                            })
+                            closeSplitDialog()
+                            navigate(`/settings/document-classifiers/${data.templateId}?from=unknown-docs`)
+                          } catch (err: any) {
+                            toast.error('Could not open zone editor', { description: err?.response?.data?.message || err.message })
+                          } finally {
+                            setOpeningEditorForDoc(null)
+                          }
+                        }}
+                      >
+                        {isOpening
+                          ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Opening…</>
+                          : <><Square className="h-3.5 w-3.5" /> Open Zone Editor</>
+                        }
+                      </Button>
                     </div>
                   )
                 })}
-
-                {/* Empty state */}
-                {splitRanges.length === 0 && (
-                  <div className="flex flex-col items-center justify-center py-10 text-center text-muted-foreground gap-2">
-                    <Scissors className="h-8 w-8 opacity-20" />
-                    <p className="text-xs">Click "Auto-Categorize with AI" or "Add Section" to define splits</p>
-                  </div>
-                )}
               </div>
 
-              {/* ── Footer ── */}
-              <div className="border-t px-4 py-3 bg-background shrink-0 flex items-center justify-between gap-3">
-                <p className="text-[11px] text-muted-foreground">
-                  {splitRanges.filter(r => r.documentType).length}/{splitRanges.length} sections categorized
+              {/* Footer */}
+              <div className="border-t px-5 py-3.5 bg-background shrink-0 flex items-center justify-between gap-3">
+                <p className="text-xs text-muted-foreground">
+                  All {splitResult.length} document{splitResult.length !== 1 ? 's are' : ' is'} saved and available in Documents.
                 </p>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="h-8"
-                    onClick={() => { setSplitDialogOpen(false); setAnalysisDone(false) }}>
-                    Cancel
-                  </Button>
-                  <Button size="sm" className="h-8 gap-1.5 bg-violet-600 hover:bg-violet-700"
-                    onClick={handleSplitSample}
-                    disabled={splittingDocs || splitRanges.length === 0}>
-                    {splittingDocs
-                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Creating…</>
-                      : <><Scissors className="h-3.5 w-3.5" />Split &amp; Create {splitRanges.length} Document{splitRanges.length !== 1 ? 's' : ''}</>
-                    }
+                  <Button variant="outline" size="sm" className="h-8" onClick={closeSplitDialog}>Close</Button>
+                  <Button size="sm" className="h-8 gap-1.5 bg-violet-600 hover:bg-violet-700 text-white"
+                    onClick={() => { closeSplitDialog(); navigate('/documents') }}>
+                    <FileText className="h-3.5 w-3.5" /> View All in Documents
                   </Button>
                 </div>
               </div>
             </div>
-          </div>
-          </>}
+          )}
+
+          {/* ══ MAIN SPLIT UI ══ */}
+          {!splitResult && (
+            <div className="flex flex-col h-full overflow-hidden">
+
+              {/* Header */}
+              <div className="flex items-center gap-3 px-5 py-3.5 border-b bg-background shrink-0">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-100 dark:bg-violet-900/40 shrink-0">
+                  <Scissors className="h-4.5 w-4.5 text-violet-600" />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-sm font-bold leading-tight">Split &amp; Categorize</h2>
+                  <p className="text-[11px] text-muted-foreground leading-tight truncate max-w-xs">
+                    {template?.sampleFileName} · {pageCount} page{pageCount !== 1 ? 's' : ''}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 ml-auto shrink-0">
+                  {analysisDone && (
+                    <span className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      {splitRanges.length} section{splitRanges.length !== 1 ? 's' : ''} identified
+                    </span>
+                  )}
+                  <Button size="sm"
+                    onClick={handleAnalyzePages}
+                    disabled={analyzingPages}
+                    className="h-8 gap-1.5 text-xs bg-violet-600 hover:bg-violet-700 text-white"
+                  >
+                    {analyzingPages
+                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Analyzing…</>
+                      : <><Sparkles className="h-3.5 w-3.5" /> {analysisDone ? 'Re-analyze' : 'Auto-Categorize with AI'}</>
+                    }
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8"
+                    onClick={() => { setSplitDialogOpen(false); setAnalysisDone(false) }}>
+                    <XIcon className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Two-panel body */}
+              <div className="flex flex-1 overflow-hidden min-h-0">
+
+                {/* ── Left: Page thumbnails ── */}
+                <div className="w-[48%] border-r flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-900/30">
+                  <div className="px-4 py-2 border-b bg-background/60 shrink-0 flex items-center justify-between">
+                    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      Pages
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Colour = section assignment
+                    </p>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4">
+                    {thumbsLoading ? (
+                      <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
+                        <Loader2 className="h-6 w-6 animate-spin" />
+                        <p className="text-xs">Rendering previews…</p>
+                      </div>
+                    ) : thumbnails.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
+                        <FileText className="h-10 w-10 opacity-20" />
+                        <p className="text-xs">No preview available</p>
+                      </div>
+                    ) : (
+                      <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))' }}>
+                        {thumbnails.map((thumb, i) => {
+                          const page = i + 1
+                          const segIdx = getPageSegmentIdx(page)
+                          const color = segIdx >= 0 ? SEGMENT_COLORS[segIdx % SEGMENT_COLORS.length] : '#94a3b8'
+                          return (
+                            <div key={i} className="flex flex-col items-center gap-1.5">
+                              <div
+                                className="relative rounded-lg overflow-hidden shadow-md transition-all hover:scale-[1.03] hover:shadow-lg cursor-default w-full"
+                                style={{ border: `2.5px solid ${color}` }}
+                              >
+                                {/* Top colour strip */}
+                                <div style={{ height: 5, background: color, width: '100%' }} />
+                                {thumb ? (
+                                  <img src={thumb} alt={`p${page}`}
+                                    style={{ width: '100%', aspectRatio: '3/4', objectFit: 'cover', display: 'block' }} />
+                                ) : (
+                                  <div style={{ aspectRatio: '3/4' }} className="flex items-center justify-center bg-muted/30">
+                                    <FileText className="h-5 w-5 text-muted-foreground/30" />
+                                  </div>
+                                )}
+                                {/* Section number badge */}
+                                {segIdx >= 0 && (
+                                  <div className="absolute top-1.5 right-1.5 text-white text-[9px] font-bold rounded-full flex items-center justify-center shadow-sm"
+                                    style={{ background: color, width: 18, height: 18 }}>
+                                    {segIdx + 1}
+                                  </div>
+                                )}
+                              </div>
+                              <span className="text-[10px] tabular-nums font-semibold" style={{ color }}>p.{page}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Right: Section editor ── */}
+                <div className="flex-1 flex flex-col overflow-hidden bg-background">
+                  {/* Sub-header */}
+                  <div className="px-4 py-2 border-b bg-background/60 shrink-0 flex items-center justify-between">
+                    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      Sections · {splitRanges.length}
+                    </p>
+                    <button
+                      className="flex items-center gap-1 text-[11px] font-semibold text-violet-600 dark:text-violet-400 hover:text-violet-800 dark:hover:text-violet-200 transition-colors"
+                      onClick={() => setSplitRanges(prev => [...prev, {
+                        start: Math.max(1, (prev[prev.length - 1]?.end ?? 0) + 1),
+                        end: pageCount,
+                        name: `section_${prev.length + 1}`,
+                      }])}
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Add Section
+                    </button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                    {(() => {
+                      const DOC_TYPES = [
+                        { value: 'invoice',           label: 'Invoice / Bill',      icon: '🧾' },
+                        { value: 'lab_result',        label: 'Lab Results',         icon: '🔬' },
+                        { value: 'prescription',      label: 'Prescription',        icon: '💊' },
+                        { value: 'discharge_summary', label: 'Discharge Summary',   icon: '🏥' },
+                        { value: 'medical_report',    label: 'Medical Report',      icon: '📋' },
+                        { value: 'claim_form',        label: 'Claim Form',          icon: '📝' },
+                        { value: 'pre_auth',          label: 'Pre-Authorization',   icon: '✅' },
+                        { value: 'referral',          label: 'Referral Letter',     icon: '📨' },
+                        { value: 'supporting',        label: 'Supporting Document', icon: '📎' },
+                      ]
+
+                      if (splitRanges.length === 0) return (
+                        <div className="flex flex-col items-center justify-center h-full gap-3 text-center text-muted-foreground py-16">
+                          <div className="h-16 w-16 rounded-2xl bg-muted/50 flex items-center justify-center">
+                            <Scissors className="h-7 w-7 opacity-30" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium">No sections yet</p>
+                            <p className="text-xs mt-1 text-muted-foreground/70 max-w-[200px]">
+                              Click <strong>Auto-Categorize with AI</strong> or add sections manually
+                            </p>
+                          </div>
+                        </div>
+                      )
+
+                      return splitRanges.map((range, i) => {
+                        const color = SEGMENT_COLORS[i % SEGMENT_COLORS.length]
+                        const docType = DOC_TYPES.find(d => d.value === range.documentType)
+                        const pageCount2 = Math.max(0, range.end - range.start + 1)
+                        return (
+                          <div key={i} className="rounded-xl border bg-card shadow-sm overflow-hidden"
+                            style={{ borderLeft: `4px solid ${color}` }}>
+
+                            {/* Card header */}
+                            <div className="flex items-center gap-3 px-4 pt-3 pb-2">
+                              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white text-xs font-bold"
+                                style={{ background: color }}>
+                                {i + 1}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold leading-tight">
+                                  {docType ? `${docType.icon} ${docType.label}` : (
+                                    <span className="text-muted-foreground font-normal italic">Select a document type…</span>
+                                  )}
+                                </p>
+                                <p className="text-[10px] text-muted-foreground">
+                                  {pageCount2} page{pageCount2 !== 1 ? 's' : ''} · p.{range.start}–{range.end}
+                                </p>
+                              </div>
+                              {splitRanges.length > 1 && (
+                                <button
+                                  className="shrink-0 h-6 w-6 flex items-center justify-center rounded-md text-muted-foreground/40 hover:text-destructive hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                                  onClick={() => setSplitRanges(prev => prev.filter((_, j) => j !== i))}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Card body */}
+                            <div className="px-4 pb-4 space-y-2.5">
+                              {/* Document type selector */}
+                              <Select
+                                value={range.documentType || ''}
+                                onValueChange={(v) => { const u = [...splitRanges]; u[i] = { ...u[i], documentType: v }; setSplitRanges(u) }}
+                              >
+                                <SelectTrigger className="h-9 text-xs border-muted-foreground/20 focus:ring-violet-400">
+                                  <SelectValue placeholder="Select document type…" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {DOC_TYPES.map(opt => (
+                                    <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                                      <span className="mr-1.5">{opt.icon}</span>{opt.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+
+                              {/* Page range + filename row */}
+                              <div className="flex items-center gap-2">
+                                {/* Page range pill */}
+                                <div className="flex items-center gap-1 rounded-lg border bg-muted/40 px-2.5 py-1.5 shrink-0">
+                                  <span className="text-[10px] text-muted-foreground font-medium">p.</span>
+                                  <input type="number" min={1} max={pageCount} value={range.start}
+                                    onChange={(e) => { const u = [...splitRanges]; u[i] = { ...u[i], start: +e.target.value || 1 }; setSplitRanges(u) }}
+                                    className="w-8 text-center text-xs bg-transparent border-none outline-none font-mono tabular-nums" />
+                                  <span className="text-muted-foreground text-xs font-medium">–</span>
+                                  <input type="number" min={1} max={pageCount} value={range.end}
+                                    onChange={(e) => { const u = [...splitRanges]; u[i] = { ...u[i], end: +e.target.value || 1 }; setSplitRanges(u) }}
+                                    className="w-8 text-center text-xs bg-transparent border-none outline-none font-mono tabular-nums" />
+                                </div>
+                                {/* Filename */}
+                                <input
+                                  value={range.name}
+                                  onChange={(e) => { const u = [...splitRanges]; u[i] = { ...u[i], name: e.target.value }; setSplitRanges(u) }}
+                                  placeholder="Output file name…"
+                                  className="h-9 flex-1 text-xs rounded-lg border border-input bg-muted/30 px-3 focus:outline-none focus:ring-1 focus:ring-violet-400 placeholder:text-muted-foreground/50"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })
+                    })()}
+                  </div>
+
+                  {/* Footer */}
+                  <div className="border-t px-4 py-3.5 bg-background shrink-0">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <div className="flex gap-0.5">
+                          {splitRanges.map((r, i) => (
+                            <div key={i} className="h-1.5 rounded-full"
+                              style={{
+                                width: 20,
+                                background: r.documentType ? SEGMENT_COLORS[i % SEGMENT_COLORS.length] : '#e2e8f0'
+                              }} />
+                          ))}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          {splitRanges.filter(r => r.documentType).length}/{splitRanges.length} categorized
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" className="h-8"
+                          onClick={() => { setSplitDialogOpen(false); setAnalysisDone(false) }}>
+                          Cancel
+                        </Button>
+                        <Button size="sm" className="h-8 gap-1.5 bg-violet-600 hover:bg-violet-700 text-white"
+                          onClick={handleSplitSample}
+                          disabled={splittingDocs || splitRanges.length === 0}>
+                          {splittingDocs
+                            ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Creating…</>
+                            : <><Scissors className="h-3.5 w-3.5" /> Split &amp; Create {splitRanges.length} Doc{splitRanges.length !== 1 ? 's' : ''}</>
+                          }
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
