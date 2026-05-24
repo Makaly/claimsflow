@@ -40,7 +40,7 @@ export default function ZoneAnalytics() {
     setLoading(true)
     try {
       const params = templateFilter !== 'all' ? `?templateId=${templateFilter}` : ''
-      const res = await api.get(`/document-classifier/zone-analytics${params}`)
+      const res = await api.get(`/document-classifiers/zone-analytics${params}`)
       setData(res.data)
     } finally {
       setLoading(false)
@@ -50,7 +50,7 @@ export default function ZoneAnalytics() {
   useEffect(() => { load() }, [load])
 
   const confirm = async (hitId: string) => {
-    await api.patch(`/document-classifier/zone-hits/${hitId}/confirm`)
+    await api.patch(`/document-classifiers/zone-hits/${hitId}/confirm`)
     load()
   }
 
@@ -352,7 +352,7 @@ export default function ZoneAnalytics() {
                             onClick={() => {
                               const corrected = window.prompt(`Correct value for "${h.fieldLabel}":`, h.extractedValue ?? '')
                               if (corrected !== null) {
-                                api.patch(`/document-classifier/zone-hits/${h.id}/correct`, { correctedValue: corrected }).then(load)
+                                api.patch(`/document-classifiers/zone-hits/${h.id}/correct`, { correctedValue: corrected }).then(load)
                               }
                             }}
                             title="Mark as incorrect"
