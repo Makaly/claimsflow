@@ -283,21 +283,28 @@ export class VisionRouterService {
       tryOrder.push({ p: 'claude', fn: () => this.claude.extractMulti(filePath, mimetype) });
     }
 
-    for (const { p, fn } of tryOrder) {
-      if (this.isCircuitOpen(p)) {
-        this.logger.warn(`Skipping ${p} — circuit open (quota/billing cooldown)`);
-        continue;
-      }
-      try {
-        const results = await fn();
-        if (results && results.length > 0) return results;
-      } catch (err: any) {
-        if (isQuotaOrBillingError(err)) this.tripCircuit(p);
-        this.logger.warn(`extractMulti attempt failed: ${err?.message || err}`);
-      }
-    }
+    const raceTasks = tryOrder
+      .filter(({ p }) => !this.isCircuitOpen(p))
+      .map(({ p, fn }) =>
+        fn()
+          .then(results => {
+            if (!results || results.length === 0) throw new Error(`${p} returned empty`);
+            return results;
+          })
+          .catch(err => {
+            if (isQuotaOrBillingError(err)) this.tripCircuit(p);
+            this.logger.warn(`extractMulti ${p}: ${err?.message || err}`);
+            throw err;
+          })
+      );
 
-    return [];
+    if (raceTasks.length === 0) return [];
+
+    try {
+      return await Promise.any(raceTasks);
+    } catch {
+      return [];
+    }
   }
 
   /**

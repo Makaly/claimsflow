@@ -2804,12 +2804,15 @@ export default function BatchUpload() {
     }))
     setClaims(allClaims)
 
-    const finalClaims: ExtractedClaim[] = []
+    // Array to hold per-file results in order (ExtractedClaim[][] indexed by file)
+    const perFileResults: ExtractedClaim[][] = uploadedFiles.map(() => [])
 
-    // Process each file - extract REAL text from PDFs, detect multi-invoice, split
-    for (let i = 0; i < uploadedFiles.length; i++) {
+    // Per-file processing logic extracted into an inner async function so it can
+    // run in parallel chunks of PARALLEL files at a time.
+    const PARALLEL = 3
+
+    const runFile = async (file: File, i: number): Promise<void> => {
       setCurrentExtractIndex(i)
-      const file = uploadedFiles[i]
       const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
       const isImage = file.type.startsWith('image/')
 
@@ -2976,12 +2979,13 @@ export default function BatchUpload() {
         stampedFiles = [{ url: URL.createObjectURL(file), size: file.size }]
       }
 
+      const extracted: ExtractedClaim[] = []
       for (let j = 0; j < result.invoices.length; j++) {
         const inv = result.invoices[j]
         const barcode = barcodes[j]
         const stamped = stampedFiles[j] || stampedFiles[0]
 
-        finalClaims.push({
+        extracted.push({
           id: Math.random().toString(36).slice(2),
           barcode,
           fileName: isMulti ? `${file.name} [Invoice ${j + 1}/${result.invoices.length}]` : file.name,
@@ -3014,10 +3018,32 @@ export default function BatchUpload() {
           validationWarnings: inv.validationWarnings,
         })
       }
+      perFileResults[i] = extracted
 
-      // Update UI in real-time
-      setClaims([...finalClaims, ...allClaims.slice(i + 1)])
+      // Streaming: update claims as each file completes — show real results for
+      // completed files and placeholders for remaining ones.
+      setClaims(() => {
+        const ordered: ExtractedClaim[] = []
+        for (let k = 0; k < uploadedFiles.length; k++) {
+          if (perFileResults[k].length > 0) {
+            ordered.push(...perFileResults[k])
+          } else {
+            const ph = allClaims.find(c => c.fileName === uploadedFiles[k].name && c.status === 'extracting')
+            if (ph) ordered.push(ph)
+          }
+        }
+        return ordered
+      })
     }
+
+    // Process in parallel chunks of PARALLEL files at a time
+    for (let s = 0; s < uploadedFiles.length; s += PARALLEL) {
+      await Promise.allSettled(
+        uploadedFiles.slice(s, s + PARALLEL).map((f, j) => runFile(f, s + j))
+      )
+    }
+
+    const finalClaims = perFileResults.flat()
 
     // AI verification pass
     await new Promise(r => setTimeout(r, 1000))

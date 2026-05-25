@@ -33,18 +33,24 @@ export class BatchSubmissionProcessor extends WorkerHost {
     let failedCount = 0;
 
     try {
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+      const PARALLEL_FILES = 3;
+      // Assign folio numbers upfront to keep them deterministic regardless of completion order
+      const tasks = files.map((file: any, i: number) => async () => {
         const folioNumber = this.barcodeService.generateFolioNumber(i + 1);
-
         try {
           await this.batchSubmissionService.processClaimFile(batchId, file, folioNumber);
           processedCount++;
-          await job.updateProgress(Math.round((processedCount / files.length) * 100));
         } catch (error) {
           this.logger.error(`Failed to process file ${file.originalName}:`, error);
           failedCount++;
+        } finally {
+          await job.updateProgress(Math.round((processedCount + failedCount) / files.length * 100));
         }
+      });
+
+      // Sliding-window: run PARALLEL_FILES tasks at a time
+      for (let i = 0; i < tasks.length; i += PARALLEL_FILES) {
+        await Promise.allSettled(tasks.slice(i, i + PARALLEL_FILES).map((t: () => Promise<void>) => t()));
       }
 
       await this.batchSubmissionService.updateBatchStatus(

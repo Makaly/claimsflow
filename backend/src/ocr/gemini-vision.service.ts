@@ -68,9 +68,24 @@ export async function buildPageHintsMap(pdfPath: string): Promise<Map<number, Pa
   return parsePageHints(text);
 }
 
+// In-process promise cache: re-uses the in-flight result when the same PDF is
+// processed by multiple providers simultaneously (e.g. Claude + Gemini racing).
+// Entries auto-evict after 10 minutes; uploads use unique timestamped paths so
+// there are no false cache hits.
+const _pageHintsCache = new Map<string, Promise<string>>();
+
+export async function buildPageContextHints(pdfPath: string): Promise<string> {
+  const cached = _pageHintsCache.get(pdfPath);
+  if (cached) return cached;
+  const p = _buildPageContextHints(pdfPath);
+  _pageHintsCache.set(pdfPath, p);
+  p.then(() => setTimeout(() => _pageHintsCache.delete(pdfPath), 10 * 60_000)).catch(() => _pageHintsCache.delete(pdfPath));
+  return p;
+}
+
 // Shared page pre-scan utility — strips stamped barcodes and classifies pages
 // using the digital text layer (fast, no AI required).
-export async function buildPageContextHints(pdfPath: string): Promise<string> {
+async function _buildPageContextHints(pdfPath: string): Promise<string> {
   try {
     // Use pdftotext per-page (subprocess) — more reliable than pdf-parse's async pagerender
     // which can silently drop pages when the callback returns a Promise it doesn't await.

@@ -4,6 +4,26 @@ import * as fs from 'fs';
 import { ParsedInvoice } from './ocr.service';
 import { buildPageContextHints } from './gemini-vision.service';
 
+/**
+ * Analyse the page-hints string to detect documents that will almost certainly
+ * fail Sonnet's confidence threshold — so we route directly to Opus and skip
+ * the wasted first-pass round-trip.
+ *
+ * Triggers on any ONE of:
+ *   • ≥4 pages total
+ *   • ≥2 SCANNED/IMAGE pages (photo-only, no digital text)
+ *   • ≥2 NEW CLAIM SPLIT BOUNDARies (complex multi-patient batch)
+ */
+function isComplexDocument(pageHints: string, isPdf: boolean): boolean {
+  if (!isPdf || !pageHints) return false;
+  const pages = (pageHints.match(/^Page \d+:/mg) || []).length;
+  if (pages >= 4) return true;
+  const scanned = (pageHints.match(/SCANNED\/IMAGE/g) || []).length;
+  if (scanned >= 2) return true;
+  const splits = (pageHints.match(/NEW CLAIM SPLIT BOUNDARY/g) || []).length;
+  return splits >= 2;
+}
+
 const SYSTEM_PROMPT = `You are a precise medical-invoice data extractor for CIC Insurance Group (Kenya).
 
 DOCUMENT CONTEXT — Kenyan medical claims:
@@ -548,10 +568,19 @@ export class ClaudeVisionService {
           },
         };
 
-    this.logger.log(`Claude extracting with model=${model} (${isPdf ? 'pdf' : 'image'})`);
+    // Build page hints for complexity check (shares cache with extractMulti)
+    const pageHints = isPdf ? await buildPageContextHints(filePath) : '';
+    // Skip Sonnet for predictably complex documents — go directly to Opus
+    const complex = isComplexDocument(pageHints, isPdf);
+    const effectiveModel = complex && model === (process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6')
+      ? 'claude-opus-4-7'
+      : model;
+    if (complex) this.logger.log(`Complex document detected — routing directly to claude-opus-4-7 (skipping ${model})`);
+
+    this.logger.log(`Claude extracting with model=${effectiveModel} (${isPdf ? 'pdf' : 'image'})`);
 
     const response = await client.messages.create({
-      model,
+      model: effectiveModel,
       max_tokens: 2048,
       // Cache the system block + tool schema. They are large and identical
       // across every claim, so caching cuts input tokens ~90% on repeats.
@@ -578,8 +607,8 @@ export class ClaudeVisionService {
     const confidence = Math.max(0, Math.min(1, Number(fields.confidence) || 0.9));
 
     // Auto-retry with Opus when Sonnet/Haiku returns low confidence
-    if (confidence < 0.70 && model !== 'claude-opus-4-7') {
-      this.logger.log(`Low confidence (${confidence.toFixed(2)}) from ${model} — retrying with claude-opus-4-7`);
+    if (confidence < 0.70 && effectiveModel !== 'claude-opus-4-7') {
+      this.logger.log(`Low confidence (${confidence.toFixed(2)}) from ${effectiveModel} — retrying with claude-opus-4-7`);
       try {
         return await this.extract(filePath, mimetype, 'claude-opus-4-7');
       } catch (opusErr: any) {
