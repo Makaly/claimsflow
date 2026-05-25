@@ -1773,3 +1773,43 @@ model NotificationQueue {
   @@map("notifications_queue")
 }
 
+/// Pre-publish claim drafts — stored per session before the user clicks Publish.
+/// No FK constraints so it can hold data before provider resolution.
+/// Deleted (or marked published) when the batch is published.
+model BatchDraftClaim {
+  id            String    @id @default(uuid())
+  sessionId     String
+  batchId       String?
+  barcode       String    @unique
+  claimNumber   String?
+  fileName      String
+  fileSize      Int       @default(0)
+  fileType      String?
+  providerName  String?
+  memberNumber  String?
+  patientName   String?
+  patientId     String?
+  invoiceNumber String?
+  invoiceDate   String?
+  invoiceAmount Float     @default(0)
+  serviceDate   String?
+  diagnosis     String?
+  diagnosisCode String?
+  procedureCode String?
+  treatment     String?
+  aiConfidence  Float     @default(0)
+  aiVerified    Boolean   @default(false)
+  status        String    @default("extracted")
+  pageRange     String?
+  annotations   Json      @default("[]")
+  lineItems     Json      @default("[]")
+  documentPages Json      @default("[]")
+  publishedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([sessionId])
+  @@index([batchId])
+  @@map("batch_draft_claims")
+}
+

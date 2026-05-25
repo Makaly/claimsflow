@@ -402,4 +402,68 @@ export class BatchSubmissionService {
       totalClaims,
     };
   }
+
+  // ── Draft claims ──────────────────────────────────────────────────────────
+
+  private draftFields(c: any) {
+    return {
+      sessionId:    c.id ? undefined : c.sessionId,  // ignored in create path
+      batchId:      c.batchId      ?? null,
+      claimNumber:  c.claimNumber  ?? null,
+      fileName:     c.fileName     ?? '',
+      fileSize:     c.fileSize     ?? 0,
+      fileType:     c.fileType     ?? null,
+      providerName: c.providerName ?? null,
+      memberNumber: c.memberNumber ?? null,
+      patientName:  c.patientName  ?? null,
+      patientId:    c.patientId    ?? null,
+      invoiceNumber:c.invoiceNumber?? null,
+      invoiceDate:  c.invoiceDate  ?? null,
+      invoiceAmount:typeof c.invoiceAmount === 'number' ? c.invoiceAmount : parseFloat(c.invoiceAmount) || 0,
+      serviceDate:  c.serviceDate  ?? null,
+      diagnosis:    c.diagnosis    ?? null,
+      diagnosisCode:c.diagnosisCode?? null,
+      procedureCode:c.procedureCode?? null,
+      treatment:    c.treatment    ?? null,
+      aiConfidence: c.aiConfidence ?? 0,
+      aiVerified:   c.aiVerified   ?? false,
+      status:       c.status       ?? 'extracted',
+      pageRange:    c.pageRange    ?? null,
+      annotations:  c.annotations  ?? [],
+      lineItems:    c.lineItems    ?? [],
+      documentPages:c.documentPages?? [],
+    };
+  }
+
+  async upsertDraftClaims(sessionId: string, claims: any[], batchId?: string) {
+    const results = await Promise.allSettled(
+      claims.map(c =>
+        this.prisma.batchDraftClaim.upsert({
+          where:  { barcode: c.barcode },
+          create: { barcode: c.barcode, sessionId, ...this.draftFields({ ...c, batchId }) },
+          update: this.draftFields({ ...c, batchId }),
+        })
+      )
+    );
+    const saved = results.filter(r => r.status === 'fulfilled').length;
+    return { saved, total: claims.length };
+  }
+
+  async updateDraftClaim(barcode: string, data: any) {
+    return this.prisma.batchDraftClaim.update({
+      where: { barcode },
+      data:  this.draftFields(data),
+    });
+  }
+
+  async getDraftClaims(sessionId: string) {
+    return this.prisma.batchDraftClaim.findMany({
+      where:   { sessionId, publishedAt: null },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async deleteDraftClaims(sessionId: string) {
+    return this.prisma.batchDraftClaim.deleteMany({ where: { sessionId } });
+  }
 }

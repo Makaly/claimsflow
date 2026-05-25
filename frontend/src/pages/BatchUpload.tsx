@@ -482,9 +482,10 @@ function ToolBtn({ active, onClick, icon, label, color, trailingIcon }: {
 }
 
 // ---- Full-screen Document Preview Modal ----
-function DocPreviewModal({ doc, onClose, onSave }: {
+function DocPreviewModal({ doc, onClose, onSave, sessionId }: {
   doc: ExtractedClaim
   onClose: () => void
+  sessionId?: string
   onSave: (updated: ExtractedClaim) => void
 }) {
   // Editable mirror of doc fields
@@ -599,14 +600,14 @@ function DocPreviewModal({ doc, onClose, onSave }: {
     }
   }
 
-  // Auto-save: debounce field changes → push to parent without closing modal
+  // Auto-save: debounce field changes → push to parent + persist to DB
   useEffect(() => {
     if (!mountedRef.current) { mountedRef.current = true; return }
     setSavedStatus('unsaved')
     if (autoSaveRef.current) clearTimeout(autoSaveRef.current)
     autoSaveRef.current = setTimeout(() => {
       setSavedStatus('saving')
-      onSave({
+      const updated = {
         ...doc,
         patientName:   edit.patientName,
         patientId:     edit.patientId,
@@ -620,7 +621,16 @@ function DocPreviewModal({ doc, onClose, onSave }: {
         diagnosisCode: edit.diagnosisCode,
         procedureCode: edit.procedureCode,
         treatment:     edit.treatment,
-      })
+      }
+      onSave(updated)
+      // Persist to DB so corrections survive across devices and browser clears
+      if (sessionId && doc.barcode) {
+        import('@/services/api').then(({ default: api }) => {
+          api.patch(`/batch-submissions/draft-claims/${doc.barcode}`, {
+            ...updated, sessionId,
+          }).catch(() => {/* non-fatal — localStorage is the fallback */})
+        })
+      }
       setSavedStatus('saved')
     }, 600)
     return () => { if (autoSaveRef.current) clearTimeout(autoSaveRef.current) }
@@ -2503,45 +2513,42 @@ export default function BatchUpload() {
     sessionInitialised.current = true
 
     if (!session || session.step === 'upload') return
-    const savedClaims = loadClaims(session.sessionId) as ExtractedClaim[]
-    if (savedClaims.length === 0) return
 
     setProvider(session.provider || '')
     setRestoredSession(true)
 
-    if (session.step === 'ai_extracting') {
-      // Mid-extraction restore: rebuild File objects from IndexedDB and re-run
-      // extraction from scratch. The partial claims would be stale anyway.
-      restoreAsFiles(session.sessionId).then(files => {
-        if (files.length === 0) {
-          // No cached files — fall back to review with whatever extracted
-          const partialClaims = savedClaims.map(c =>
-            c.status === 'extracting' ? { ...c, status: 'error' as const } : c
-          )
-          setClaims(partialClaims)
-          setStep('review')
-          return
-        }
-        // Files recovered — restart extraction automatically
-        setUploadedFiles(files)
-        autoExtractPending.current = true
-        setStep('upload')   // momentary reset so startAiExtraction can fire
-      }).catch(() => {
-        const partialClaims = savedClaims.map(c =>
-          c.status === 'extracting' ? { ...c, status: 'error' as const } : c
-        )
-        setClaims(partialClaims)
-        setStep('review')
-      })
-      return
-    }
+    // Try DB first (corrections persist across devices); fall back to localStorage
+    import('@/services/api').then(({ default: api }) => {
+      api.get(`/batch-submissions/draft-claims?sessionId=${session.sessionId}`)
+        .then(({ data }) => {
+          const dbClaims = Array.isArray(data) ? data : []
+          if (dbClaims.length > 0) {
+            // Merge DB corrections over localStorage baseline (DB wins on every field)
+            const local = loadClaims(session.sessionId) as ExtractedClaim[]
+            const localMap: Record<string, ExtractedClaim> = Object.fromEntries(local.map(c => [c.barcode, c]))
+            const merged = dbClaims.map((db: any) => ({ ...(localMap[db.barcode] ?? {}), ...db, fileUrl: localMap[db.barcode]?.fileUrl ?? '' }))
+            setClaims(merged as ExtractedClaim[])
+            setStep(session.step)
+            return
+          }
+          // No DB drafts — use localStorage
+          const savedClaims = loadClaims(session.sessionId) as ExtractedClaim[]
+          if (savedClaims.length > 0) {
+            setClaims(savedClaims)
+            setStep(session.step)
+          }
+        })
+        .catch(() => {
+          // API unavailable — fall back to localStorage silently
+          const savedClaims = loadClaims(session.sessionId) as ExtractedClaim[]
+          if (savedClaims.length > 0) {
+            setClaims(savedClaims)
+            setStep(session.step)
+          }
+        })
+    })
 
-    // For review / publishing / complete: restore state directly
-    setStep(session.step as Step)
-    setClaims(savedClaims)
-    setPublishProgress(session.publishProgress || 0)
-
-    // Rehydrate blob URLs from IndexedDB in the background
+    // Rehydrate blob URLs from IndexedDB in the background regardless of restore path
     restoreFiles(session.sessionId).then(cached => {
       if (cached.size === 0) return
       setClaims(prev => prev.map(c => {
@@ -2566,9 +2573,7 @@ export default function BatchUpload() {
   useEffect(() => {
     if (step === 'upload') return   // nothing worth saving yet
     const sid = session?.sessionId ?? `ses-${Date.now()}`
-    // Claims go to sessionStorage (large data — avoids localStorage QuotaExceededError)
     if (claims.length > 0) saveClaims(sid, claims as any)
-    // Only tiny metadata goes to localStorage
     upsertSession({
       step,
       provider,
@@ -2576,6 +2581,14 @@ export default function BatchUpload() {
       extractedCount: claims.filter(c => c.status !== 'extracting').length,
       publishProgress,
     })
+    // Bulk-upsert extracted claims to DB so corrections survive across devices.
+    // Only run when extraction is complete (no 'extracting' status remaining).
+    const allDone = claims.length > 0 && claims.every(c => c.status !== 'extracting')
+    if (allDone) {
+      import('@/services/api').then(({ default: api }) => {
+        api.post('/batch-submissions/draft-claims', { sessionId: sid, claims }).catch(() => {})
+      })
+    }
   }, [step, claims, provider, publishProgress])
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -4828,7 +4841,7 @@ export default function BatchUpload() {
                                         {claim.validationWarnings.length === 1 ? 'Warning · ' : `${claim.validationWarnings.length} warnings · `}
                                       </span>
                                       {claim.validationWarnings.map((w, wi) => (
-                                        <span key={wi} className="text-amber-700 dark:text-amber-300">{w}{wi < claim.validationWarnings.length - 1 ? ' · ' : ''}</span>
+                                        <span key={wi} className="text-amber-700 dark:text-amber-300">{w}{wi < (claim.validationWarnings?.length ?? 0) - 1 ? ' · ' : ''}</span>
                                       ))}
                                     </p>
                                   </div>
@@ -5118,6 +5131,7 @@ export default function BatchUpload() {
       {previewDoc && (
         <DocPreviewModal
           doc={previewDoc}
+          sessionId={session?.sessionId}
           onClose={() => setPreviewDoc(null)}
           onSave={(updated) => {
             setClaims(prev => prev.map(c => c.id === updated.id ? updated : c))

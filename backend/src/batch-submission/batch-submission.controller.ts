@@ -2,6 +2,9 @@ import {
   Controller,
   Post,
   Get,
+  Patch,
+  Delete,
+  Body,
   Param,
   Query,
   UseGuards,
@@ -208,5 +211,31 @@ export class BatchSubmissionController {
   @Get(':id')
   async getBatchById(@Param('id') id: string) {
     return this.batchSubmissionService.getBatchById(id);
+  }
+
+  // ── Draft claims — persist extracted data before publish ──────────────────
+
+  /** Bulk upsert draft claims for a session (called after AI extraction). */
+  @Post('draft-claims')
+  upsertDraftClaims(@Body() body: { sessionId: string; batchId?: string; claims: any[] }) {
+    return this.batchSubmissionService.upsertDraftClaims(body.sessionId, body.claims, body.batchId);
+  }
+
+  /** Update a single draft claim field by barcode (called on every DocPreviewModal auto-save). */
+  @Patch('draft-claims/:barcode')
+  updateDraftClaim(@Param('barcode') barcode: string, @Body() body: any) {
+    return this.batchSubmissionService.updateDraftClaim(barcode, body);
+  }
+
+  /** Load all draft claims for a session. */
+  @Get('draft-claims')
+  getDraftClaims(@Query('sessionId') sessionId: string) {
+    return this.batchSubmissionService.getDraftClaims(sessionId);
+  }
+
+  /** Delete draft claims after publishing (cleanup). */
+  @Delete('draft-claims')
+  deleteDraftClaims(@Query('sessionId') sessionId: string) {
+    return this.batchSubmissionService.deleteDraftClaims(sessionId);
   }
 }
