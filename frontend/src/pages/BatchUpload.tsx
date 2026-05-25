@@ -3463,7 +3463,10 @@ export default function BatchUpload() {
     }
 
     setStep('complete')
-    if (session?.sessionId) clearCachedFiles(session.sessionId).catch(() => {})
+    if (session?.sessionId) {
+      clearCachedFiles(session.sessionId).catch(() => {})
+      api.delete(`/batch-submissions/draft-claims?sessionId=${session.sessionId}`).catch(() => {})
+    }
     clearSession()
   }
 
@@ -3494,7 +3497,10 @@ export default function BatchUpload() {
   }
 
   const resetAll = () => {
-    if (session?.sessionId) clearCachedFiles(session.sessionId).catch(() => {})
+    if (session?.sessionId) {
+      clearCachedFiles(session.sessionId).catch(() => {})
+      api.delete(`/batch-submissions/draft-claims?sessionId=${session.sessionId}`).catch(() => {})
+    }
     setUploadedFiles([])
     setClaims([])
     setStep('upload')

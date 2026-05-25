@@ -1303,6 +1303,49 @@ Return an empty array if everything looks correct. Only flag genuine issues, not
     return result;
   }
 
+  /**
+   * Return confirmed manual zone hits for a specific provider name, keyed by fieldName.
+   * Only fields marked wasCorrect=true (manual OCR selections) and not variable per-claim
+   * (memberNumber, patientName, etc. are excluded since they differ every submission).
+   * Used to enrich AI extraction output when a field is blank or low-confidence.
+   */
+  async getConfirmedProviderHints(
+    providerName: string,
+  ): Promise<Record<string, string>> {
+    if (!providerName) return {};
+
+    // Normalize to a prefix search — handles "Nairobi Hospital" vs "Nairobi Hospital Ltd"
+    const likeTerm = `% [${providerName.trim()}]`;
+
+    const hits = await this.prisma.ocrZoneHit.findMany({
+      where: {
+        wasCorrect: true,
+        extractedValue: { not: null },
+        // fieldLabel stored as "Label [ProviderName]" by recordManualZoneHit
+        fieldLabel: { endsWith: `[${providerName.trim()}]` },
+        // Exclude per-claim fields that won't generalise across submissions
+        fieldName: { notIn: ['patientName', 'patientId', 'memberNumber', 'invoiceNumber', 'invoiceAmount', 'invoiceDate', 'serviceDate'] },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      select: { fieldName: true, extractedValue: true },
+    });
+
+    // Most-frequent value per field (majority vote over recent confirmed hits)
+    const freq: Record<string, Record<string, number>> = {};
+    for (const h of hits) {
+      if (!h.extractedValue) continue;
+      freq[h.fieldName] = freq[h.fieldName] || {};
+      freq[h.fieldName][h.extractedValue] = (freq[h.fieldName][h.extractedValue] || 0) + 1;
+    }
+
+    const result: Record<string, string> = {};
+    for (const [field, counts] of Object.entries(freq)) {
+      result[field] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+    }
+    return result;
+  }
+
   // ── Confusion matrix & retraining wiring ─────────────────────────────────────
 
   /** Fetch reviewed UnknownDocuments that have a guessedType label. */

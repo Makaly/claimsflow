@@ -384,6 +384,30 @@ export class OcrService {
       this.logger.warn(`Classifier enrichment skipped: ${err?.message}`);
     }
 
+    // Apply confirmed manual zone-hit knowledge for this provider to fill
+    // any fields that AI left blank (diagnosis, procedureCode, treatment, providerName).
+    // Per-claim variable fields (amount, dates, patient) are intentionally excluded.
+    try {
+      const knownProviders = [...new Set(result.invoices.map(inv => inv.providerName).filter(Boolean))];
+      for (const provName of knownProviders) {
+        const hints = await this.documentClassifier.getConfirmedProviderHints(provName);
+        if (Object.keys(hints).length === 0) continue;
+        result.invoices = result.invoices.map(inv => {
+          if (inv.providerName !== provName) return inv;
+          return {
+            ...inv,
+            diagnosis:     (!inv.diagnosis     && hints['diagnosis'])     ? hints['diagnosis']     : inv.diagnosis,
+            diagnosisCode: (!inv.diagnosisCode && hints['diagnosisCode']) ? hints['diagnosisCode'] : inv.diagnosisCode,
+            procedureCode: (!inv.procedureCode && hints['procedureCode']) ? hints['procedureCode'] : inv.procedureCode,
+            treatment:     (!inv.treatment     && hints['treatment'])     ? hints['treatment']     : inv.treatment,
+          };
+        });
+        this.logger.log(`Provider hints applied for "${provName}": ${Object.keys(hints).join(', ')}`);
+      }
+    } catch (err: any) {
+      this.logger.warn(`Provider hint enrichment skipped: ${err?.message}`);
+    }
+
     // Structural post-validation: catches arithmetic, date and completeness
     // issues that confidence scores miss. Flagged invoices still pass through
     // but the warnings are surfaced for human review.
