@@ -15,10 +15,22 @@
 --
 -- This migration implements steps 1–3 only. Steps 4–5 are manual runbook tasks.
 
--- Step 1: Create the partitioned parent table
+-- Step 1: Create the partitioned parent table.
+-- INCLUDING ALL cannot be used here because PostgreSQL requires every unique
+-- constraint (including PRIMARY KEY) on a partitioned table to include all
+-- partition key columns. We copy only DEFAULTS and add a composite PK manually.
 CREATE TABLE IF NOT EXISTS activity_logs_partitioned (
-  LIKE activity_logs INCLUDING ALL
+  LIKE activity_logs INCLUDING DEFAULTS INCLUDING GENERATED
 ) PARTITION BY RANGE ("createdAt");
+
+-- Composite PK: id identifies the row; createdAt satisfies the partition key requirement.
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'activity_logs_partitioned_pkey'
+  ) THEN
+    ALTER TABLE activity_logs_partitioned ADD PRIMARY KEY ("id", "createdAt");
+  END IF;
+END $$;
 
 -- Step 2: Create initial partitions (current month + 2 future months)
 DO $$
