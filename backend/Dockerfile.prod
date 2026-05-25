@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:26-alpine AS builder
 
 WORKDIR /app
 
@@ -15,7 +15,7 @@ RUN npx tsc --skipLibCheck --esModuleInterop --allowSyntheticDefaultImports \
     --target ES2021 --module commonjs --outDir dist/prisma prisma/seed.ts 2>/dev/null || true
 
 # ---- runtime ----
-FROM node:20-alpine
+FROM node:26-alpine
 
 WORKDIR /app
 
