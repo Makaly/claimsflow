@@ -626,8 +626,10 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId }: {
       // Persist to DB so corrections survive across devices and browser clears
       if (sessionId && doc.barcode) {
         import('@/services/api').then(({ default: api }) => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { fileBytes: _fb, ...updatedWithoutBytes } = updated
           api.patch(`/batch-submissions/draft-claims/${doc.barcode}`, {
-            ...updated, sessionId,
+            ...updatedWithoutBytes, sessionId,
           }).catch(() => {/* non-fatal — localStorage is the fallback */})
         })
       }
@@ -2586,7 +2588,11 @@ export default function BatchUpload() {
     const allDone = claims.length > 0 && claims.every(c => c.status !== 'extracting')
     if (allDone) {
       import('@/services/api').then(({ default: api }) => {
-        api.post('/batch-submissions/draft-claims', { sessionId: sid, claims }).catch(() => {})
+        api.post('/batch-submissions/draft-claims', {
+          sessionId: sid,
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          claims: claims.map(({ fileBytes, ...c }) => c),
+        }).catch(() => {})
       })
     }
   }, [step, claims, provider, publishProgress])
