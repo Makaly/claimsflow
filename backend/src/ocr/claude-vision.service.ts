@@ -38,7 +38,7 @@ HANDWRITING: Many fields on claim/membership forms are filled in by hand. Read a
 
 EXTRACTION RULES:
 1. Copy values EXACTLY as they appear — no paraphrasing, no guessing, no hallucinating
-2. Patient name: search the ENTIRE document — check header, "Patient Name:", "Member:", "Insured:", "Name of Patient:", "Patient's Name:", claim-form fields, and any authorization/signature block. Handwritten names are valid.
+2. Patient name: search the ENTIRE document — check ALL pages including discharge summaries, authorization letters, and lab reports. Look for "Patient:", "Patient Name:", "Member:", "Insured:", "Name of Patient:", "MEMBER NAME:", claim-form fields, and any authorization/signature block. Handwritten names are valid. IMPORTANT: If the Name field on the invoice page appears blacked out or redacted, do NOT read the Patient Address (city like "Nairobi", "Mountain View") as the patient name — instead look for the name on OTHER pages of the same document (discharge summary has "Patient: SURNAME, FIRSTNAME", AAR letters have "MEMBER NAME:"). If you cannot find the name on any page, return empty string.
 3. Patient ID (National ID / patient registration number): search for labels "National ID:", "National ID No.:", "ID No.:", "ID Number:", "Patient ID:", "Pat. ID:", "Reg. No.:", "Registration No.:", "File No.:", "Patient No.", "Passport No." — on Aga Khan forms look near "Patient Address" block or top-right header area. Return ONLY the number, not the label. If the document only shows an AK-number or policy number, leave patientId empty — do NOT duplicate the membership number here.
 4. If a field is genuinely absent, return empty string or 0 — NEVER invent or approximate a value
 5. Invoice amount: use the TOTAL / GRAND TOTAL / AMOUNT DUE line, not line-item subtotals
@@ -67,23 +67,35 @@ AGA KHAN INPATIENT DISCHARGE BILLS — common structural traps (UH-prefix invoic
      line of free clinical text.
 
   C. AMOUNT on inpatient bills is NOT the small "Total:", "Amount Due:",
-     or "Patient Co-pay:" figure (often KES 0–100 — that's the patient
-     contribution after insurance, not the bill total). Use, in priority
-     order:
+     "Your Amount Due:", or "Patient Co-pay:" figure (often KES 0–100 or
+     even 0.02 — that's what the patient pays after insurance covers the
+     rest). Use, in priority order:
         1. "Sponsor Amount Payable" / "Net Amount Payable to Hospital" /
            "Sponsor Settlement" / "Net Payable to Hospital" — these are
            the actual amounts the insurer pays.
         2. "Sponsor Coverage" section — figure that follows the corporate
            code / employer name (NOT the annual-limit figure earlier in
            the same section).
-        3. "Grand Total" / "Bill Total" — the full hospital bill before
-           sponsor/patient split.
-     Never return a value below KES 100 on an inpatient document — that is
-     definitionally a sub-total or co-pay, not the invoice total.
+        3. "Total Charges:" / "Grand Total" / "Bill Total" — the full
+           hospital bill before sponsor/patient split.
+     "Your Amount Due: 0.00" or "Your Amount Due: 0.02" means the patient
+     owes nothing — the sponsor covers everything. NEVER return this as
+     the invoice amount. Never return a value below KES 100 on an inpatient
+     document — that is definitionally a co-pay, not the invoice total.
 
   D. MULTI-PAGE: these bills are typically 9–13 pages. The grand total
-     usually sits on the LAST one or two pages, NOT page 1. Read the full
-     document before deciding the amount.`;
+     always sits on the LAST page, NOT page 1. Always read to the final
+     page before deciding the amount — the summary table with
+     "Total Charges:", "NHIF Rebate:", "Sponsor Coverage:", "Your Amount
+     Due:" is ONLY on the last page.
+
+  E. PATIENT NAME on Aga Khan inpatient invoices is often REDACTED on the
+     invoice page (black box over the Name field). If you see a redacted
+     name on the invoice, look for it on OTHER pages: the Discharge Summary
+     has "Patient: SURNAME, FIRSTNAME" and authorization letters have
+     "MEMBER NAME: MR/MRS FIRSTNAME SURNAME". Use whichever page has the
+     readable name. NEVER read the Patient Address (e.g. "NAIROBI",
+     "MOUNTAIN VIEW") as the patient name.`;
 
 const EXTRACT_TOOL: Anthropic.Tool = {
   name: 'record_invoice_fields',
@@ -245,10 +257,10 @@ RULE 4 — Supporting documents attach to the NEAREST preceding invoice:
 ━━━ FIELD EXTRACTION ━━━
 
 For each claim packet:
-• invoiceAmount: use Sponsor Coverage line (inpatient) or Grand Total / Balance Due (outpatient) — NOT the patient co-pay or "Your Amount Due: 0.00"
-• diagnosis: prefer MCF "Diagnosis:" field (handwritten) → discharge summary "Discharge Diagnosis" → invoice "Diagnosis" section
-• patientName: check MCF "Name:" field (may be handwritten) and invoice header
-• membershipNumber: MCF "Membership No." field, invoice "HMN NO." or "AK Number", auth letter "MEMBER NO:"
+• invoiceAmount: For inpatient (Aga Khan UH-prefix bills): use "Sponsor Coverage" amount on the LAST page summary — NOT "Your Amount Due" (that is the patient co-pay, often 0.00 or under KES 100). For outpatient: use Grand Total / Balance Due. NEVER return a value under KES 100 for any hospital inpatient bill.
+• diagnosis: prefer MCF "Diagnosis:" field (handwritten) → discharge summary "Discharge Diagnosis:" section → invoice "Diagnosis" section. The Discharge Diagnosis section label "Discharge Diagnosis" is a header — use the clinical text BELOW it (e.g. "BPH", "Closed left femoral fracture"), not the label itself.
+• patientName: If the Name field on the invoice is REDACTED (black box), look on OTHER pages: discharge summary has "Patient: SURNAME, FIRSTNAME", auth letter has "MEMBER NAME: MR/MRS FIRSTNAME SURNAME". NEVER use the Patient Address (e.g. "Nairobi", "Mountain View") as the patient name.
+• membershipNumber: MCF "Membership No." field, invoice "HMN NO." or "AK Number", auth letter "MEMBER NO:" (e.g. AK18863700 → strip spaces → AK18863700)
 • invoiceNumber: from invoice page only (e.g. Nyr/13277, ZMC2024/024329, UH283003051_3)
 • lineItems: extract EVERY billed row from the invoice table — description, quantity, unit price, and total. Leave empty if no billing table is visible.
 

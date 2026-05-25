@@ -386,30 +386,6 @@ export class OcrService {
       this.logger.warn(`Classifier enrichment skipped: ${err?.message}`);
     }
 
-    // Apply confirmed manual zone-hit knowledge for this provider to fill
-    // any fields that AI left blank (diagnosis, procedureCode, treatment, providerName).
-    // Per-claim variable fields (amount, dates, patient) are intentionally excluded.
-    try {
-      const knownProviders = [...new Set(result.invoices.map(inv => inv.providerName).filter(Boolean))];
-      for (const provName of knownProviders) {
-        const hints = await this.documentClassifier.getConfirmedProviderHints(provName);
-        if (Object.keys(hints).length === 0) continue;
-        result.invoices = result.invoices.map(inv => {
-          if (inv.providerName !== provName) return inv;
-          return {
-            ...inv,
-            diagnosis:     (!inv.diagnosis     && hints['diagnosis'])     ? hints['diagnosis']     : inv.diagnosis,
-            diagnosisCode: (!inv.diagnosisCode && hints['diagnosisCode']) ? hints['diagnosisCode'] : inv.diagnosisCode,
-            procedureCode: (!inv.procedureCode && hints['procedureCode']) ? hints['procedureCode'] : inv.procedureCode,
-            treatment:     (!inv.treatment     && hints['treatment'])     ? hints['treatment']     : inv.treatment,
-          };
-        });
-        this.logger.log(`Provider hints applied for "${provName}": ${Object.keys(hints).join(', ')}`);
-      }
-    } catch (err: any) {
-      this.logger.warn(`Provider hint enrichment skipped: ${err?.message}`);
-    }
-
     // Re-upload enrichment: for documents previously published in the system,
     // pull known-correct field values so repeated uploads of the same invoice
     // get the right data without requiring manual correction again.
@@ -488,8 +464,16 @@ export class OcrService {
 
     // 3) Critical fields. Patient name is the worst silent-fail mode — without
     //    it, we have nothing to bill against. Provider next.
-    if (!inv.patientName || /^Unknown/i.test(inv.patientName)) {
-      warnings.push('Patient name missing or marked Unknown — manual review required');
+    // Also catch city/address names mis-read as patient names (Aga Khan bills
+    // where the Name field is visually redacted and the model reads "NAIROBI"
+    // from the Patient Address line instead).
+    const KENYAN_CITIES = /^(Nairobi|Mombasa|Kisumu|Nakuru|Eldoret|Thika|Nyeri|Machakos|Garissa|Malindi|Lamu|Nanyuki|Kitale|Kakamega|Meru|Embu|Bungoma|Voi)$/i;
+    if (!inv.patientName || /^Unknown/i.test(inv.patientName) || KENYAN_CITIES.test(inv.patientName.trim())) {
+      if (KENYAN_CITIES.test((inv.patientName || '').trim())) {
+        // City mis-read — clear so UI shows it as missing rather than a wrong value
+        (inv as any).patientName = '';
+      }
+      warnings.push('Patient name missing or redacted — manual entry required');
     }
     if (!inv.providerName || /^Unknown/i.test(inv.providerName)) {
       warnings.push('Provider name missing or marked Unknown');
