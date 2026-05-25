@@ -404,9 +404,14 @@ export class OcrService {
         this.logger.log(`Re-upload: enriched invoice ${inv.invoiceNumber} from previously published claim`);
         const pubServiceDate = published.dateOfService ? published.dateOfService.toISOString().split('T')[0] : undefined;
         const pubInvoiceDate = published.invoiceDate ? published.invoiceDate.toISOString().split('T')[0] : undefined;
+        // Only carry over a published name if it looks like a real person's name — reject
+        // instruction text accidentally stored as a name ("ensure they are rectified…", etc.)
+        const JUNK_NAME_WORDS = /\b(ensure|rectified|before|they|are|disc|please|warning|missing|required|enter|manual|note|patient|name)\b/i;
+        const looksLikeName = (n?: string | null) =>
+          !!n && n.length >= 4 && /[A-Z]/.test(n) && !JUNK_NAME_WORDS.test(n) && !/^\d/.test(n);
         return {
           ...inv,
-          patientName:      (!inv.patientName || /^Unknown/i.test(inv.patientName)) && published.patientName ? published.patientName : inv.patientName,
+          patientName:      (!inv.patientName || /^Unknown/i.test(inv.patientName)) && looksLikeName(published.patientName) ? published.patientName! : inv.patientName,
           patientId:        (!inv.patientId && published.patientId) ? published.patientId : inv.patientId,
           membershipNumber: (!inv.membershipNumber && published.memberNumber) ? published.memberNumber : inv.membershipNumber,
           // Override amount if extraction looks like a co-pay but published record has the real amount
@@ -611,15 +616,40 @@ export class OcrService {
         }
       }
 
-      // If diagnosis/treatment missing from invoice, look in supporting docs
+      // If diagnosis/treatment missing from invoice, search supporting docs.
+      // Priority 1: discharge summaries — most reliable source of diagnosis text and patient name.
+      // Prescriptions and lab result pages are excluded at all levels because medication
+      // codes (e.g. B30, H28) look identical to ICD-10 codes and cause wrong diagnoses.
       if (!parsed.diagnosis) {
-        const supportText = group.pages
-          .filter(p => p.category !== 'invoice')
+        const dsText = group.pages
+          .filter(p => p.category === 'discharge_summary')
           .map(p => pages[p.pageNumber - 1]).join('\n');
-        const supportParsed = this.parseInvoiceText(supportText);
-        if (supportParsed.diagnosis) parsed.diagnosis = supportParsed.diagnosis;
-        if (supportParsed.treatment) parsed.treatment = supportParsed.treatment;
-        if (supportParsed.diagnosisCode && !parsed.diagnosisCode) parsed.diagnosisCode = supportParsed.diagnosisCode;
+        if (dsText) {
+          // Aga Khan discharge summary format: "Patient: SURNAME, FIRSTNAME"
+          const patNameMatch = dsText.match(/(?:^|\n)\s*Patient\s*[:\-]\s*([A-Z][A-Z ,]+?)(?:\n|MRN|Reg|Date|DOB|IP\s*No|$)/im);
+          if (patNameMatch?.[1]) {
+            const rawName = patNameMatch[1].trim().replace(/\s+/g, ' ');
+            if (rawName.length >= 4 && /[A-Z]{2}/.test(rawName) && (!parsed.patientName || /^Unknown/i.test(parsed.patientName))) {
+              parsed.patientName = rawName;
+            }
+          }
+          const dsParsed = this.parseInvoiceText(dsText);
+          if (dsParsed.diagnosis) parsed.diagnosis = dsParsed.diagnosis;
+          if (dsParsed.treatment) parsed.treatment = dsParsed.treatment;
+          if (dsParsed.diagnosisCode && !parsed.diagnosisCode) parsed.diagnosisCode = dsParsed.diagnosisCode;
+        }
+        // Priority 2: all other non-invoice, non-prescription, non-lab pages
+        if (!parsed.diagnosis) {
+          const supportText = group.pages
+            .filter(p => p.category !== 'invoice' && p.category !== 'prescription' && p.category !== 'lab_result')
+            .map(p => pages[p.pageNumber - 1]).join('\n');
+          if (supportText) {
+            const supportParsed = this.parseInvoiceText(supportText);
+            if (supportParsed.diagnosis) parsed.diagnosis = supportParsed.diagnosis;
+            if (supportParsed.treatment) parsed.treatment = supportParsed.treatment;
+            if (supportParsed.diagnosisCode && !parsed.diagnosisCode) parsed.diagnosisCode = supportParsed.diagnosisCode;
+          }
+        }
       }
 
       const pageNums = group.pages.map(p => p.pageNumber);
@@ -1187,12 +1217,17 @@ export class OcrService {
       }
     }
 
-    // ICD CODE
-    const icdM = t.match(/([A-TV-Z]\d{2}(?:\.\d{1,4})?)/g);
-    if (icdM) {
-      // Filter out codes that are clearly not ICD (like C20 from barcode C20240...)
-      const valid = icdM.filter(c => /^[A-TV-Z]\d{2}/.test(c) && !t.includes('C' + c.substring(1) + '0'));
-      if (valid.length > 0) result.diagnosisCode = valid[0];
+    // ICD CODE — require an explicit "ICD-10:", "Diagnosis Code:", or "Dx:" label.
+    // The standalone /[A-Z]\d{2}/ pattern is intentionally NOT used here because it
+    // matches medication lot numbers, room numbers, and barcode fragments on
+    // prescription/lab pages, producing completely wrong diagnoses (e.g. B30 →
+    // "Viral conjunctivitis" for a BPH patient, H28 → "Cataract" for a fracture).
+    const icdLabelMatches = t.match(/(?:ICD[\-\s]?10|Diagnosis\s*Code|Dx)\s*[:\-]?\s*([A-HJ-NP-Z]\d{2}(?:\.\d{1,4})?)/gi);
+    if (icdLabelMatches) {
+      const codes = icdLabelMatches
+        .map(m => m.match(/([A-HJ-NP-Z]\d{2}(?:\.\d{1,4})?)/)?.[1])
+        .filter((c): c is string => !!c);
+      if (codes.length > 0) result.diagnosisCode = codes[0];
     }
 
     // SERVICE DATE
@@ -1245,13 +1280,13 @@ export class OcrService {
     const maxCritical = critical.reduce((s, f) => s + f.weight, 0);
     result.confidence = Math.min(0.99, (criticalScore / maxCritical) * 0.90 + (bonusScore / 100) * 0.10);
 
-    // Use ICD-10 from medical codes if no diagnosis code found yet
-    const finalDiagnosisCode = result.diagnosisCode || medicalCodes.icd10Codes[0] || '';
-    // Prefer CPT codes from dedicated extraction; fall back to generic procedureCode
-    const finalProcedureCode = medicalCodes.cptCodes[0] || (finalDiagnosisCode ? '99214' : '');
+    // Only use the explicitly-labelled diagnosisCode found above.
+    // Do NOT fall through to medicalCodes.icd10Codes (standalone pattern) — it matches
+    // medication codes and barcode fragments, causing wrong diagnoses on Tesseract path.
+    const finalDiagnosisCode = result.diagnosisCode || '';
+    const finalProcedureCode = medicalCodes.cptCodes[0] || '';
 
-    // If no free-text diagnosis was extracted but we have an ICD-10 code, expand it to a
-    // human-readable label (e.g. E39 → "Urinary disorder") so the claim card is not blank.
+    // Expand ICD code to human-readable text only when we found it via an explicit label.
     const finalDiagnosis = result.diagnosis || (finalDiagnosisCode ? icd10Label(finalDiagnosisCode) : '');
 
     return {
