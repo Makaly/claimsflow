@@ -397,7 +397,6 @@ export class OcrService {
           select: {
             patientName: true, patientId: true, memberNumber: true,
             invoiceAmount: true, invoiceDate: true, dateOfService: true,
-            diagnosis: true, treatment: true, procedureCodes: true,
           },
           orderBy: { submittedAt: 'desc' },
         });
@@ -414,9 +413,9 @@ export class OcrService {
           invoiceAmount:    (inv.invoiceAmount < 100 && published.invoiceAmount && published.invoiceAmount >= 100) ? Number(published.invoiceAmount) : inv.invoiceAmount,
           invoiceDate:      (!inv.invoiceDate && pubInvoiceDate) ? pubInvoiceDate : inv.invoiceDate,
           serviceDate:      (!inv.serviceDate && pubServiceDate) ? pubServiceDate : inv.serviceDate,
-          diagnosis:        (!inv.diagnosis && published.diagnosis) ? published.diagnosis : inv.diagnosis,
-          treatment:        (!inv.treatment && published.treatment) ? published.treatment : inv.treatment,
-          procedureCode:    (!inv.procedureCode && published.procedureCodes?.length) ? published.procedureCodes[0] : inv.procedureCode,
+          // NOTE: diagnosis, treatment, procedureCodes are intentionally NOT copied from
+          // published claims — those fields are patient-specific and prior extractions
+          // may have been wrong, causing cross-patient contamination if re-applied.
         };
       }));
     } catch (err: any) {
