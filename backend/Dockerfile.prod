@@ -29,30 +29,26 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
 COPY prisma ./prisma
+COPY scripts ./scripts
 
 EXPOSE 4000
 
 # Boot chain — every step echoes a marker so a deploy-log break in the middle
 # tells us exactly which step failed.
 #
-#   1. Apply pending migrations
+#   1. Run scripts/migrate.js — validates all migrations, auto-resolves any
+#      that failed mid-run (Prisma P3009), then applies all pending ones.
 #   2. Optionally seed demo users + reference data (gated by RUN_SEED=true).
 #      The seed is idempotent (all `upsert`), but it shouldn't run on every
 #      restart in prod: it re-applies demo passwords and writes to the audit
 #      trail on each boot. Set RUN_SEED=true once for a fresh DB, then unset.
-#   3. Hand off to the API server
-#
-# If a future migration fails mid-deploy and needs explicit recovery,
-# do it interactively via `render shell`:
-#     npx prisma migrate resolve --rolled-back <migration_name>
-# Do not bake one-off recovery commands into this boot chain — they outlive
-# their incident and become silent debt (see add_claim_branch).
+#   3. Hand off to the API server.
 #
 # `exec` on the last line replaces the shell process with node, so signals
 # from the orchestrator reach the app cleanly (no zombie wrapper).
 CMD set -e \
-    && echo "[boot] step 1/3 prisma migrate deploy" \
-    && npx prisma migrate deploy \
+    && echo "[boot] step 1/3 migrate (validate + auto-recover + deploy)" \
+    && node scripts/migrate.js \
     && echo "[boot] step 2/3 seed reference data (RUN_SEED=$RUN_SEED)" \
     && if [ "$RUN_SEED" = "true" ]; then node dist/prisma/seed.js; else echo "[boot] step 2/3 skipped (set RUN_SEED=true to enable)"; fi \
     && echo "[boot] step 3/3 starting API on PORT=$PORT" \
