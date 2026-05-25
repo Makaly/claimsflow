@@ -1168,30 +1168,54 @@ function DocPreviewModal({ doc, onClose, onSave }: {
       <div className="flex flex-1 overflow-hidden">
 
         {/* Left: thumbnail strip — hidden on mobile */}
-        {isPdf && numPages > 0 && (
-          <div className="hidden md:block w-[96px] bg-gray-100/90 dark:bg-gray-900/80 border-r border-gray-200 dark:border-gray-800 overflow-y-auto shrink-0 py-3 space-y-2.5">
-            {Array.from({ length: numPages }).map((_, i) => (
-              <button key={i} onClick={() => setPageNum(i + 1)}
-                className="w-full flex flex-col items-center gap-1 px-2 group">
-                <div className={`w-full rounded-lg overflow-hidden ring-2 transition-all duration-150 ${
-                  pageNum === i + 1
-                    ? 'ring-violet-500 shadow-md shadow-violet-500/25'
-                    : 'ring-transparent group-hover:ring-gray-300 dark:group-hover:ring-gray-600'
-                }`}>
-                  {thumbs[i]
-                    ? <img src={thumbs[i]} alt={`p${i+1}`} className="w-full block" />
-                    : <div className="aspect-[3/4] bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                        <Loader2 className="h-3 w-3 text-gray-500 dark:text-gray-600 animate-spin" />
-                      </div>
-                  }
-                </div>
-                <span className={`text-[9px] tabular-nums font-medium transition-colors ${
-                  pageNum === i + 1 ? 'text-violet-400' : 'text-gray-500 dark:text-gray-600 group-hover:text-gray-600 dark:group-hover:text-gray-400'
-                }`}>{i + 1}</span>
-              </button>
-            ))}
-          </div>
-        )}
+        {isPdf && numPages > 0 && (() => {
+          const thumbCatColors: Record<string, string> = {
+            invoice:          'bg-blue-500/80 text-white',
+            claim_form:       'bg-purple-500/80 text-white',
+            prescription:     'bg-green-500/80 text-white',
+            lab_result:       'bg-orange-500/80 text-white',
+            medical_report:   'bg-teal-500/80 text-white',
+            discharge_summary:'bg-cyan-500/80 text-white',
+            referral:         'bg-indigo-500/80 text-white',
+            pre_auth:         'bg-amber-500/80 text-white',
+          }
+          // Build a quick lookup: pageNumber → documentPage entry
+          const pageMap = Object.fromEntries((doc.documentPages ?? []).map(p => [p.pageNumber, p]))
+          return (
+            <div className="hidden md:block w-[96px] bg-gray-100/90 dark:bg-gray-900/80 border-r border-gray-200 dark:border-gray-800 overflow-y-auto shrink-0 py-3 space-y-2.5">
+              {Array.from({ length: numPages }).map((_, i) => {
+                const pg = pageMap[i + 1]
+                return (
+                  <button key={i} onClick={() => setPageNum(i + 1)}
+                    className="w-full flex flex-col items-center gap-1 px-2 group">
+                    <div className={`relative w-full rounded-lg overflow-hidden ring-2 transition-all duration-150 ${
+                      pageNum === i + 1
+                        ? 'ring-violet-500 shadow-md shadow-violet-500/25'
+                        : 'ring-transparent group-hover:ring-gray-300 dark:group-hover:ring-gray-600'
+                    }`}>
+                      {thumbs[i]
+                        ? <img src={thumbs[i]} alt={`p${i+1}`} className="w-full block" />
+                        : <div className="aspect-[3/4] bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                            <Loader2 className="h-3 w-3 text-gray-500 dark:text-gray-600 animate-spin" />
+                          </div>
+                      }
+                      {pg && (
+                        <span className={`absolute bottom-0 inset-x-0 text-center text-[7px] font-semibold leading-tight py-0.5 px-1 truncate ${
+                          thumbCatColors[pg.category] ?? 'bg-gray-500/80 text-white'
+                        }`}>
+                          {pg.categoryLabel}
+                        </span>
+                      )}
+                    </div>
+                    <span className={`text-[9px] tabular-nums font-medium transition-colors ${
+                      pageNum === i + 1 ? 'text-violet-400' : 'text-gray-500 dark:text-gray-600 group-hover:text-gray-600 dark:group-hover:text-gray-400'
+                    }`}>{i + 1}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )
+        })()}
 
         {/* Center: document canvas — hidden on mobile when data tab active */}
         <div className={`flex-1 flex-col overflow-hidden bg-gray-200 dark:bg-[#1a1b1e] ${mobileTab === 'data' ? 'hidden md:flex' : 'flex'}`}>
