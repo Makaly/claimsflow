@@ -1008,8 +1008,18 @@ function DocPreviewModal({ doc, onClose, onSave }: {
     }
     setEdit(prev => ({ ...prev, [field]: value }))
     setOcrZoneResult(null)
-    // Redraw to remove the zone highlight
     redrawAnnotations()
+    // Record this manual hit in the analytics knowledge base (fire-and-forget).
+    import('@/services/api').then(({ default: api }) => {
+      api.post('/document-classifiers/zone-hits', {
+        fieldName:      field,
+        extractedValue: value,
+        confidence:     0.9,
+        engine:         'manual',
+        claimId:        doc.dbId   ?? undefined,
+        documentId:     doc.fileUrl ? undefined : undefined,
+      }).catch(() => {/* non-fatal */})
+    })
   }
 
   const endDraw = (p: { x: number; y: number }) => {

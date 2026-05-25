@@ -1017,6 +1017,97 @@ Return an empty array if everything looks correct. Only flag genuine issues, not
     return total > 0 ? parseFloat((successes / total).toFixed(4)) : 0;
   }
 
+  // Standard fields that appear in the manual OCR zone picker.
+  private static readonly MANUAL_ZONES = [
+    { fieldName: 'patientName',   fieldLabel: 'Patient Name' },
+    { fieldName: 'patientId',     fieldLabel: 'Patient ID' },
+    { fieldName: 'memberNumber',  fieldLabel: 'Member Number' },
+    { fieldName: 'providerName',  fieldLabel: 'Provider' },
+    { fieldName: 'invoiceNumber', fieldLabel: 'Invoice Number' },
+    { fieldName: 'invoiceDate',   fieldLabel: 'Invoice Date' },
+    { fieldName: 'invoiceAmount', fieldLabel: 'Amount' },
+    { fieldName: 'serviceDate',   fieldLabel: 'Service Date' },
+    { fieldName: 'diagnosis',     fieldLabel: 'Diagnosis' },
+    { fieldName: 'diagnosisCode', fieldLabel: 'Diagnosis Code' },
+    { fieldName: 'procedureCode', fieldLabel: 'Procedure Code' },
+    { fieldName: 'treatment',     fieldLabel: 'Treatment' },
+  ] as const;
+
+  /**
+   * Lazily upserts the __MANUAL__ system template and its standard zones,
+   * returning the zone id for the given fieldName. Manual OCR zone hits are
+   * recorded against this template so the analytics dashboard has data even
+   * when no document-classifier template matched the document.
+   */
+  private async getManualZoneId(fieldName: string): Promise<{ templateId: string; zoneId: string; fieldLabel: string } | null> {
+    const entry = DocumentClassifierService.MANUAL_ZONES.find(z => z.fieldName === fieldName);
+    if (!entry) return null;
+
+    const template = await this.prisma.ocrTemplate.upsert({
+      where:  { name: '__MANUAL__' },
+      create: {
+        name: '__MANUAL__',
+        description: 'Auto-created catch-all for manual OCR zone selections',
+        documentType: 'manual',
+        fieldDefinitions: {},
+        isActive: true,
+      },
+      update: {},
+      select: { id: true },
+    });
+
+    let zone = await this.prisma.documentZone.findFirst({
+      where:  { templateId: template.id, fieldName },
+      select: { id: true },
+    });
+    if (!zone) {
+      zone = await this.prisma.documentZone.create({
+        data: {
+          templateId:   template.id,
+          fieldName:    entry.fieldName,
+          fieldLabel:   entry.fieldLabel,
+          claimField:   entry.fieldName,
+          xPercent: 0, yPercent: 0, widthPercent: 0, heightPercent: 0,
+        },
+        select: { id: true },
+      });
+    }
+
+    return { templateId: template.id, zoneId: zone.id, fieldLabel: entry.fieldLabel };
+  }
+
+  /**
+   * Records a manual OCR zone hit (user drew a box and applied the result to a field).
+   * Marks wasCorrect=true because the user explicitly confirmed the value by applying it.
+   */
+  async recordManualZoneHit(data: {
+    fieldName: string;
+    extractedValue: string;
+    confidence?: number;
+    engine?: string;
+    claimId?: string;
+    documentId?: string;
+  }) {
+    const ids = await this.getManualZoneId(data.fieldName);
+    if (!ids) return null;
+
+    return this.prisma.ocrZoneHit.create({
+      data: {
+        zoneId:         ids.zoneId,
+        templateId:     ids.templateId,
+        fieldName:      data.fieldName,
+        fieldLabel:     ids.fieldLabel,
+        extractedValue: data.extractedValue,
+        confidence:     data.confidence ?? 0.9,
+        engine:         data.engine ?? 'manual',
+        wasCorrect:     true,
+        claimId:        data.claimId    ?? null,
+        documentId:     data.documentId ?? null,
+      },
+      select: { id: true },
+    });
+  }
+
   /** Record user correction on an extracted zone hit — closes the feedback loop. */
   async recordZoneCorrection(hitId: string, correctedValue: string, userId: string) {
     return this.prisma.ocrZoneHit.update({

@@ -273,6 +273,13 @@ export class DocumentClassifierController {
     return this.service.getBestKnownValues(templateId);
   }
 
+  @Post('zone-hits')
+  recordManualZoneHit(
+    @Body() body: { fieldName: string; extractedValue: string; confidence?: number; engine?: string; claimId?: string; documentId?: string },
+  ) {
+    return this.service.recordManualZoneHit(body);
+  }
+
   @Patch('zone-hits/:hitId/correct')
   recordCorrection(
     @Param('hitId') hitId: string,
