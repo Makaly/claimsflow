@@ -1034,14 +1034,15 @@ function DocPreviewModal({ doc, onClose, onSave }: {
     setOcrZoneResult(null)
     redrawAnnotations()
     // Record this manual hit in the analytics knowledge base (fire-and-forget).
+    // providerName is stored so future queries can filter by provider for smarter suggestions.
     import('@/services/api').then(({ default: api }) => {
       api.post('/document-classifiers/zone-hits', {
         fieldName:      field,
         extractedValue: value,
         confidence:     0.9,
         engine:         'manual',
-        claimId:        doc.dbId   ?? undefined,
-        documentId:     doc.fileUrl ? undefined : undefined,
+        claimId:        doc.dbId        ?? undefined,
+        providerName:   doc.providerName ?? undefined,
       }).catch(() => {/* non-fatal */})
     })
   }

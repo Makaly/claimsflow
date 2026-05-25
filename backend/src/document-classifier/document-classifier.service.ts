@@ -1087,16 +1087,23 @@ Return an empty array if everything looks correct. Only flag genuine issues, not
     engine?: string;
     claimId?: string;
     documentId?: string;
+    providerName?: string;
   }) {
     const ids = await this.getManualZoneId(data.fieldName);
     if (!ids) return null;
+
+    // providerName stored in fieldLabel suffix so analytics can filter by provider
+    // without a schema change (OcrZoneHit has no providerName column).
+    const fieldLabel = data.providerName
+      ? `${ids.fieldLabel} [${data.providerName}]`
+      : ids.fieldLabel;
 
     return this.prisma.ocrZoneHit.create({
       data: {
         zoneId:         ids.zoneId,
         templateId:     ids.templateId,
         fieldName:      data.fieldName,
-        fieldLabel:     ids.fieldLabel,
+        fieldLabel,
         extractedValue: data.extractedValue,
         confidence:     data.confidence ?? 0.9,
         engine:         data.engine ?? 'manual',

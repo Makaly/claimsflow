@@ -46,28 +46,41 @@ interface BatchSessionMeta {
   updatedAt: string
 }
 
-// ── Claims stored in sessionStorage (separate quota, survives F5 within tab) ──
+// ── Claims stored in localStorage with 48-hour TTL ──
+// Previously used sessionStorage (lost on tab close). Switched to localStorage
+// so manual OCR corrections survive browser close/reopen within the same day.
 const CLAIMS_KEY = (sid: string) => `cic-claims-${sid}`
+const CLAIMS_TTL_MS = 48 * 60 * 60 * 1000  // 48 hours
 
 export function saveClaims(sessionId: string, claims: SessionClaim[]) {
   try {
-    // Strip blob URLs (invalid after reload) and large page-analysis arrays
     const slim = claims.map(({ fileUrl: _, documentPages: __, ...rest }) =>
       ({ ...rest, fileUrl: '' })
     )
-    sessionStorage.setItem(CLAIMS_KEY(sessionId), JSON.stringify(slim))
-  } catch { /* non-fatal */ }
+    localStorage.setItem(CLAIMS_KEY(sessionId), JSON.stringify({ data: slim, savedAt: Date.now() }))
+  } catch { /* quota — non-fatal */ }
 }
 
 export function loadClaims(sessionId: string): SessionClaim[] {
   try {
-    const raw = sessionStorage.getItem(CLAIMS_KEY(sessionId))
-    return raw ? (JSON.parse(raw) as SessionClaim[]) : []
+    const raw = localStorage.getItem(CLAIMS_KEY(sessionId))
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    // Support legacy sessionStorage shape (plain array) and new TTL-wrapped shape
+    if (Array.isArray(parsed)) return parsed as SessionClaim[]
+    if (Date.now() - parsed.savedAt > CLAIMS_TTL_MS) {
+      localStorage.removeItem(CLAIMS_KEY(sessionId))
+      return []
+    }
+    return parsed.data as SessionClaim[]
   } catch { return [] }
 }
 
 export function dropClaims(sessionId: string) {
-  try { sessionStorage.removeItem(CLAIMS_KEY(sessionId)) } catch { /* ignore */ }
+  try {
+    localStorage.removeItem(CLAIMS_KEY(sessionId))
+    sessionStorage.removeItem(CLAIMS_KEY(sessionId))  // clear legacy entry if present
+  } catch { /* ignore */ }
 }
 
 // ── Store interface ──

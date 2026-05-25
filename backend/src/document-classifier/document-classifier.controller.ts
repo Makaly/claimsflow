@@ -275,7 +275,7 @@ export class DocumentClassifierController {
 
   @Post('zone-hits')
   recordManualZoneHit(
-    @Body() body: { fieldName: string; extractedValue: string; confidence?: number; engine?: string; claimId?: string; documentId?: string },
+    @Body() body: { fieldName: string; extractedValue: string; confidence?: number; engine?: string; claimId?: string; documentId?: string; providerName?: string },
   ) {
     return this.service.recordManualZoneHit(body);
   }
