@@ -4614,7 +4614,7 @@ export default function BatchUpload() {
                   const incompleteCount = sortedClaims.length - completeCount
 
                   return (
-                    <div className="space-y-1.5">
+                    <div className="space-y-2">
                       {sortedClaims.map((claim, idx) => {
                         const rowMissing = liveErrors[claim.id] || []
                         const hasError = rowMissing.length > 0
@@ -4652,41 +4652,43 @@ export default function BatchUpload() {
                         return (
                           <Fragment key={claim.id}>
                             {showCompleteHeader && (
-                              <div className="flex items-center gap-2 px-0.5 pt-0.5 pb-1.5">
-                                <div className="h-px w-6 bg-gradient-to-r from-transparent to-emerald-500/50" />
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 dark:text-emerald-400 shrink-0">Verified & Complete</span>
-                                <span className="inline-flex items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 text-[9px] font-bold h-4 min-w-[18px] px-1.5 shrink-0">{completeCount}</span>
-                                <div className="flex-1 h-px bg-gradient-to-r from-emerald-500/40 to-transparent" />
+                              <div className="flex items-center gap-3 px-1 pt-1 pb-2">
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 px-3 py-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 shrink-0">
+                                  <CheckCircle className="h-3 w-3" /> Verified & Complete
+                                  <span className="rounded-full bg-emerald-200 dark:bg-emerald-800/70 px-1.5 text-[10px] font-bold">{completeCount}</span>
+                                </span>
+                                <div className="flex-1 h-px bg-emerald-100 dark:bg-emerald-900/30" />
                               </div>
                             )}
                             {showIncompleteHeader && (
-                              <div className={`flex items-center gap-2 px-0.5 pb-1.5 ${completeCount > 0 ? 'mt-3 pt-3 border-t border-border/40' : 'pt-0.5'}`}>
-                                <div className="h-px w-6 bg-gradient-to-r from-transparent to-red-500/50" />
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-red-600 dark:text-red-400 shrink-0">Requires Attention</span>
-                                <span className="inline-flex items-center justify-center rounded-full bg-red-100 dark:bg-red-900/60 text-red-800 dark:text-red-300 text-[9px] font-bold h-4 min-w-[18px] px-1.5 shrink-0">{incompleteCount}</span>
-                                <div className="flex-1 h-px bg-gradient-to-r from-red-500/40 to-transparent" />
+                              <div className={`flex items-center gap-3 px-1 pb-2 ${completeCount > 0 ? 'mt-4 pt-4 border-t border-border/30' : 'pt-1'}`}>
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 dark:bg-red-900/40 px-3 py-1 text-[11px] font-semibold text-red-700 dark:text-red-300 shrink-0">
+                                  <AlertCircle className="h-3 w-3" /> Needs Attention
+                                  <span className="rounded-full bg-red-200 dark:bg-red-800/70 px-1.5 text-[10px] font-bold">{incompleteCount}</span>
+                                </span>
+                                <div className="flex-1 h-px bg-red-100 dark:bg-red-900/30" />
                               </div>
                             )}
                             <div
                               onClick={() => setPreviewDoc(claim)}
-                              className={`group relative rounded-xl border cursor-pointer transition-all duration-200 ${
+                              className={`group relative rounded-xl cursor-pointer transition-all duration-200 overflow-hidden bg-card ${
                                 hasError
-                                  ? 'border-red-300/70 dark:border-red-700/60 bg-gradient-to-br from-red-950/5 to-card dark:from-red-950/10 hover:border-red-400/80 hover:shadow-lg hover:shadow-red-500/10'
+                                  ? 'shadow-sm ring-1 ring-red-200/80 dark:ring-red-800/50 hover:shadow-md hover:ring-red-300 dark:hover:ring-red-700/60'
                                   : claim.status === 'published'
-                                    ? 'border-emerald-300/70 dark:border-emerald-700/60 bg-gradient-to-br from-emerald-950/5 to-card dark:from-emerald-950/10 hover:border-emerald-400/80 hover:shadow-lg hover:shadow-emerald-500/10'
-                                    : 'border-violet-200/60 dark:border-violet-800/50 bg-gradient-to-br from-violet-950/5 to-card dark:from-violet-950/10 hover:border-violet-400/70 hover:shadow-lg hover:shadow-violet-500/10'
+                                    ? 'shadow-sm ring-1 ring-emerald-200/70 dark:ring-emerald-800/40 hover:shadow-md'
+                                    : 'shadow-sm ring-1 ring-border/50 hover:shadow-md hover:ring-violet-200/70 dark:hover:ring-violet-700/50'
                               }`}
                             >
-                              {/* Accent bar */}
-                              <div className={`absolute left-0 top-0 bottom-0 w-[3px] rounded-l-xl ${
+                              {/* Top accent stripe */}
+                              <div className={`h-[3px] w-full ${
                                 hasError
-                                  ? 'bg-gradient-to-b from-red-400 via-red-500 to-red-600'
+                                  ? 'bg-gradient-to-r from-red-400 via-rose-500 to-red-400'
                                   : claim.status === 'published'
-                                    ? 'bg-gradient-to-b from-emerald-400 via-emerald-500 to-emerald-600'
-                                    : 'bg-gradient-to-b from-violet-400 via-violet-500 to-violet-600'
+                                    ? 'bg-gradient-to-r from-emerald-400 via-teal-500 to-emerald-400'
+                                    : 'bg-gradient-to-r from-violet-400 via-indigo-500 to-violet-400'
                               }`} />
 
-                              <div className="pl-4 pr-3 py-3">
+                              <div className="px-4 py-3">
                                 {/* Row 1: Barcode + Status + Confidence */}
                                 <div className="flex items-center justify-between gap-2 mb-2.5">
                                   <div className="flex items-center gap-2 min-w-0">
@@ -4712,45 +4714,41 @@ export default function BatchUpload() {
                                     </span>
                                     {/* Status */}
                                     {hasError ? (
-                                      <Badge variant="destructive" className="text-[9px] h-5 gap-0.5">
-                                        <AlertCircle className="h-2.5 w-2.5" />{rowMissing.length} missing
-                                      </Badge>
+                                      <span className="inline-flex items-center gap-1 rounded-full bg-red-100 dark:bg-red-900/40 px-2 py-0.5 text-[10px] font-semibold text-red-700 dark:text-red-300">
+                                        <AlertCircle className="h-3 w-3" />{rowMissing.length} missing
+                                      </span>
                                     ) : claim.status === 'published' ? (
-                                      <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300 text-[9px] h-5 gap-0.5">
-                                        <CheckCircle className="h-2.5 w-2.5" />Published
-                                      </Badge>
+                                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 dark:bg-emerald-900/40 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">
+                                        <CheckCircle className="h-3 w-3" /> Published
+                                      </span>
                                     ) : (
-                                      <Badge className="bg-violet-100 text-violet-800 dark:bg-violet-900/60 dark:text-violet-300 text-[9px] h-5 gap-0.5">
-                                        <CheckCircle className="h-2.5 w-2.5" />Ready
-                                      </Badge>
+                                      <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 dark:bg-violet-900/40 px-2 py-0.5 text-[10px] font-semibold text-violet-700 dark:text-violet-300">
+                                        <CheckCircle className="h-3 w-3" /> Ready
+                                      </span>
                                     )}
                                   </div>
                                 </div>
 
-                                {/* Validation warnings (line-item sum mismatch, future date, high-value, etc.) */}
+                                {/* Validation warnings */}
                                 {claim.validationWarnings && claim.validationWarnings.length > 0 && (
-                                  <div className="mb-2.5 rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/30 px-2.5 py-1.5">
-                                    <div className="flex items-start gap-1.5">
-                                      <AlertCircle className="h-3 w-3 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
-                                      <div className="min-w-0 flex-1">
-                                        <p className="text-[10px] uppercase tracking-widest font-bold text-amber-700 dark:text-amber-400 mb-0.5">
-                                          {claim.validationWarnings.length === 1 ? 'Structural warning' : `${claim.validationWarnings.length} structural warnings`}
-                                        </p>
-                                        <ul className="text-[11px] text-amber-800 dark:text-amber-300 leading-snug space-y-0.5">
-                                          {claim.validationWarnings.map((w, wi) => (
-                                            <li key={wi} className="break-words">• {w}</li>
-                                          ))}
-                                        </ul>
-                                      </div>
-                                    </div>
+                                  <div className="mb-2.5 flex items-start gap-2 rounded-lg bg-amber-50 dark:bg-amber-950/20 px-3 py-2">
+                                    <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-500 dark:text-amber-400" />
+                                    <p className="text-[11px] leading-snug min-w-0 flex-1">
+                                      <span className="font-semibold text-amber-700 dark:text-amber-400">
+                                        {claim.validationWarnings.length === 1 ? 'Warning · ' : `${claim.validationWarnings.length} warnings · `}
+                                      </span>
+                                      {claim.validationWarnings.map((w, wi) => (
+                                        <span key={wi} className="text-amber-700 dark:text-amber-300">{w}{wi < claim.validationWarnings.length - 1 ? ' · ' : ''}</span>
+                                      ))}
+                                    </p>
                                   </div>
                                 )}
 
-                                {/* Row 2: Main data grid */}
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-2 text-xs">
+                                {/* Data grid */}
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                                   {/* Patient */}
-                                  <div className={`min-w-0 rounded-lg p-2 border ${patientBad ? 'bg-red-100/50 dark:bg-red-900/20 border-red-200/60 dark:border-red-800/40' : 'bg-muted/30 border-border/30'}`}>
-                                    <p className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold mb-1">Patient</p>
+                                  <div className={`min-w-0 rounded-lg p-2.5 ${patientBad ? 'bg-red-50/80 dark:bg-red-950/20 ring-1 ring-red-200/60 dark:ring-red-800/40' : 'bg-muted/30'}`}>
+                                    <p className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold mb-1.5">Patient</p>
                                     <div className="space-y-0.5">
                                       <div className="flex items-center gap-1 flex-wrap">
                                         <p className={`font-semibold text-xs leading-tight truncate ${isMissing(claim, 'patientName') ? 'text-red-500' : ''}`}>
@@ -4769,8 +4767,8 @@ export default function BatchUpload() {
                                   </div>
 
                                   {/* Invoice */}
-                                  <div className={`min-w-0 rounded-lg p-2 border ${invoiceBad ? 'bg-red-100/50 dark:bg-red-900/20 border-red-200/60 dark:border-red-800/40' : 'bg-muted/30 border-border/30'}`}>
-                                    <p className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold mb-1">Invoice</p>
+                                  <div className={`min-w-0 rounded-lg p-2.5 ${invoiceBad ? 'bg-red-50/80 dark:bg-red-950/20 ring-1 ring-red-200/60 dark:ring-red-800/40' : 'bg-muted/30'}`}>
+                                    <p className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold mb-1.5">Invoice</p>
                                     <div className="space-y-0.5">
                                       <div className="flex items-center gap-1 flex-wrap">
                                         <span className={`font-mono font-semibold text-xs truncate ${isMissing(claim, 'invoiceNumber') ? 'text-red-500' : ''}`}>
@@ -4789,8 +4787,8 @@ export default function BatchUpload() {
                                   </div>
 
                                   {/* Diagnosis */}
-                                  <div className={`min-w-0 rounded-lg p-2 border ${diagBad ? 'bg-red-100/50 dark:bg-red-900/20 border-red-200/60 dark:border-red-800/40' : 'bg-muted/30 border-border/30'}`}>
-                                    <p className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold mb-1">Diagnosis</p>
+                                  <div className={`min-w-0 rounded-lg p-2.5 ${diagBad ? 'bg-red-50/80 dark:bg-red-950/20 ring-1 ring-red-200/60 dark:ring-red-800/40' : 'bg-muted/30'}`}>
+                                    <p className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold mb-1.5">Diagnosis</p>
                                     <div className="space-y-0.5">
                                       <div className="flex items-center gap-1 flex-wrap">
                                         <p className={`text-xs leading-tight line-clamp-2 ${isMissing(claim, 'diagnosis') ? 'text-red-500' : ''}`}>
@@ -4805,9 +4803,9 @@ export default function BatchUpload() {
                                     </div>
                                   </div>
 
-                                  {/* Pages + Doc type */}
-                                  <div className="min-w-0 rounded-lg p-2 border bg-muted/30 border-border/30">
-                                    <p className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold mb-1">Document</p>
+                                  {/* Document */}
+                                  <div className="min-w-0 rounded-lg p-2.5 bg-muted/30">
+                                    <p className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold mb-1.5">Document</p>
                                     <div className="space-y-0.5">
                                       {claim.documentPages?.[0]?.categoryLabel && (
                                         <Badge variant="outline" className="font-mono text-[9px] px-1 h-4 max-w-full truncate">{claim.documentPages[0].categoryLabel}</Badge>
@@ -4819,24 +4817,24 @@ export default function BatchUpload() {
                                   </div>
                                 </div>
 
-                                {/* Row 3: Actions */}
-                                <div className="flex items-center gap-1 mt-2.5 pt-2 border-t border-border/40">
+                                {/* Action toolbar */}
+                                <div className="flex items-center gap-0.5 mt-3 pt-2.5 border-t border-border/30">
                                   <Button
-                                    variant="outline"
+                                    variant="ghost"
                                     size="sm"
-                                    className="h-7 text-xs px-2.5 gap-1"
+                                    className="h-7 text-xs px-2.5 gap-1 text-muted-foreground hover:text-foreground"
                                     onClick={(e) => { e.stopPropagation(); setPreviewDoc(claim) }}
                                   >
-                                    <Eye className="h-3 w-3" /> View
+                                    <Eye className="h-3.5 w-3.5" /> View
                                   </Button>
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    className="h-7 text-xs px-2.5 gap-1"
+                                    className="h-7 text-xs px-2.5 gap-1 text-muted-foreground hover:text-foreground"
                                     disabled={ocrRunning.has(claim.id) || reprocessingOne.has(claim.id)}
                                     onClick={(e) => { e.stopPropagation(); rerunOcr(claim.id) }}
                                   >
-                                    {ocrRunning.has(claim.id) ? <Loader2 className="h-3 w-3 animate-spin" /> : <Scan className="h-3 w-3" />}
+                                    {ocrRunning.has(claim.id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Scan className="h-3.5 w-3.5" />}
                                     OCR
                                   </Button>
                                   <Button
@@ -4846,7 +4844,7 @@ export default function BatchUpload() {
                                     disabled={reprocessingOne.has(claim.id) || ocrRunning.has(claim.id)}
                                     onClick={(e) => { e.stopPropagation(); reprocessClaim(claim.id) }}
                                   >
-                                    {reprocessingOne.has(claim.id) ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+                                    {reprocessingOne.has(claim.id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
                                     Reprocess
                                   </Button>
                                   <Button
@@ -4856,16 +4854,16 @@ export default function BatchUpload() {
                                     disabled={claim.status === 'published'}
                                     onClick={(e) => { e.stopPropagation(); setClaims(prev => prev.filter(c => c.id !== claim.id)) }}
                                   >
-                                    <Trash2 className="h-3 w-3" /> Delete
+                                    <Trash2 className="h-3.5 w-3.5" /> Delete
                                   </Button>
                                   {step === 'review' && claim.status !== 'published' && (
                                     <Button
                                       size="sm"
-                                      className="h-7 text-xs px-2.5 gap-1 ml-auto bg-indigo-600 hover:bg-indigo-700 text-white"
+                                      className="h-7 text-xs px-3 gap-1.5 ml-auto"
                                       disabled={publishingOne.has(claim.id) || hasError}
                                       onClick={(e) => { e.stopPropagation(); publishSingleClaim(claim.id) }}
                                     >
-                                      {publishingOne.has(claim.id) ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                                      {publishingOne.has(claim.id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
                                       Publish
                                     </Button>
                                   )}
