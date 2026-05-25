@@ -412,7 +412,9 @@ export class OcrService {
         return {
           ...inv,
           patientName:      (!inv.patientName || /^Unknown/i.test(inv.patientName)) && looksLikeName(published.patientName) ? published.patientName! : inv.patientName,
-          patientId:        (!inv.patientId && published.patientId) ? published.patientId : inv.patientId,
+          // Reject patientId values that look like invoice numbers (UH prefix) — these
+          // were stored erroneously when OCR mis-assigned the invoice number to this field.
+          patientId:        (!inv.patientId && published.patientId && !/^UH\d{6,}/i.test(published.patientId)) ? published.patientId : inv.patientId,
           membershipNumber: (!inv.membershipNumber && published.memberNumber) ? published.memberNumber : inv.membershipNumber,
           // Override amount if extraction looks like a co-pay but published record has the real amount
           invoiceAmount:    (inv.invoiceAmount < 100 && published.invoiceAmount && published.invoiceAmount >= 100) ? Number(published.invoiceAmount) : inv.invoiceAmount,
@@ -472,9 +474,13 @@ export class OcrService {
     // where the Name field is visually redacted and the model reads "NAIROBI"
     // from the Patient Address line instead).
     const KENYAN_CITIES = /^(Nairobi|Mombasa|Kisumu|Nakuru|Eldoret|Thika|Nyeri|Machakos|Garissa|Malindi|Lamu|Nanyuki|Kitale|Kakamega|Meru|Embu|Bungoma|Voi)$/i;
-    if (!inv.patientName || /^Unknown/i.test(inv.patientName) || KENYAN_CITIES.test(inv.patientName.trim())) {
-      if (KENYAN_CITIES.test((inv.patientName || '').trim())) {
-        // City mis-read — clear so UI shows it as missing rather than a wrong value
+    // Sentence-like text extracted from pre-auth / financial guarantor sections —
+    // e.g. "ensure outstanding balances are rectified before discharge" captured
+    // by a broad Name: pattern on the Aga Khan pre-auth letter (page 6).
+    const NAME_SENTENCE_WORDS = /\b(ensure|outstanding|balances|rectified|discharge|settlement|billing|guarantee|responsibility|coverage|payment|invoice|refund|hereby|amounts)\b/i;
+    const name = (inv.patientName || '').trim();
+    if (!name || /^Unknown/i.test(name) || KENYAN_CITIES.test(name) || NAME_SENTENCE_WORDS.test(name)) {
+      if (KENYAN_CITIES.test(name) || NAME_SENTENCE_WORDS.test(name)) {
         (inv as any).patientName = '';
       }
       warnings.push('Patient name missing or redacted — manual entry required');
