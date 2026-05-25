@@ -1809,11 +1809,13 @@ function mergeInvoice(ocr: ExtractedInvoiceData, ai: ExtractedInvoiceData): Extr
   const PLACEHOLDER = /^(Unknown Patient|Unknown Provider|OCR Processing Required|Upload to backend for extraction)$/i
   const empty = (v: string | undefined) => !v || PLACEHOLDER.test(v)
 
-  // For amounts: prefer whichever is non-zero; if both non-zero and close (within 5%), take AI
+  // For amounts: prefer whichever is non-zero; if both non-zero and close (within 5%), take AI.
+  // If AI returns a suspicious co-pay-level amount (< 100 KES) but OCR has a larger value, use OCR.
   const mergedAmount = (() => {
     if (!ai.invoiceAmount && !ocr.invoiceAmount) return 0
     if (!ai.invoiceAmount) return ocr.invoiceAmount
     if (!ocr.invoiceAmount) return ai.invoiceAmount
+    if (ai.invoiceAmount > 0 && ai.invoiceAmount < 100 && ocr.invoiceAmount >= 100) return ocr.invoiceAmount
     const ratio = Math.abs(ai.invoiceAmount - ocr.invoiceAmount) / Math.max(ai.invoiceAmount, ocr.invoiceAmount)
     return ratio <= 0.05 ? ai.invoiceAmount : Math.max(ai.invoiceAmount, ocr.invoiceAmount)
   })()

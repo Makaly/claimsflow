@@ -15,6 +15,7 @@ import {
 import { OllamaOcrService } from './ollama-ocr.service';
 import { VisionRouterService } from './vision-router.service';
 import { DocumentClassifierService } from '../document-classifier/document-classifier.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { buildPageHintsMap, PageHintEntry } from './gemini-vision.service';
 
 export interface ExtractedLineItem {
@@ -91,6 +92,7 @@ export class OcrService {
     private readonly ollamaOcr: OllamaOcrService,
     private readonly visionRouter: VisionRouterService,
     private readonly documentClassifier: DocumentClassifierService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async processDocument(documentId: string, filePath: string, mimetype: string) {
@@ -408,6 +410,43 @@ export class OcrService {
       this.logger.warn(`Provider hint enrichment skipped: ${err?.message}`);
     }
 
+    // Re-upload enrichment: for documents previously published in the system,
+    // pull known-correct field values so repeated uploads of the same invoice
+    // get the right data without requiring manual correction again.
+    try {
+      result.invoices = await Promise.all(result.invoices.map(async inv => {
+        if (!inv.invoiceNumber) return inv;
+        const published = await this.prisma.claim.findFirst({
+          where: { invoiceNumber: inv.invoiceNumber },
+          select: {
+            patientName: true, patientId: true, memberNumber: true,
+            invoiceAmount: true, invoiceDate: true, dateOfService: true,
+            diagnosis: true, treatment: true, procedureCodes: true,
+          },
+          orderBy: { submittedAt: 'desc' },
+        });
+        if (!published) return inv;
+        this.logger.log(`Re-upload: enriched invoice ${inv.invoiceNumber} from previously published claim`);
+        const pubServiceDate = published.dateOfService ? published.dateOfService.toISOString().split('T')[0] : undefined;
+        const pubInvoiceDate = published.invoiceDate ? published.invoiceDate.toISOString().split('T')[0] : undefined;
+        return {
+          ...inv,
+          patientName:      (!inv.patientName || /^Unknown/i.test(inv.patientName)) && published.patientName ? published.patientName : inv.patientName,
+          patientId:        (!inv.patientId && published.patientId) ? published.patientId : inv.patientId,
+          membershipNumber: (!inv.membershipNumber && published.memberNumber) ? published.memberNumber : inv.membershipNumber,
+          // Override amount if extraction looks like a co-pay but published record has the real amount
+          invoiceAmount:    (inv.invoiceAmount < 100 && published.invoiceAmount && published.invoiceAmount >= 100) ? Number(published.invoiceAmount) : inv.invoiceAmount,
+          invoiceDate:      (!inv.invoiceDate && pubInvoiceDate) ? pubInvoiceDate : inv.invoiceDate,
+          serviceDate:      (!inv.serviceDate && pubServiceDate) ? pubServiceDate : inv.serviceDate,
+          diagnosis:        (!inv.diagnosis && published.diagnosis) ? published.diagnosis : inv.diagnosis,
+          treatment:        (!inv.treatment && published.treatment) ? published.treatment : inv.treatment,
+          procedureCode:    (!inv.procedureCode && published.procedureCodes?.length) ? published.procedureCodes[0] : inv.procedureCode,
+        };
+      }));
+    } catch (err: any) {
+      this.logger.warn(`Re-upload enrichment skipped: ${err?.message}`);
+    }
+
     // Structural post-validation: catches arithmetic, date and completeness
     // issues that confidence scores miss. Flagged invoices still pass through
     // but the warnings are surfaced for human review.
@@ -506,9 +545,15 @@ export class OcrService {
       try {
         const result = await this.visionRouter.extract(chosen, filePath, mimetype, true);
         if (result) {
-          return { invoices: [result], pageCount: 1, modelUsed: chosen };
+          // Same quality gate as multi-claim path: skip co-pay-level amounts
+          if (result.invoiceAmount > 0 && result.invoiceAmount < 100) {
+            this.logger.warn(`Single-claim extract returned co-pay-level amount (${result.invoiceAmount}) — falling through to Tesseract`);
+          } else {
+            return { invoices: [result], pageCount: 1, modelUsed: chosen };
+          }
+        } else {
+          this.logger.warn(`Vision router returned null for ${chosen} — falling back to Tesseract regex pipeline`);
         }
-        this.logger.warn(`Vision router returned null for ${chosen} — falling back to Tesseract regex pipeline`);
       } catch (err: any) {
         this.logger.warn(`Vision router failed for ${chosen}: ${err?.message || err} — falling back to Tesseract`);
       }
@@ -567,6 +612,21 @@ export class OcrService {
       // Also include all pages for full context
       const allText = group.pages.map(p => pages[p.pageNumber - 1]).join('\n');
       const parsed = this.parseInvoiceText(invoiceText);
+
+      // Aga Khan inpatient bills: "Sponsor Amount Payable" is on the last summary
+      // page, not the invoice page. If the invoice-page amount looks like a patient
+      // co-pay (> 0 but < 100), re-try amount extraction across all pages.
+      if (parsed.invoiceAmount > 0 && parsed.invoiceAmount < 100) {
+        const allParsed = this.parseInvoiceText(allText);
+        if (allParsed.invoiceAmount >= 100) {
+          this.logger.log(`Replaced co-pay amount ${parsed.invoiceAmount} with all-page amount ${allParsed.invoiceAmount}`);
+          parsed.invoiceAmount = allParsed.invoiceAmount;
+        }
+        // Also pick up patient name from all pages if invoice page missed it
+        if ((!parsed.patientName || /^Unknown/i.test(parsed.patientName)) && allParsed.patientName && !/^Unknown/i.test(allParsed.patientName)) {
+          parsed.patientName = allParsed.patientName;
+        }
+      }
 
       // If diagnosis/treatment missing from invoice, look in supporting docs
       if (!parsed.diagnosis) {
