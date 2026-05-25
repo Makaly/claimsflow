@@ -1000,7 +1000,12 @@ function DocPreviewModal({ doc, onClose, onSave }: {
 
   const applyOcrZoneToField = (field: string) => {
     if (!ocrZoneResult?.text || ocrZoneResult.text.startsWith('(')) return
-    const value = ocrZoneResult.text.replace(/\n/g, ' ').trim()
+    let value = ocrZoneResult.text.replace(/\n/g, ' ').trim()
+    if (field === 'invoiceAmount') {
+      // Strip currency symbols and thousands-separator commas so the value is
+      // a plain decimal string that <input type="number"> and parseFloat() accept.
+      value = value.replace(/[^0-9.]/g, '')
+    }
     setEdit(prev => ({ ...prev, [field]: value }))
     setOcrZoneResult(null)
     // Redraw to remove the zone highlight
