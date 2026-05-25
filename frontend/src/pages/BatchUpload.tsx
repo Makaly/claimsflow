@@ -362,10 +362,15 @@ function DateEF({ label, value, onChange, required }: {
   const toIso = (str: string): string => {
     if (!str?.trim()) return ''
     if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10)
+    // DD Mon YYYY  e.g. "28 Feb 2024"
     const m1 = str.match(/^(\d{1,2})[-/ ](jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[-/ ](\d{4})/i)
     if (m1) return `${m1[3]}-${MONTHS[m1[2].toLowerCase()]}-${String(m1[1]).padStart(2,'0')}`
-    const m2 = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+    // DD/MM/YYYY or DD-MM-YYYY
+    const m2 = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
     if (m2) return `${m2[3]}-${String(m2[2]).padStart(2,'0')}-${String(m2[1]).padStart(2,'0')}`
+    // DD/MM/YY — assume 2000s (common in Kenyan hospital invoices)
+    const m3 = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2})$/)
+    if (m3) return `20${m3[3]}-${String(m3[2]).padStart(2,'0')}-${String(m3[1]).padStart(2,'0')}`
     const d = new Date(str)
     if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10)
     return ''
@@ -998,6 +1003,21 @@ function DocPreviewModal({ doc, onClose, onSave }: {
     }
   }
 
+  // Mirrors DateEF.toIso() — parse common OCR date formats → YYYY-MM-DD.
+  const ocrDateToIso = (raw: string): string => {
+    const s = raw.trim()
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
+    const MONTHS: Record<string, string> = { jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12' }
+    const m1 = s.match(/^(\d{1,2})[-/ ](jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[-/ ](\d{4})/i)
+    if (m1) return `${m1[3]}-${MONTHS[m1[2].toLowerCase()]}-${String(m1[1]).padStart(2,'0')}`
+    const m2 = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
+    if (m2) return `${m2[3]}-${String(m2[2]).padStart(2,'0')}-${String(m2[1]).padStart(2,'0')}`
+    const m3 = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2})$/)
+    if (m3) return `20${m3[3]}-${String(m3[2]).padStart(2,'0')}-${String(m3[1]).padStart(2,'0')}`
+    const d = new Date(s)
+    return isNaN(d.getTime()) ? s : d.toISOString().slice(0, 10)
+  }
+
   const applyOcrZoneToField = (field: string) => {
     if (!ocrZoneResult?.text || ocrZoneResult.text.startsWith('(')) return
     let value = ocrZoneResult.text.replace(/\n/g, ' ').trim()
@@ -1005,6 +1025,10 @@ function DocPreviewModal({ doc, onClose, onSave }: {
       // Strip currency symbols and thousands-separator commas so the value is
       // a plain decimal string that <input type="number"> and parseFloat() accept.
       value = value.replace(/[^0-9.]/g, '')
+    } else if (field === 'invoiceDate' || field === 'serviceDate') {
+      // Normalise OCR date text (DD/MM/YY, DD/MM/YYYY, etc.) to YYYY-MM-DD so
+      // the date input and auto-save both receive a valid ISO string.
+      value = ocrDateToIso(value)
     }
     setEdit(prev => ({ ...prev, [field]: value }))
     setOcrZoneResult(null)
