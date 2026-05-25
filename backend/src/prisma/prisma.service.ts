@@ -1,4 +1,5 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { execSync } from 'child_process';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { decryptField, encryptField } from '../common/services/field-encryption';
 
@@ -85,6 +86,19 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   }
 
   async onModuleInit() {
+    // Apply any pending migrations before accepting connections.
+    // migrate deploy is idempotent — no-op when the schema is already current.
+    // Dockerfile.prod runs scripts/migrate.js first, so this is a safety net
+    // for local dev and any non-Docker start path (e.g. npm run start:dev).
+    try {
+      console.log('[startup] running prisma migrate deploy…');
+      execSync('npx prisma migrate deploy', { stdio: 'inherit' });
+      console.log('[startup] migrations up to date');
+    } catch (err) {
+      console.error('[startup] prisma migrate deploy failed — refusing to start:', err);
+      process.exit(1);
+    }
+
     await this.$connect();
     console.log('Database connected');
     // Validate encryption key at startup so mis-configured deployments fail
