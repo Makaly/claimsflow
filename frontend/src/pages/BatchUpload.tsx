@@ -491,7 +491,7 @@ function DocPreviewModal({ doc, onClose, onSave }: {
     invoiceNumber: doc.invoiceNumber,
     invoiceDate:   doc.invoiceDate,
     invoiceAmount: String(doc.invoiceAmount),
-    serviceDate:   doc.serviceDate,
+    serviceDate:   doc.serviceDate || new Date().toISOString().split('T')[0],
     diagnosis:     doc.diagnosis,
     diagnosisCode: doc.diagnosisCode,
     procedureCode: doc.procedureCode,
@@ -500,7 +500,7 @@ function DocPreviewModal({ doc, onClose, onSave }: {
   const dirty = JSON.stringify(edit) !== JSON.stringify({
     patientName: doc.patientName, patientId: doc.patientId, memberNumber: doc.memberNumber,
     providerName: doc.providerName, invoiceNumber: doc.invoiceNumber, invoiceDate: doc.invoiceDate,
-    invoiceAmount: String(doc.invoiceAmount), serviceDate: doc.serviceDate, diagnosis: doc.diagnosis,
+    invoiceAmount: String(doc.invoiceAmount), serviceDate: doc.serviceDate || new Date().toISOString().split('T')[0], diagnosis: doc.diagnosis,
     diagnosisCode: doc.diagnosisCode, procedureCode: doc.procedureCode, treatment: doc.treatment,
   })
   const ef = (field: keyof typeof edit) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
