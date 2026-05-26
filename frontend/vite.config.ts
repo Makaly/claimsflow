@@ -13,12 +13,12 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       output: {
-        hoistTransitiveImports: false,
         // Split output by role group so each role downloads only its pages.
         // Matches the lazy() chunk groupings in App.tsx.
         manualChunks(id: string) {
           // Vendor chunks (large deps isolated for long-term caching)
-          if (id.includes('node_modules/recharts') || id.includes('node_modules/d3')) return 'vendor-charts'
+          // recharts/d3 intentionally excluded from a separate chunk — circular
+          // imports inside recharts cause a TDZ crash when Rollup isolates them.
           if (id.includes('node_modules/@radix-ui')) return 'vendor-radix'
           if (id.includes('node_modules')) return 'vendor'
 
