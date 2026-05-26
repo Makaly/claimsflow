@@ -407,7 +407,7 @@ export class BatchSubmissionService {
 
   private draftFields(c: any) {
     return {
-      sessionId:    c.id ? undefined : c.sessionId,  // ignored in create path
+      sessionId:    c.sessionId ?? undefined,
       batchId:      c.batchId      ?? null,
       claimNumber:  c.claimNumber  ?? null,
       fileName:     c.fileName     ?? '',
@@ -450,9 +450,13 @@ export class BatchSubmissionService {
   }
 
   async updateDraftClaim(barcode: string, data: any) {
-    return this.prisma.batchDraftClaim.update({
-      where: { barcode },
-      data:  this.draftFields(data),
+    const fields = this.draftFields(data);
+    // Use upsert so a PATCH for a claim that only exists in localStorage
+    // (never flushed to DB) creates the row rather than throwing P2025.
+    return this.prisma.batchDraftClaim.upsert({
+      where:  { barcode },
+      update: fields,
+      create: { barcode, sessionId: data.sessionId ?? '', ...fields },
     });
   }
 

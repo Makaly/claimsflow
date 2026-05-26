@@ -54,7 +54,7 @@ const CLAIMS_TTL_MS = 48 * 60 * 60 * 1000  // 48 hours
 
 export function saveClaims(sessionId: string, claims: SessionClaim[]) {
   try {
-    const slim = claims.map(({ fileUrl: _, documentPages: __, ...rest }) =>
+    const slim = claims.map(({ fileUrl: _, ...rest }) =>
       ({ ...rest, fileUrl: '' })
     )
     localStorage.setItem(CLAIMS_KEY(sessionId), JSON.stringify({ data: slim, savedAt: Date.now() }))
