@@ -13,6 +13,7 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       output: {
+        hoistTransitiveImports: false,
         // Split output by role group so each role downloads only its pages.
         // Matches the lazy() chunk groupings in App.tsx.
         manualChunks(id: string) {
