@@ -2530,7 +2530,20 @@ export default function BatchUpload() {
             // Merge DB corrections over localStorage baseline (DB wins on every field)
             const local = loadClaims(session.sessionId) as ExtractedClaim[]
             const localMap: Record<string, ExtractedClaim> = Object.fromEntries(local.map(c => [c.barcode, c]))
-            const merged = dbClaims.map((db: any) => ({ ...(localMap[db.barcode] ?? {}), ...db, fileUrl: localMap[db.barcode]?.fileUrl ?? '' }))
+            const merged = dbClaims.map((db: any) => {
+              const local = localMap[db.barcode] ?? {}
+              return {
+                ...local,
+                ...db,
+                fileUrl: (local as any).fileUrl ?? '',
+                // DB stores documentPages as Json defaulting to [] — if the DB row
+                // was created before documentPages was populated, fall back to the
+                // richer localStorage copy so thumbnail category badges appear.
+                documentPages: (db.documentPages?.length > 0)
+                  ? db.documentPages
+                  : ((local as any).documentPages ?? []),
+              }
+            })
             setClaims(merged as ExtractedClaim[])
             setStep(session.step)
             return
