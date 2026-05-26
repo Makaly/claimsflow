@@ -37,7 +37,7 @@ async function bootstrap() {
         scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", 'data:', 'blob:'],
-        connectSrc: ["'self'"],
+        connectSrc: ["'self'", ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : [])],
         fontSrc: ["'self'"],
         objectSrc: ["'none'"],
         frameAncestors: ["'none'"],
@@ -73,6 +73,9 @@ async function bootstrap() {
 
   // CORS — only allow explicitly whitelisted origins
   const allowedOrigin = process.env.FRONTEND_URL;
+  if (isProd && !allowedOrigin) {
+    console.error('[startup] FRONTEND_URL is not set — all browser requests will be CORS-rejected');
+  }
   const isDev = !isProd;
   app.enableCors({
     origin: (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => {
@@ -81,7 +84,9 @@ async function bootstrap() {
       if (!origin) return cb(null, true); // curl/Postman/server-to-server
       if (isDev && /^https?:\/\/localhost(:\d+)?$/.test(origin)) return cb(null, true);
       if (allowedOrigin && origin === allowedOrigin) return cb(null, true);
-      cb(new Error(`CORS: origin ${origin} not allowed`));
+      // Use cb(null, false) — NOT cb(new Error()) — so Express returns a proper
+      // CORS rejection instead of throwing, which NestJS would catch as a 500.
+      cb(null, false);
     },
     credentials: true,
   });
