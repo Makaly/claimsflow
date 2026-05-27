@@ -1,6 +1,10 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { createReadStream, existsSync, readFileSync } from 'fs';
+import { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { EmailService } from '../notifications/email.service';
+import { EventsGateway } from '../notifications/events.gateway';
 import { CreateProviderDto } from './dto/create-provider.dto';
 import { UpdateProviderDto } from './dto/update-provider.dto';
 
@@ -9,6 +13,8 @@ export class ProvidersService {
   constructor(
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
+    private emailService: EmailService,
+    private eventsGateway: EventsGateway,
   ) {}
 
   // ── Self-Service Methods ──────────────────────────────────────────────
@@ -321,20 +327,20 @@ export class ProvidersService {
   }
 
   /**
-   * Approve provider registration
+   * Approve provider registration. PR1 — refuses to proceed unless the
+   * reviewing admin has scrolled through every page of every onboarding
+   * document, captures the admin's approval comment, and notifies the
+   * provider with a branded email.
    */
-  async approveProvider(id: string, approvedBy: string) {
+  async approveProvider(id: string, approvedBy: string, comment?: string) {
     const provider = await this.prisma.provider.findUnique({
       where: { id },
+      include: { users: { where: { role: 'provider_admin' }, take: 1 } },
     });
 
     if (!provider) {
       throw new NotFoundException(`Provider with ID ${id} not found`);
     }
-
-    // Accept both the schema default ('pending_approval') and the shorter
-    // 'pending' value that older rows and some clients use.
-    // If already approved, return the current record (idempotent).
     if (provider.approvalStatus === 'approved') {
       return provider;
     }
@@ -343,45 +349,96 @@ export class ProvidersService {
         `Provider cannot be approved from its current status: ${provider.approvalStatus}`,
       );
     }
+    if (!comment || !comment.trim()) {
+      throw new BadRequestException('An approval comment is required.');
+    }
+
+    // Per-page review gate — every onboarding document must have been viewed
+    // page-by-page by THIS admin. Without this guard, approval would defeat
+    // the audit-trail requirement we shipped specifically for this flow.
+    const readiness = await this.getReviewReadiness(approvedBy, id);
+    if (!readiness.readyToApprove) {
+      const incomplete = readiness.documents.filter((d) => !d.complete).map((d) => ({
+        documentId: d.id, fileName: d.fileName,
+        viewed: d.viewedPages.length, total: d.pageCount,
+      }));
+      throw new BadRequestException({
+        message: 'You must view every page of every uploaded document before approving.',
+        code: 'review_incomplete',
+        incomplete,
+      });
+    }
 
     const updatedProvider = await this.prisma.provider.update({
       where: { id },
       data: {
         approvalStatus: 'approved',
-        // Keep the coarse `status` column in sync so FE tables reflect the
-        // approval without an extra lookup.
         status: 'approved',
         isActive: true,
         canSubmitClaims: true,
         approvedBy,
         approvedAt: new Date(),
+        approvalComment: comment.trim(),
+        rejectionReason: null,
       },
     });
 
-    // Send notification to provider
-    await this.notificationsService.sendEmail({
-      recipient: provider.email,
-      subject: 'Provider Registration Approved',
-      message: `Congratulations! Your provider registration for ${provider.name} has been approved. You can now start submitting claims.`,
+    // Audit-log the approval itself separately from page views.
+    const admin = await this.prisma.user.findUnique({
+      where: { id: approvedBy }, select: { name: true, role: true },
     });
+    await this.prisma.activityLog.create({
+      data: {
+        userId: approvedBy,
+        username: admin?.name,
+        userRole: admin?.role,
+        action: 'approve_provider',
+        entity: 'provider',
+        entityId: id,
+        status: 'success',
+        metadata: { comment: comment.trim(), readiness: { totalDocuments: readiness.totalDocuments } },
+      },
+    });
+
+    // Notify the provider admin with the branded "Approved" template.
+    const adminUser = provider.users[0];
+    this.emailService.sendProviderApprovalDecision({
+      recipientEmail: adminUser?.email ?? provider.email,
+      recipientName: adminUser?.name ?? provider.contactPerson,
+      providerName: provider.name,
+      decision: 'approved',
+      comment: comment.trim(),
+      loginUrl: `${process.env.APP_URL || 'http://localhost:3000'}/login`,
+    }).catch(() => undefined);
+    // Real-time bell badge for every provider_admin attached to this provider.
+    const adminIds = provider.users.map((u) => u.id);
+    if (adminIds.length) {
+      this.eventsGateway.emitProviderDecision(adminIds, {
+        providerId: id, providerName: provider.name, decision: 'approved', comment: comment.trim(),
+      });
+    }
 
     return updatedProvider;
   }
 
   /**
-   * Reject provider registration
+   * Reject provider registration. PR1 — requires both a rejection reason
+   * (sent to the provider) and an internal admin comment.
    */
-  async rejectProvider(id: string, reason: string, rejectedBy: string) {
+  async rejectProvider(id: string, reason: string, rejectedBy: string, comment?: string) {
     const provider = await this.prisma.provider.findUnique({
       where: { id },
+      include: { users: { where: { role: 'provider_admin' }, take: 1 } },
     });
 
     if (!provider) {
       throw new NotFoundException(`Provider with ID ${id} not found`);
     }
-
     if (!['pending_approval', 'pending'].includes(provider.approvalStatus)) {
       throw new BadRequestException('Provider is not pending approval');
+    }
+    if (!reason || !reason.trim()) {
+      throw new BadRequestException('A rejection reason is required.');
     }
 
     const updatedProvider = await this.prisma.provider.update({
@@ -391,16 +448,43 @@ export class ProvidersService {
         status: 'rejected',
         isActive: false,
         canSubmitClaims: false,
-        rejectionReason: reason,
+        rejectionReason: reason.trim(),
+        approvalComment: comment?.trim() || null,
       },
     });
 
-    // Send notification to provider
-    await this.notificationsService.sendEmail({
-      recipient: provider.email,
-      subject: 'Provider Registration Rejected',
-      message: `Your provider registration for ${provider.name} has been rejected. Reason: ${reason}. Please contact support for more information.`,
+    const admin = await this.prisma.user.findUnique({
+      where: { id: rejectedBy }, select: { name: true, role: true },
     });
+    await this.prisma.activityLog.create({
+      data: {
+        userId: rejectedBy,
+        username: admin?.name,
+        userRole: admin?.role,
+        action: 'reject_provider',
+        entity: 'provider',
+        entityId: id,
+        status: 'success',
+        metadata: { reason: reason.trim(), comment: comment?.trim() ?? null },
+      },
+    });
+
+    const adminUser = provider.users[0];
+    this.emailService.sendProviderApprovalDecision({
+      recipientEmail: adminUser?.email ?? provider.email,
+      recipientName: adminUser?.name ?? provider.contactPerson,
+      providerName: provider.name,
+      decision: 'rejected',
+      rejectionReason: reason.trim(),
+      comment: comment?.trim(),
+      loginUrl: `${process.env.APP_URL || 'http://localhost:3000'}/login`,
+    }).catch(() => undefined);
+    const adminIds = provider.users.map((u) => u.id);
+    if (adminIds.length) {
+      this.eventsGateway.emitProviderDecision(adminIds, {
+        providerId: id, providerName: provider.name, decision: 'rejected', reason: reason.trim(), comment: comment?.trim(),
+      });
+    }
 
     return updatedProvider;
   }
@@ -550,9 +634,165 @@ export class ProvidersService {
       uploadedBy?: string;
     },
   ) {
+    // PR1 — extract page count so the admin review-readiness gate can require
+    // per-page acknowledgement. Images count as 1 page; PDFs use pdf-parse.
+    // A failure to extract is non-fatal: pageCount stays null and the gate
+    // treats it as a single page (the safest default for tracking).
+    let pageCount: number | null = null;
+    if (data.mimeType === 'application/pdf') {
+      try {
+        const pdfParse = await import('pdf-parse');
+        const buf = readFileSync(data.filePath);
+        const parsed = await (pdfParse.default || (pdfParse as any))(buf);
+        if (parsed?.numpages && parsed.numpages > 0) pageCount = parsed.numpages;
+      } catch {
+        pageCount = null;
+      }
+    } else if (data.mimeType && data.mimeType.startsWith('image/')) {
+      pageCount = 1;
+    }
+
     return this.prisma.providerOnboardingDocument.create({
-      data: { providerId, ...data },
+      data: { providerId, ...data, pageCount: pageCount ?? undefined },
     });
+  }
+
+  // ── PR1: Per-page document view tracking ────────────────────────────────
+
+  /**
+   * Records that an admin viewed a specific page of an onboarding document.
+   * Each (admin, document, page) tuple only needs to exist once — duplicates
+   * are harmless but inflate the activity log, so we skip if already present.
+   * Returns the running coverage for this document so the UI can update its
+   * checkmark immediately without a second round-trip.
+   */
+  async recordDocumentPageView(
+    adminUserId: string,
+    documentId: string,
+    pageNumber: number,
+    meta?: { ipAddress?: string; userAgent?: string },
+  ) {
+    const doc = await this.prisma.providerOnboardingDocument.findUnique({
+      where: { id: documentId },
+    });
+    if (!doc) throw new NotFoundException('Document not found');
+    if (pageNumber < 1) throw new BadRequestException('pageNumber must be >= 1');
+    if (doc.pageCount && pageNumber > doc.pageCount) {
+      throw new BadRequestException(`pageNumber exceeds document length (${doc.pageCount})`);
+    }
+
+    // Idempotency check — we don't want one drag-the-scrollbar gesture to
+    // create 200 audit rows for the same page.
+    const existing = await this.prisma.activityLog.findFirst({
+      where: {
+        userId: adminUserId,
+        action: 'view_page',
+        entity: 'provider_onboarding_document',
+        entityId: documentId,
+        metadata: { path: ['pageNumber'], equals: pageNumber },
+      },
+      select: { id: true },
+    });
+    if (!existing) {
+      const admin = await this.prisma.user.findUnique({
+        where: { id: adminUserId },
+        select: { name: true, role: true },
+      });
+      await this.prisma.activityLog.create({
+        data: {
+          userId: adminUserId,
+          username: admin?.name,
+          userRole: admin?.role,
+          action: 'view_page',
+          entity: 'provider_onboarding_document',
+          entityId: documentId,
+          status: 'success',
+          ipAddress: meta?.ipAddress,
+          userAgent: meta?.userAgent,
+          metadata: { pageNumber, providerId: doc.providerId, category: doc.category },
+        },
+      });
+    }
+
+    const viewedPages = await this.getViewedPagesForDoc(adminUserId, documentId);
+    return {
+      documentId,
+      pageCount: doc.pageCount ?? 1,
+      viewedPages,
+      complete: viewedPages.length >= (doc.pageCount ?? 1),
+    };
+  }
+
+  /** Returns the distinct page numbers this admin has acknowledged for a doc. */
+  private async getViewedPagesForDoc(adminUserId: string, documentId: string): Promise<number[]> {
+    const rows = await this.prisma.activityLog.findMany({
+      where: {
+        userId: adminUserId,
+        action: 'view_page',
+        entity: 'provider_onboarding_document',
+        entityId: documentId,
+      },
+      select: { metadata: true },
+    });
+    const pages = new Set<number>();
+    for (const r of rows) {
+      const p = (r.metadata as any)?.pageNumber;
+      if (typeof p === 'number') pages.add(p);
+    }
+    return Array.from(pages).sort((a, b) => a - b);
+  }
+
+  /**
+   * Computes whether the admin has scrolled through every page of every
+   * onboarding document for a provider — the precondition for approval.
+   * Returned shape is consumed directly by the admin review UI to render
+   * per-document checkmarks and gate the Approve button.
+   */
+  async getReviewReadiness(adminUserId: string, providerId: string) {
+    const docs = await this.prisma.providerOnboardingDocument.findMany({
+      where: { providerId },
+      orderBy: [{ category: 'asc' }, { uploadedAt: 'asc' }],
+    });
+
+    const results = await Promise.all(
+      docs.map(async (d) => {
+        const viewed = await this.getViewedPagesForDoc(adminUserId, d.id);
+        const total = d.pageCount ?? 1;
+        return {
+          id: d.id,
+          category: d.category,
+          fileName: d.fileName,
+          mimeType: d.mimeType,
+          pageCount: total,
+          viewedPages: viewed,
+          complete: viewed.length >= total,
+        };
+      }),
+    );
+
+    const readyToApprove = results.length > 0 && results.every((r) => r.complete);
+    return {
+      providerId,
+      documents: results,
+      totalDocuments: results.length,
+      completedDocuments: results.filter((r) => r.complete).length,
+      readyToApprove,
+    };
+  }
+
+  /** Stream an onboarding document inline (PDF viewer / image preview). */
+  async streamOnboardingDocument(providerId: string, docId: string, res: Response) {
+    const doc = await this.prisma.providerOnboardingDocument.findFirst({
+      where: { id: docId, providerId },
+    });
+    if (!doc) throw new NotFoundException('Onboarding document not found');
+    if (!existsSync(doc.filePath)) {
+      throw new NotFoundException('Onboarding document file is missing on disk');
+    }
+    const mime = doc.mimeType || 'application/octet-stream';
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Content-Disposition', `inline; filename="${doc.fileName}"`);
+    createReadStream(doc.filePath).pipe(res);
   }
 
   async removeOnboardingDocument(providerId: string, docId: string) {
@@ -688,6 +928,161 @@ export class ProvidersService {
         rejectionReason: null,
       },
     });
+  }
+
+  // ── PR2: Provider-admin manages users under their provider ──────────────
+
+  /** Users belonging to this provider, with optional status filter. */
+  async listProviderUsers(providerId: string, opts?: { status?: 'pending' | 'approved' | 'rejected' }) {
+    const where: any = { providerId, deletedAt: null };
+    if (opts?.status) where.providerApprovalStatus = opts.status;
+    const users = await this.prisma.user.findMany({
+      where,
+      orderBy: [{ providerApprovalStatus: 'asc' }, { createdAt: 'desc' }],
+      select: {
+        id: true, name: true, email: true, role: true, isActive: true,
+        createdAt: true, lastLogin: true,
+        emailVerifiedAt: true,
+        providerApprovalStatus: true,
+        providerApprovedAt: true,
+        providerApprovedBy: true,
+        providerApprovalComment: true,
+        providerRejectionReason: true,
+      },
+    });
+    return users;
+  }
+
+  /**
+   * Provider admin approves one of their users. Refuses to operate on
+   * users not attached to this provider (defense-in-depth on top of the
+   * RolesGuard) and refuses to act on non-pending users.
+   */
+  async approveProviderUser(
+    providerId: string,
+    targetUserId: string,
+    actingAdminId: string,
+    comment?: string,
+  ) {
+    if (!comment || !comment.trim()) {
+      throw new BadRequestException('An approval comment is required.');
+    }
+    const user = await this.prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!user || user.providerId !== providerId) {
+      throw new NotFoundException('User not found under this provider');
+    }
+    if (user.providerApprovalStatus === 'approved') return user;
+    if (user.providerApprovalStatus && user.providerApprovalStatus !== 'pending') {
+      throw new BadRequestException(`Cannot approve from status: ${user.providerApprovalStatus}`);
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: targetUserId },
+      data: {
+        providerApprovalStatus: 'approved',
+        providerApprovedBy: actingAdminId,
+        providerApprovedAt: new Date(),
+        providerApprovalComment: comment.trim(),
+        providerRejectionReason: null,
+      },
+    });
+
+    // Audit trail.
+    const admin = await this.prisma.user.findUnique({
+      where: { id: actingAdminId }, select: { name: true, role: true },
+    });
+    await this.prisma.activityLog.create({
+      data: {
+        userId: actingAdminId,
+        username: admin?.name,
+        userRole: admin?.role,
+        action: 'approve_provider_user',
+        entity: 'user',
+        entityId: targetUserId,
+        status: 'success',
+        metadata: { providerId, comment: comment.trim() },
+      },
+    });
+
+    const provider = await this.prisma.provider.findUnique({ where: { id: providerId }, select: { name: true } });
+    this.emailService.sendUserApprovalDecision({
+      recipientEmail: user.email,
+      recipientName: user.name,
+      providerName: provider?.name ?? 'your provider',
+      decision: 'approved',
+      comment: comment.trim(),
+      loginUrl: `${process.env.APP_URL || 'http://localhost:3000'}/login`,
+    }).catch(() => undefined);
+    // Real-time toast for the user — they'll see a confirmation the moment
+    // they refresh the login screen.
+    this.eventsGateway.emitUserDecision(targetUserId, {
+      providerId, providerName: provider?.name ?? 'your provider', decision: 'approved', comment: comment.trim(),
+    });
+
+    return updated;
+  }
+
+  async rejectProviderUser(
+    providerId: string,
+    targetUserId: string,
+    actingAdminId: string,
+    reason: string,
+    comment?: string,
+  ) {
+    if (!reason || !reason.trim()) {
+      throw new BadRequestException('A rejection reason is required.');
+    }
+    const user = await this.prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!user || user.providerId !== providerId) {
+      throw new NotFoundException('User not found under this provider');
+    }
+    if (user.providerApprovalStatus && user.providerApprovalStatus !== 'pending') {
+      throw new BadRequestException(`Cannot reject from status: ${user.providerApprovalStatus}`);
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: targetUserId },
+      data: {
+        providerApprovalStatus: 'rejected',
+        providerApprovedBy: actingAdminId,
+        providerApprovedAt: new Date(),
+        providerRejectionReason: reason.trim(),
+        providerApprovalComment: comment?.trim() || null,
+        isActive: false,
+      },
+    });
+
+    const admin = await this.prisma.user.findUnique({
+      where: { id: actingAdminId }, select: { name: true, role: true },
+    });
+    await this.prisma.activityLog.create({
+      data: {
+        userId: actingAdminId,
+        username: admin?.name,
+        userRole: admin?.role,
+        action: 'reject_provider_user',
+        entity: 'user',
+        entityId: targetUserId,
+        status: 'success',
+        metadata: { providerId, reason: reason.trim(), comment: comment?.trim() ?? null },
+      },
+    });
+
+    const provider = await this.prisma.provider.findUnique({ where: { id: providerId }, select: { name: true } });
+    this.emailService.sendUserApprovalDecision({
+      recipientEmail: user.email,
+      recipientName: user.name,
+      providerName: provider?.name ?? 'your provider',
+      decision: 'rejected',
+      rejectionReason: reason.trim(),
+      comment: comment?.trim(),
+      loginUrl: `${process.env.APP_URL || 'http://localhost:3000'}/login`,
+    }).catch(() => undefined);
+    this.eventsGateway.emitUserDecision(targetUserId, {
+      providerId, providerName: provider?.name ?? 'your provider', decision: 'rejected', reason: reason.trim(), comment: comment?.trim(),
+    });
+
+    return updated;
   }
 
   // ── A3: Monthly statement ──────────────────────────────────────────────

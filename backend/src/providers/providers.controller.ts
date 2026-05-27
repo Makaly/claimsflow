@@ -304,6 +304,45 @@ export class ProvidersController {
     return this.providersService.submitOnboarding(providerId);
   }
 
+  // ── PR2: provider-admin manages users under their provider ─────────────
+
+  /** List all users (or only pending) belonging to the current provider. */
+  @Get('self-service/users')
+  @UseGuards(RolesGuard)
+  @Roles('provider_admin')
+  listProviderUsers(@Request() req: any, @Query('status') status?: string) {
+    const providerId = this.ensureProviderId(req);
+    const allowed = ['pending', 'approved', 'rejected'];
+    return this.providersService.listProviderUsers(
+      providerId,
+      status && allowed.includes(status) ? { status: status as any } : undefined,
+    );
+  }
+
+  @Post('self-service/users/:userId/approve')
+  @UseGuards(RolesGuard)
+  @Roles('provider_admin')
+  approveProviderUser(
+    @Request() req: any,
+    @Param('userId') userId: string,
+    @Body() body: { comment: string },
+  ) {
+    const providerId = this.ensureProviderId(req);
+    return this.providersService.approveProviderUser(providerId, userId, req.user.userId, body?.comment);
+  }
+
+  @Post('self-service/users/:userId/reject')
+  @UseGuards(RolesGuard)
+  @Roles('provider_admin')
+  rejectProviderUser(
+    @Request() req: any,
+    @Param('userId') userId: string,
+    @Body() body: { reason: string; comment?: string },
+  ) {
+    const providerId = this.ensureProviderId(req);
+    return this.providersService.rejectProviderUser(providerId, userId, req.user.userId, body.reason, body.comment);
+  }
+
   /** Full onboarding packet — used by the provider to populate their own
    *  dashboard and by admins when reviewing. */
   @Get('self-service/onboarding-packet')
@@ -443,8 +482,12 @@ export class ProvidersController {
   @Post(':id/approve')
   @UseGuards(RolesGuard)
   @Roles('admin', 'claims_officer')
-  approveProvider(@Param('id') id: string, @Request() req) {
-    return this.providersService.approveProvider(id, req.user.userId);
+  approveProvider(
+    @Param('id') id: string,
+    @Body() body: { comment: string },
+    @Request() req,
+  ) {
+    return this.providersService.approveProvider(id, req.user.userId, body?.comment);
   }
 
   @Post(':id/reject')
@@ -452,10 +495,56 @@ export class ProvidersController {
   @Roles('admin', 'claims_officer')
   rejectProvider(
     @Param('id') id: string,
-    @Body() body: { reason: string },
+    @Body() body: { reason: string; comment?: string },
     @Request() req,
   ) {
-    return this.providersService.rejectProvider(id, body.reason, req.user.userId);
+    return this.providersService.rejectProvider(id, body.reason, req.user.userId, body.comment);
+  }
+
+  // ── PR1: per-page review tracking ───────────────────────────────────────
+
+  /** Stream an onboarding document inline so the PDF viewer can render it. */
+  @Get(':id/onboarding-documents/:docId/file')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'claims_officer', 'provider_admin')
+  async serveOnboardingDocument(
+    @Param('id') id: string,
+    @Param('docId') docId: string,
+    @Request() req: any,
+    @Res() res: Response,
+  ) {
+    // provider_admin may only access their OWN provider's docs.
+    if (req.user.role === 'provider_admin' && req.user.providerId !== id) {
+      throw new ForbiddenException('Access denied');
+    }
+    return this.providersService.streamOnboardingDocument(id, docId, res);
+  }
+
+  /** Admin POSTs once per page reached in the PDF viewer. Idempotent. */
+  @Post(':id/onboarding-documents/:docId/page-view')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'claims_officer')
+  recordDocumentPageView(
+    @Param('id') _id: string,
+    @Param('docId') docId: string,
+    @Body() body: { pageNumber: number },
+    @Request() req: any,
+  ) {
+    return this.providersService.recordDocumentPageView(
+      req.user.userId,
+      docId,
+      body?.pageNumber,
+      { ipAddress: req?.ip, userAgent: req?.headers?.['user-agent'] },
+    );
+  }
+
+  /** Per-document coverage map for the current admin — used by the approval
+   *  drawer to render checkmarks and gate the Approve button. */
+  @Get(':id/review-readiness')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'claims_officer')
+  getReviewReadiness(@Param('id') id: string, @Request() req: any) {
+    return this.providersService.getReviewReadiness(req.user.userId, id);
   }
 
   @Post(':id/suspend')

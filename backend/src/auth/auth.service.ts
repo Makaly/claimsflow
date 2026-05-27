@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
@@ -6,6 +6,35 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { EmailService } from '../notifications/email.service';
+import { EventsGateway } from '../notifications/events.gateway';
+import { EmailOtpService } from './email-otp.service';
+
+/** Login refusal when the user's email has not been verified yet. We throw
+ *  a 403 (not 401) so the frontend can distinguish "wrong password" from
+ *  "verify your inbox first" and route to the OTP screen instead of showing
+ *  an invalid-credentials error. */
+export class EmailNotVerifiedException extends ForbiddenException {
+  constructor(public readonly userEmail: string) {
+    super({ statusCode: 403, message: 'Email not verified', code: 'email_not_verified', email: userEmail });
+  }
+}
+
+/** PR2 — login refusal when a provider_user is awaiting approval from their
+ *  provider's admin. Frontend shows a "waiting for approval" screen rather
+ *  than the generic invalid-credentials error. */
+export class PendingProviderApprovalException extends ForbiddenException {
+  constructor(public readonly providerName: string | null) {
+    super({ statusCode: 403, message: 'Awaiting provider approval', code: 'pending_provider_approval', providerName });
+  }
+}
+
+/** PR2 — login refusal when a provider_user was rejected by their provider
+ *  admin. Reason is included so the frontend can show it. */
+export class ProviderApprovalRejectedException extends ForbiddenException {
+  constructor(public readonly reason: string | null) {
+    super({ statusCode: 403, message: 'Provider rejected your access', code: 'provider_rejected', reason });
+  }
+}
 
 @Injectable()
 export class AuthService {
@@ -13,6 +42,9 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private emailService: EmailService,
+    @Inject(forwardRef(() => EmailOtpService))
+    private emailOtpService: EmailOtpService,
+    private eventsGateway: EventsGateway,
   ) {}
 
   async register(
@@ -65,11 +97,17 @@ export class AuthService {
     });
 
     const { password: _, ...result } = user;
-    const access_token = this.generateToken(user.id, user.email);
+
+    // PR1 — kick off the OTP email. We deliberately do NOT issue an access
+    // token here; the caller must verify their email via /auth/verify-email-otp,
+    // which mints the token. Returning a token now would let an attacker who
+    // grabbed someone else's email proceed without proving ownership.
+    await this.emailOtpService.sendOtp(user.id).catch(() => undefined);
 
     return {
       user: result,
-      access_token,
+      requiresEmailVerification: true,
+      message: 'Account created. Check your email for the 6-digit verification code.',
     };
   }
 
@@ -127,6 +165,28 @@ export class AuthService {
       where: { id: user.id },
       data: { failedLoginAttempts: 0, lockedUntil: null, lastLogin: new Date() },
     });
+
+    // PR1 — block login when the user's email has never been verified.
+    // The 403 carries the email so the frontend can immediately send a
+    // fresh OTP and route to the verification screen.
+    if (!user.emailVerifiedAt) {
+      // Trigger a fresh OTP send so the user doesn't have to click "resend".
+      this.emailOtpService.sendOtp(user.id).catch(() => undefined);
+      throw new EmailNotVerifiedException(user.email);
+    }
+
+    // PR2 — block login for provider users that haven't been approved by
+    // their provider's admin yet. Internal staff have providerApprovalStatus
+    // = null so they pass through.
+    if (user.providerApprovalStatus === 'pending') {
+      const providerName = user.providerId
+        ? (await this.prisma.provider.findUnique({ where: { id: user.providerId }, select: { name: true } }))?.name ?? null
+        : null;
+      throw new PendingProviderApprovalException(providerName);
+    }
+    if (user.providerApprovalStatus === 'rejected') {
+      throw new ProviderApprovalRejectedException(user.providerRejectionReason);
+    }
 
     const { password: _, ...result } = user;
     const access_token = this.generateToken(user.id, user.email);
@@ -215,7 +275,18 @@ export class AuthService {
       // Provider fields
       providerName: string; type: string; licenseNumber: string
       phone: string; email: string; physicalAddress: string
-      contactPerson: string; city?: string; region?: string
+      contactPerson: string; city?: string; region?: string; country?: string
+      // PR1 — extra company-profile fields (procurement spec items a, b).
+      // All optional at registration; the provider completes them in the
+      // onboarding wizard before submitting for approval.
+      companyStructure?: 'sole_proprietorship' | 'partnership' | 'registered_company'
+      registrationNumber?: string
+      kraPin?: string
+      incorporationDate?: string
+      numberOfPartners?: number
+      ownerName?: string
+      ownerIdNumber?: string
+      yearsProvidingServices?: number
       // Admin user fields
       adminName: string; adminEmail: string; adminPassword: string
       // GDPR / KDPA consent — required at registration.
@@ -242,9 +313,18 @@ export class AuthService {
         contactPerson: dto.contactPerson,
         city: dto.city,
         region: dto.region,
+        country: dto.country,
         status: 'pending',
         approvalStatus: 'pending_approval',
         alternatePhone: '',
+        companyStructure: dto.companyStructure,
+        registrationNumber: dto.registrationNumber,
+        kraPin: dto.kraPin,
+        incorporationDate: dto.incorporationDate ? new Date(dto.incorporationDate) : undefined,
+        numberOfPartners: dto.numberOfPartners,
+        ownerName: dto.ownerName,
+        ownerIdNumber: dto.ownerIdNumber,
+        yearsProvidingServices: dto.yearsProvidingServices,
       },
     })
 
@@ -283,7 +363,7 @@ export class AuthService {
 
     const { password: _, ...userResult } = user
 
-    // Send welcome email — fire-and-forget so a mail failure doesn't break registration
+    // Welcome email — fire-and-forget so a mail failure doesn't break registration
     this.emailService.sendProviderWelcomeEmail({
       adminEmail: dto.adminEmail,
       adminName: dto.adminName,
@@ -291,12 +371,190 @@ export class AuthService {
       loginUrl: process.env.APP_URL || 'http://localhost:3000',
     }).catch(() => {});
 
+    // PR1 — send the 6-digit OTP. The frontend immediately routes to the
+    // verification screen and does not get a session token until the user
+    // proves they own the inbox.
+    this.emailOtpService.sendOtp(user.id).catch(() => undefined);
+
+    // Notify every admin / claims_officer that a new provider is waiting.
+    // Failure to deliver these alerts must not break the registration flow.
+    this.notifyAdminsOfNewProvider({
+      providerName: dto.providerName,
+      providerType: dto.type,
+      contactPerson: dto.contactPerson,
+      contactEmail: dto.adminEmail,
+    }).catch(() => undefined);
+    // Real-time bell badge for any reviewer who is currently signed in.
+    this.eventsGateway.emitProviderPending({
+      providerId: provider.id,
+      providerName: provider.name,
+      providerType: provider.type,
+    });
+
     return {
       user: userResult,
       provider,
-      access_token: this.generateToken(user.id, user.email),
-      message: 'Provider account created. Awaiting approval.',
+      requiresEmailVerification: true,
+      message: 'Provider account created. Check your email for a 6-digit code to verify your address.',
     }
+  }
+
+  /**
+   * PR2 — register a normal user under an existing approved provider.
+   * Creates the user in `pending` provider-approval state, sends an OTP for
+   * email verification, and notifies the provider's admins. Login is blocked
+   * until BOTH the email is verified AND a provider admin approves the user.
+   */
+  async registerUserUnderProvider(
+    dto: {
+      name: string;
+      email: string;
+      password: string;
+      providerId: string;
+      phone?: string;
+      acceptTerms: boolean;
+      policyVersion?: string;
+    },
+    meta?: { ipAddress?: string; userAgent?: string },
+  ) {
+    if (!dto.acceptTerms) {
+      throw new BadRequestException('You must accept the Terms of Service and Privacy Policy to register.');
+    }
+    if (!dto.providerId) {
+      throw new BadRequestException('Please select a provider to register under.');
+    }
+    if (dto.password.length < 8) {
+      throw new BadRequestException('Password must be at least 8 characters.');
+    }
+
+    // Verify the chosen provider is real and currently accepting new users.
+    const provider = await this.prisma.provider.findUnique({
+      where: { id: dto.providerId },
+      select: { id: true, name: true, approvalStatus: true, isActive: true },
+    });
+    if (!provider || provider.approvalStatus !== 'approved' || !provider.isActive) {
+      throw new BadRequestException('Provider is not available for new user registration.');
+    }
+
+    const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    if (existing) throw new UnauthorizedException('A user with this email already exists');
+
+    const hashed = await bcrypt.hash(dto.password, 10);
+    const user = await this.prisma.user.create({
+      data: {
+        name: dto.name,
+        email: dto.email,
+        password: hashed,
+        phone: dto.phone,
+        role: 'provider_user',
+        providerId: provider.id,
+        // Approval gate — provider_admin must approve before login is allowed.
+        providerApprovalStatus: 'pending',
+        consents: {
+          create: [
+            { purpose: 'terms_of_service', action: 'granted', version: dto.policyVersion, source: 'registration', ipAddress: meta?.ipAddress, userAgent: meta?.userAgent },
+            { purpose: 'privacy_policy', action: 'granted', version: dto.policyVersion, source: 'registration', ipAddress: meta?.ipAddress, userAgent: meta?.userAgent },
+          ],
+        },
+      },
+    });
+    const { password: _p, ...userResult } = user;
+
+    // Email OTP — required to prove inbox ownership.
+    await this.emailOtpService.sendOtp(user.id).catch(() => undefined);
+
+    // Alert this provider's admins (provider_admin role attached to the same providerId)
+    this.notifyProviderAdminsOfNewUser({
+      providerId: provider.id,
+      providerName: provider.name,
+      userName: user.name,
+      userEmail: user.email,
+    }).catch(() => undefined);
+    // Real-time bell badge for the provider's admins.
+    this.prisma.user.findMany({
+      where: {
+        providerId: provider.id,
+        role: 'provider_admin',
+        isActive: true, deletedAt: null,
+        providerApprovalStatus: 'approved',
+      },
+      select: { id: true },
+    }).then((admins) => {
+      this.eventsGateway.emitUserPending(
+        admins.map((a) => a.id),
+        { providerId: provider.id, providerName: provider.name, userId: user.id, userName: user.name, userEmail: user.email },
+      );
+    }).catch(() => undefined);
+
+    return {
+      user: userResult,
+      provider: { id: provider.id, name: provider.name },
+      requiresEmailVerification: true,
+      requiresProviderApproval: true,
+      message: 'Account created. Verify your email, then wait for your provider to approve access.',
+    };
+  }
+
+  /** Email every provider_admin attached to this provider. */
+  private async notifyProviderAdminsOfNewUser(meta: {
+    providerId: string; providerName: string; userName: string; userEmail: string;
+  }) {
+    const admins = await this.prisma.user.findMany({
+      where: {
+        providerId: meta.providerId,
+        role: 'provider_admin',
+        isActive: true,
+        deletedAt: null,
+        // Don't email admins who themselves haven't been approved/verified.
+        providerApprovalStatus: 'approved',
+        emailVerifiedAt: { not: null },
+      },
+      select: { email: true, name: true },
+    });
+    if (!admins.length) return;
+    const reviewUrl = `${process.env.APP_URL || 'http://localhost:3000'}/provider-users`;
+    await Promise.allSettled(
+      admins.map((a) =>
+        this.emailService.sendProviderUserPendingAlert({
+          adminEmail: a.email,
+          adminName: a.name,
+          providerName: meta.providerName,
+          userName: meta.userName,
+          userEmail: meta.userEmail,
+          reviewUrl,
+        }),
+      ),
+    );
+  }
+
+  /** Fan-out new-provider alert to every admin + claims_officer. Internal
+   *  helper used by registerProvider. */
+  private async notifyAdminsOfNewProvider(meta: {
+    providerName: string; providerType: string; contactPerson: string; contactEmail: string;
+  }) {
+    const admins = await this.prisma.user.findMany({
+      where: {
+        isActive: true,
+        deletedAt: null,
+        OR: [{ role: 'admin' }, { role: 'claims_officer' }],
+      },
+      select: { email: true, name: true },
+    });
+    if (!admins.length) return;
+    const reviewUrl = `${process.env.APP_URL || 'http://localhost:3000'}/provider-approvals`;
+    await Promise.allSettled(
+      admins.map(a =>
+        this.emailService.sendAdminNewProviderAlert({
+          adminEmail: a.email,
+          adminName: a.name,
+          providerName: meta.providerName,
+          providerType: meta.providerType,
+          contactPerson: meta.contactPerson,
+          contactEmail: meta.contactEmail,
+          reviewUrl,
+        }),
+      ),
+    );
   }
 
   async changePassword(userId: string, currentPassword: string, newPassword: string) {
@@ -405,5 +663,11 @@ export class AuthService {
   private generateToken(userId: string, email: string): string {
     const payload = { sub: userId, email };
     return this.jwtService.sign(payload);
+  }
+
+  /** Public token-mint helper used by the OTP-verification endpoint to log
+   *  the user in immediately after their email is confirmed. */
+  issueToken(userId: string, email: string): string {
+    return this.generateToken(userId, email);
   }
 }

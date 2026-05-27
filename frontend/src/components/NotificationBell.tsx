@@ -1,4 +1,4 @@
-import { Bell, CheckCheck, AlertTriangle, FileText, Scale, Package } from 'lucide-react'
+import { Bell, CheckCheck, AlertTriangle, FileText, Scale, Package, Building2, UserPlus, ShieldCheck, ShieldX } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -47,6 +47,26 @@ const typeConfig: Record<
     icon: Package,
     color: 'text-emerald-600 dark:text-emerald-400',
     bg: 'bg-emerald-50 dark:bg-emerald-950',
+  },
+  'provider:pending': {
+    icon: Building2,
+    color: 'text-amber-600 dark:text-amber-400',
+    bg: 'bg-amber-50 dark:bg-amber-950',
+  },
+  'provider:decision': {
+    icon: ShieldCheck,
+    color: 'text-cyan-600 dark:text-cyan-400',
+    bg: 'bg-cyan-50 dark:bg-cyan-950',
+  },
+  'user:pending': {
+    icon: UserPlus,
+    color: 'text-blue-600 dark:text-blue-400',
+    bg: 'bg-blue-50 dark:bg-blue-950',
+  },
+  'user:decision': {
+    icon: ShieldX,
+    color: 'text-purple-600 dark:text-purple-400',
+    bg: 'bg-purple-50 dark:bg-purple-950',
   },
 }
 

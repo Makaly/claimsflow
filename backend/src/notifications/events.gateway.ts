@@ -134,4 +134,36 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   emitBatchComplete(userId: string, batchNumber: string, totalClaims: number) {
     this.emitToUser(userId, 'batch:complete', { batchNumber, totalClaims, timestamp: new Date() });
   }
+
+  // ── PR3: provider + user approval workflow notifications ─────────────────
+
+  /** A new provider has submitted onboarding — alert CIC reviewers in real time. */
+  emitProviderPending(meta: { providerId: string; providerName: string; providerType: string }) {
+    const payload = { ...meta, timestamp: new Date() };
+    this.emitToRole('admin', 'provider:pending', payload);
+    this.emitToRole('claims_officer', 'provider:pending', payload);
+  }
+
+  /** A CIC reviewer has decided on a provider — tell the provider's admin users. */
+  emitProviderDecision(adminUserIds: string[], meta: {
+    providerId: string; providerName: string; decision: 'approved' | 'rejected'; comment?: string; reason?: string;
+  }) {
+    const payload = { ...meta, timestamp: new Date() };
+    for (const uid of adminUserIds) this.emitToUser(uid, 'provider:decision', payload);
+  }
+
+  /** A new user wants to join a provider — alert that provider's admins in real time. */
+  emitUserPending(providerAdminUserIds: string[], meta: {
+    providerId: string; providerName: string; userId: string; userName: string; userEmail: string;
+  }) {
+    const payload = { ...meta, timestamp: new Date() };
+    for (const uid of providerAdminUserIds) this.emitToUser(uid, 'user:pending', payload);
+  }
+
+  /** A provider admin has decided on a user — tell that user in real time. */
+  emitUserDecision(userId: string, meta: {
+    providerId: string; providerName: string; decision: 'approved' | 'rejected'; comment?: string; reason?: string;
+  }) {
+    this.emitToUser(userId, 'user:decision', { ...meta, timestamp: new Date() });
+  }
 }

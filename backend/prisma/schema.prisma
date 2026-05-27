@@ -9,69 +9,82 @@ datasource db {
 }
 
 model User {
-  id                    String                  @id @default(uuid())
-  email                 String                  @unique
-  password              String
-  name                  String
-  role                  String                  @default("user")
-  isActive              Boolean                 @default(true)
-  requirePasswordChange Boolean                 @default(false)
-  lastLogin             DateTime?
-  failedLoginAttempts   Int                     @default(0)
-  lockedUntil           DateTime?
-  twoFactorEnabled      Boolean                 @default(false)
-  twoFactorSecret       String?
-  phone                 String?
-  jobTitle              String?
-  department            String?
-  location              String?
-  timezone              String?
-  language              String?
-  locale                String?  @default("en") // C5: UI + notification locale
-  bio                   String?
-  avatarUrl             String?
-  savedSignatures       Json?                   @default("[]")
-  providerId            String?
-  branchId              String?
-  passwordResetToken    String?
-  passwordResetExpiry   DateTime?
-  createdAt             DateTime                @default(now())
-  updatedAt             DateTime                @updatedAt
-  createdBy             String?
-  updatedBy             String?
-  isOnLeave             Boolean                 @default(false)
-  relieverId            String?
-  reliever              User?                   @relation("UserReliever", fields: [relieverId], references: [id])
-  relievingFor          User[]                  @relation("UserReliever")
+  id                      String                   @id @default(uuid())
+  email                   String                   @unique
+  password                String
+  name                    String
+  role                    String                   @default("user")
+  isActive                Boolean                  @default(true)
+  requirePasswordChange   Boolean                  @default(false)
+  lastLogin               DateTime?
+  failedLoginAttempts     Int                      @default(0)
+  lockedUntil             DateTime?
+  twoFactorEnabled        Boolean                  @default(false)
+  twoFactorSecret         String?
+  phone                   String?
+  jobTitle                String?
+  department              String?
+  location                String?
+  timezone                String?
+  language                String?
+  locale                  String?                  @default("en") // C5: UI + notification locale
+  bio                     String?
+  avatarUrl               String?
+  savedSignatures         Json?                    @default("[]")
+  providerId              String?
+  branchId                String?
+  passwordResetToken      String?
+  passwordResetExpiry     DateTime?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  createdBy               String?
+  updatedBy               String?
+  isOnLeave               Boolean                  @default(false)
+  relieverId              String?
+  reliever                User?                    @relation("UserReliever", fields: [relieverId], references: [id])
+  relievingFor            User[]                   @relation("UserReliever")
+  // PR1 — email OTP verification. Set when the user confirms ownership of
+  // their inbox during registration. Login is blocked until this is non-null.
+  emailVerifiedAt         DateTime?
+  emailVerificationTokens EmailVerificationToken[]
+  // PR2 — provider-admin approval workflow for users registered under a
+  // provider. NULL for non-provider users (admin, claims_officer, etc.).
+  // 'pending' | 'approved' | 'rejected' for provider_admin / provider_user.
+  // Login is blocked unless this is null or 'approved'.
+  providerApprovalStatus  String?
+  providerApprovedBy      String?
+  providerApprovedAt      DateTime?
+  providerApprovalComment String?
+  providerRejectionReason String?
   // GDPR Art. 17 — soft-erasure marker. When set, login is blocked and PII
   // is replaced with anonymised tokens but referential integrity for legally
   // retained claim records (Insurance Act 2017 s.83 — 7 year retention) is
   // preserved.
-  deletedAt             DateTime?
-  activityLogs          ActivityLog[]
-  claimsApproved        ClaimApproval[]
-  claimsAssigned        Claim[]                 @relation("ClaimAssignee")
-  claimsCreated         Claim[]                 @relation("ClaimCreator")
-  notifications         Notification[]
-  userRoles             UserRole[]
-  provider              Provider?               @relation(fields: [providerId], references: [id])
-  appeals               Appeal[]                @relation("AppealAdjudicator")
-  appealsFiled          Appeal[]                @relation("AppealFiler")
-  appealMessages        AppealMessage[]         @relation("AppealMessageSender")
-  consents              ConsentRecord[]
-  dataExports           DataExportRequest[]
-  decisionReviews       DecisionReviewRequest[]
-  scanEvents            ScanEvent[]             @relation("ScanEventUser")
-  scanMeteringUpdates   ScanMeteringSettings[]  @relation("ScanMeteringSettingsUpdatedBy")
-  activeStatus          String                  @default("active")
-  seniorityTier         String                  @default("mid")
-  notificationPrefs     NotificationPreference?
-  notificationQueue     NotificationQueue[]
+  deletedAt               DateTime?
+  activityLogs            ActivityLog[]
+  claimsApproved          ClaimApproval[]
+  claimsAssigned          Claim[]                  @relation("ClaimAssignee")
+  claimsCreated           Claim[]                  @relation("ClaimCreator")
+  notifications           Notification[]
+  userRoles               UserRole[]
+  provider                Provider?                @relation(fields: [providerId], references: [id])
+  appeals                 Appeal[]                 @relation("AppealAdjudicator")
+  appealsFiled            Appeal[]                 @relation("AppealFiler")
+  appealMessages          AppealMessage[]          @relation("AppealMessageSender")
+  consents                ConsentRecord[]
+  dataExports             DataExportRequest[]
+  decisionReviews         DecisionReviewRequest[]
+  scanEvents              ScanEvent[]              @relation("ScanEventUser")
+  scanMeteringUpdates     ScanMeteringSettings[]   @relation("ScanMeteringSettingsUpdatedBy")
+  activeStatus            String                   @default("active")
+  seniorityTier           String                   @default("mid")
+  notificationPrefs       NotificationPreference?
+  notificationQueue       NotificationQueue[]
   // Phase 4 — nullable tenant scaffolding (see Tenant model at end of file).
-  tenantId              String?
-  tenant                Tenant?                 @relation(fields: [tenantId], references: [id], onDelete: SetNull)
-  casesOwned            Case[]                  @relation("CaseOwner")
-  caseComments          CaseComment[]           @relation("CaseCommentAuthor")
+  tenantId                String?
+  tenant                  Tenant?                  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  casesOwned              Case[]                   @relation("CaseOwner")
+  caseComments            CaseComment[]            @relation("CaseCommentAuthor")
 
   @@index([providerId])
   @@index([email])
@@ -80,6 +93,25 @@ model User {
   @@index([activeStatus])
   @@index([tenantId])
   @@map("users")
+}
+
+/// One-time codes used to verify a user owns the email address they
+/// registered with. Codes are bcrypt-hashed at rest, expire after 10 minutes,
+/// and may be attempted at most 5 times before being burned.
+model EmailVerificationToken {
+  id         String    @id @default(uuid())
+  userId     String
+  email      String
+  codeHash   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  attempts   Int       @default(0)
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([email])
+  @@map("email_verification_tokens")
 }
 
 /// Records every consent grant or withdrawal under KDPA Art. 7 / GDPR Art. 7.
@@ -214,11 +246,19 @@ model Provider {
   physicalAddress        String
   city                   String?
   region                 String?
+  // PR3.1 — ISO-3166 2-letter country code. Defaults to 'KE' for backfill
+  // and for forms that don't surface a picker; the new provider wizard
+  // requires the user to confirm/change it.
+  country                String?                      @default("KE")
   status                 String                       @default("pending")
   approvalStatus         String                       @default("pending_approval")
   approvedBy             String?
   approvedAt             DateTime?
   rejectionReason        String?
+  // PR1 — free-text comment captured by the reviewing admin at the moment of
+  // approval or rejection. Stored alongside `rejectionReason` so an approval
+  // can also carry a non-blocking note.
+  approvalComment        String?
   parentProviderId       String?
   invoiceUploaderId      String?
   companyStructure       String?
@@ -273,6 +313,10 @@ model ProviderOnboardingDocument {
   filePath   String
   fileSize   Int?
   mimeType   String?
+  // PR1 — number of pages in the uploaded document. PDF page count is
+  // extracted on upload via pdf-parse; images default to 1. Used by the
+  // admin review gate to require per-page acknowledgement before approval.
+  pageCount  Int?
   uploadedAt DateTime @default(now())
   uploadedBy String?
   provider   Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
@@ -305,8 +349,8 @@ model ProviderReference {
 }
 
 model Branch {
-  id                String   @id @default(uuid())
-  code              String   @unique
+  id                String      @id @default(uuid())
+  code              String      @unique
   name              String
   providerId        String
   region            String?
@@ -317,12 +361,12 @@ model Branch {
   contactPerson     String?
   invoiceUploaderId String?
   branchManagerId   String?
-  isActive          Boolean  @default(true)
-  isApproved        Boolean  @default(false)
+  isActive          Boolean     @default(true)
+  isApproved        Boolean     @default(false)
   notes             String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  provider          Provider @relation(fields: [providerId], references: [id])
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  provider          Provider    @relation(fields: [providerId], references: [id])
   scanEvents        ScanEvent[] @relation("ScanEventBranch")
 
   @@index([providerId])
@@ -363,93 +407,93 @@ model BatchSubmission {
 }
 
 model Claim {
-  id                    String               @id @default(uuid())
-  claimNumber           String               @unique
-  batchNumber           String?
-  folioNumber           String?
-  barcode               String               @unique
-  providerId            String
-  memberNumber          String?
-  memberName            String?
-  patientName           String?
-  patientId             String?
-  dateOfBirth           DateTime?
-  invoiceNumber         String?
-  invoiceDate           DateTime?
-  invoiceAmount         Float?
-  dateOfService         DateTime?
-  diagnosis             String?
-  treatment             String?
-  procedureCodes        String[]
-  status                String               @default("submitted")
-  workflowStage         String               @default("initial_review")
-  assignedTo            String?
-  priority              String               @default("normal")
-  isRejected            Boolean              @default(false)
-  rejectionReason       String?
-  rejectedAt            DateTime?
-  rejectedBy            String?
-  resubmissionCount     Int                  @default(0)
-  originalClaimId       String?
-  isComplete            Boolean              @default(false)
-  missingDocuments      String[]
-  completenessCheckedAt DateTime?
-  completenessCheckedBy String?
-  ocrStatus             String               @default("pending")
-  ocrConfidence         Float?
-  ocrProcessedAt        DateTime?
-  requiresManualReview  Boolean              @default(false)
-  batchId               String?
-  assignmentStrategy    String?
-  submittedAt           DateTime             @default(now())
-  reviewedAt            DateTime?
-  approvedAt            DateTime?
-  paidAt                DateTime?
-  createdAt             DateTime             @default(now())
-  updatedAt             DateTime             @updatedAt
-  createdBy             String?
-  uploadedBy            String?
-  notes                 String?
-  internalNotes         String?
-  fraudSignals          Json?                @default("[]")
-  annotations           Json?                @default("[]")
-  branchId              String?
-  approvals             ClaimApproval[]
-  emails                ClaimEmail[]
-  statusHistory         ClaimStatusHistory[]
-  assignedUser          User?                @relation("ClaimAssignee", fields: [assignedTo], references: [id])
-  batch                 BatchSubmission?     @relation(fields: [batchId], references: [id])
-  creator               User?                @relation("ClaimCreator", fields: [createdBy], references: [id])
-  provider              Provider             @relation(fields: [providerId], references: [id])
-  documents             Document[]
-  edmsData              EdmsDocument?
-  ocrData               OcrExtraction?
-  lineItems             InvoiceLineItem[]
-  appeals               Appeal[]
-  slaBreached           Boolean              @default(false)
-  slaBreachedAt         DateTime?
-  slaDeadline           DateTime?
-  eligibilityStatus     String?
-  eligibilityCheckedAt  DateTime?
-  eligibilityNotes      String?
+  id                      String               @id @default(uuid())
+  claimNumber             String               @unique
+  batchNumber             String?
+  folioNumber             String?
+  barcode                 String               @unique
+  providerId              String
+  memberNumber            String?
+  memberName              String?
+  patientName             String?
+  patientId               String?
+  dateOfBirth             DateTime?
+  invoiceNumber           String?
+  invoiceDate             DateTime?
+  invoiceAmount           Float?
+  dateOfService           DateTime?
+  diagnosis               String?
+  treatment               String?
+  procedureCodes          String[]
+  status                  String               @default("submitted")
+  workflowStage           String               @default("initial_review")
+  assignedTo              String?
+  priority                String               @default("normal")
+  isRejected              Boolean              @default(false)
+  rejectionReason         String?
+  rejectedAt              DateTime?
+  rejectedBy              String?
+  resubmissionCount       Int                  @default(0)
+  originalClaimId         String?
+  isComplete              Boolean              @default(false)
+  missingDocuments        String[]
+  completenessCheckedAt   DateTime?
+  completenessCheckedBy   String?
+  ocrStatus               String               @default("pending")
+  ocrConfidence           Float?
+  ocrProcessedAt          DateTime?
+  requiresManualReview    Boolean              @default(false)
+  batchId                 String?
+  assignmentStrategy      String?
+  submittedAt             DateTime             @default(now())
+  reviewedAt              DateTime?
+  approvedAt              DateTime?
+  paidAt                  DateTime?
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
+  createdBy               String?
+  uploadedBy              String?
+  notes                   String?
+  internalNotes           String?
+  fraudSignals            Json?                @default("[]")
+  annotations             Json?                @default("[]")
+  branchId                String?
+  approvals               ClaimApproval[]
+  emails                  ClaimEmail[]
+  statusHistory           ClaimStatusHistory[]
+  assignedUser            User?                @relation("ClaimAssignee", fields: [assignedTo], references: [id])
+  batch                   BatchSubmission?     @relation(fields: [batchId], references: [id])
+  creator                 User?                @relation("ClaimCreator", fields: [createdBy], references: [id])
+  provider                Provider             @relation(fields: [providerId], references: [id])
+  documents               Document[]
+  edmsData                EdmsDocument?
+  ocrData                 OcrExtraction?
+  lineItems               InvoiceLineItem[]
+  appeals                 Appeal[]
+  slaBreached             Boolean              @default(false)
+  slaBreachedAt           DateTime?
+  slaDeadline             DateTime?
+  eligibilityStatus       String?
+  eligibilityCheckedAt    DateTime?
+  eligibilityNotes        String?
   // Fraud-officer verdict relayed back to the claims officer.
   // Values: null | 'cleared' | 'confirmed'.
-  fraudVerdict             String?
-  fraudVerdictAt           DateTime?
-  fraudVerdictBy           String?
-  fraudVerdictNotes        String?
+  fraudVerdict            String?
+  fraudVerdictAt          DateTime?
+  fraudVerdictBy          String?
+  fraudVerdictNotes       String?
   // Final approval by the claims officer, after maker_checker + (optional) fraud review.
-  claimsOfficerApprovedAt  DateTime?
-  claimsOfficerApprovedBy  String?
+  claimsOfficerApprovedAt DateTime?
+  claimsOfficerApprovedBy String?
   // Phase 4 — nullable tenant scaffolding.
-  tenantId                 String?
-  tenant                   Tenant?              @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  tenantId                String?
+  tenant                  Tenant?              @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   // D1: flag set when claim originates from a structured HMIS/FHIR feed
-  structuredSource         Boolean  @default(false)
+  structuredSource        Boolean              @default(false)
   // T2.3 — signal-lift labelling
-  isLabelled               Boolean  @default(false)
-  cases                    Case[]
-  label                    ClaimLabel?
+  isLabelled              Boolean              @default(false)
+  cases                   Case[]
+  label                   ClaimLabel?
 
   @@index([claimNumber])
   @@index([barcode])
@@ -684,23 +728,23 @@ model DocumentZone {
 }
 
 model UnknownDocument {
-  id              String    @id @default(uuid())
-  filePath        String
-  fileName        String
-  mimeType        String    @default("application/pdf")
-  guessedType     String?
-  guessedProvider String?
-  rawExtract      Json?
-  status          String    @default("pending")
-  reviewedBy      String?
-  reviewedAt      DateTime?
+  id                   String    @id @default(uuid())
+  filePath             String
+  fileName             String
+  mimeType             String    @default("application/pdf")
+  guessedType          String?
+  guessedProvider      String?
+  rawExtract           Json?
+  status               String    @default("pending")
+  reviewedBy           String?
+  reviewedAt           DateTime?
   notes                String?
   classificationReason String?
   claimId              String?
   uploadedBy           String?
   linkedTemplateId     String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   @@index([status])
   @@index([createdAt])
@@ -919,23 +963,23 @@ model ClaimEmail {
 }
 
 model Appeal {
-  id              String           @id @default(uuid())
+  id              String          @id @default(uuid())
   claimId         String
   providerId      String
   filedBy         String
   reason          String
   additionalNotes String?
-  status          String           @default("pending")
+  status          String          @default("pending")
   adjudicatedBy   String?
   adjudicatedAt   DateTime?
   outcome         String?
   outcomeNotes    String?
-  documents       Json?            @default("[]")
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  claim           Claim            @relation(fields: [claimId], references: [id])
-  filer           User             @relation("AppealFiler", fields: [filedBy], references: [id])
-  adjudicator     User?            @relation("AppealAdjudicator", fields: [adjudicatedBy], references: [id])
+  documents       Json?           @default("[]")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  claim           Claim           @relation(fields: [claimId], references: [id])
+  filer           User            @relation("AppealFiler", fields: [filedBy], references: [id])
+  adjudicator     User?           @relation("AppealAdjudicator", fields: [adjudicatedBy], references: [id])
   messages        AppealMessage[]
 
   @@index([claimId])
@@ -983,8 +1027,8 @@ model PaymentAdvice {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  tenantId         String?
-  tenant           Tenant?   @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
 
   @@index([providerId])
   @@index([status])
@@ -994,18 +1038,18 @@ model PaymentAdvice {
 
 /// B1: Mobile money payout transaction tracking (M-Pesa / Airtel Money)
 model PayoutTransaction {
-  id                         String    @id @default(uuid())
-  adviceId                   String
-  carrier                    String    // 'mpesa' | 'airtel'
-  msisdn                     String?
-  amount                     Float
-  status                     String    @default("pending") // pending | success | failed
-  originatorConversationId   String?
-  carrierRef                 String?
-  lastError                  String?
-  attempts                   Int       @default(0)
-  createdAt                  DateTime  @default(now())
-  updatedAt                  DateTime  @updatedAt
+  id                       String   @id @default(uuid())
+  adviceId                 String
+  carrier                  String // 'mpesa' | 'airtel'
+  msisdn                   String?
+  amount                   Float
+  status                   String   @default("pending") // pending | success | failed
+  originatorConversationId String?
+  carrierRef               String?
+  lastError                String?
+  attempts                 Int      @default(0)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 
   @@index([adviceId])
   @@index([status])
@@ -1104,7 +1148,7 @@ model ClaimLabel {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  claim            Claim    @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  claim Claim @relation(fields: [claimId], references: [id], onDelete: Cascade)
 
   @@index([label])
   @@index([source])
@@ -1149,23 +1193,23 @@ model ProviderAlias {
 /// and correctedValue captures what the field should have been, creating
 /// a supervised training signal for future zone refinement.
 model OcrZoneHit {
-  id             String        @id @default(uuid())
+  id             String       @id @default(uuid())
   zoneId         String
   templateId     String
   claimId        String?
   documentId     String?
-  fieldName      String        // e.g. "invoice_amount"
-  fieldLabel     String        // e.g. "Invoice Amount"
+  fieldName      String // e.g. "invoice_amount"
+  fieldLabel     String // e.g. "Invoice Amount"
   extractedValue String?
-  confidence     Float?        // 0–1
-  engine         String?       // "gemini" | "anthropic" | "tesseract"
-  wasCorrect     Boolean?      // null = unverified; true = confirmed correct; false = corrected
-  correctedValue String?       // what the user set it to
-  correctedBy    String?       // userId
+  confidence     Float? // 0–1
+  engine         String? // "gemini" | "anthropic" | "tesseract"
+  wasCorrect     Boolean? // null = unverified; true = confirmed correct; false = corrected
+  correctedValue String? // what the user set it to
+  correctedBy    String? // userId
   correctedAt    DateTime?
-  createdAt      DateTime      @default(now())
-  zone           DocumentZone  @relation(fields: [zoneId], references: [id], onDelete: Cascade)
-  template       OcrTemplate   @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+  zone           DocumentZone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  template       OcrTemplate  @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
   @@index([zoneId])
   @@index([templateId])
@@ -1179,34 +1223,34 @@ model OcrZoneHit {
 /// Each row represents one billed service, drug, or procedure extracted
 /// from the invoice table via layout-aware OCR or a vision model.
 model InvoiceLineItem {
-  id                  String   @id @default(uuid())
-  claimId             String
-  lineNumber          Int?
-  description         String
-  itemName            String?
-  category            String?
-  quantity            Float?
-  unitPrice           Float?
-  totalPrice          Float?
-  taxAmount           Float?
-  discount            Float?
-  currency            String   @default("KES")
-  serviceDate         String?
-  procedureCode       String?
+  id                 String   @id @default(uuid())
+  claimId            String
+  lineNumber         Int?
+  description        String
+  itemName           String?
+  category           String?
+  quantity           Float?
+  unitPrice          Float?
+  totalPrice         Float?
+  taxAmount          Float?
+  discount           Float?
+  currency           String   @default("KES")
+  serviceDate        String?
+  procedureCode      String?
   // Confidence scores (0-1)
-  ocrConfidence       Float?
-  layoutConfidence    Float?
-  semanticConfidence  Float?
-  overallConfidence   Float?
+  ocrConfidence      Float?
+  layoutConfidence   Float?
+  semanticConfidence Float?
+  overallConfidence  Float?
   // Fraud detection
-  fraudRisk           String?  // "low" | "medium" | "high"
-  fraudRiskScore      Float?   // 0-1
-  fraudFlags          String[]
-  arithmeticValid     Boolean? // qty × unitPrice ≈ totalPrice
-  rawText             String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-  claim               Claim    @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  fraudRisk          String? // "low" | "medium" | "high"
+  fraudRiskScore     Float? // 0-1
+  fraudFlags         String[]
+  arithmeticValid    Boolean? // qty × unitPrice ≈ totalPrice
+  rawText            String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  claim              Claim    @relation(fields: [claimId], references: [id], onDelete: Cascade)
 
   @@index([claimId])
   @@index([fraudRisk])
@@ -1217,13 +1261,13 @@ model InvoiceLineItem {
 /// AnomalyScoringService.calibrateWeights(). One row is the current
 /// active model; older rows are kept for audit / rollback.
 model FraudModelWeights {
-  id          String   @id @default(uuid())
-  weights     Json     // { factorName: weight, ... }
-  sampleSize  Int
-  fraudCount  Int
+  id              String   @id @default(uuid())
+  weights         Json // { factorName: weight, ... }
+  sampleSize      Int
+  fraudCount      Int
   legitimateCount Int
-  trainedAt   DateTime @default(now())
-  isActive    Boolean  @default(false)
+  trainedAt       DateTime @default(now())
+  isActive        Boolean  @default(false)
 
   @@index([isActive])
   @@index([trainedAt])
@@ -1232,17 +1276,17 @@ model FraudModelWeights {
 
 /// Case management (F1). status: open | on-hold | resolved | escalated.
 model Case {
-  id        String         @id @default(uuid())
+  id        String        @id @default(uuid())
   claimId   String
   ownerId   String?
-  status    String         @default("open")
+  status    String        @default("open")
   slaDueAt  DateTime?
-  openedAt  DateTime       @default(now())
+  openedAt  DateTime      @default(now())
   closedAt  DateTime?
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
-  claim     Claim          @relation(fields: [claimId], references: [id], onDelete: Cascade)
-  owner     User?          @relation("CaseOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  claim     Claim         @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  owner     User?         @relation("CaseOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   comments  CaseComment[]
   links     CaseLink[]
 
@@ -1359,13 +1403,13 @@ model FeatureFlag {
 
 /// Records monthly RTO/RPO measurements from the nightly restore drill (E2).
 model DrMeasurement {
-  id          String   @id @default(uuid())
-  measuredAt  DateTime
-  rtoSeconds  Int
-  rpoSeconds  Int
-  backupKey   String
-  rawJson     Json?
-  createdAt   DateTime @default(now())
+  id         String   @id @default(uuid())
+  measuredAt DateTime
+  rtoSeconds Int
+  rpoSeconds Int
+  backupKey  String
+  rawJson    Json?
+  createdAt  DateTime @default(now())
 
   @@index([measuredAt(sort: Desc)])
   @@map("dr_measurements")
@@ -1375,16 +1419,16 @@ model DrMeasurement {
 /// status: 'candidate' = trained but not yet promoted; 'active' = currently
 /// serving predictions; 'superseded' = replaced by a newer active run.
 model ModelVersion {
-  id          String   @id @default(uuid())
-  trainedAt   DateTime @default(now())
-  sampleSize  Int
-  fraudCount  Int
+  id              String    @id @default(uuid())
+  trainedAt       DateTime  @default(now())
+  sampleSize      Int
+  fraudCount      Int
   legitimateCount Int
-  metricsJson Json     // { aucRoc, precisionAtK, psi, ... }
-  status      String   @default("candidate") // "candidate" | "active" | "superseded"
-  promotedAt  DateTime?
-  supersededAt DateTime?
-  notes       String?
+  metricsJson     Json // { aucRoc, precisionAtK, psi, ... }
+  status          String    @default("candidate") // "candidate" | "active" | "superseded"
+  promotedAt      DateTime?
+  supersededAt    DateTime?
+  notes           String?
 
   @@index([status])
   @@index([trainedAt])
@@ -1395,20 +1439,20 @@ model ModelVersion {
 
 /// One row per bank statement line imported from MT940, camt.053, or CSV.
 model BankStatementLine {
-  id            String   @id @default(uuid())
-  uploadId      String   // groups lines from the same file upload
-  format        String   // "mt940" | "camt053" | "csv"
-  reference     String?
-  amount        Float
-  currency      String   @default("KES")
-  valueDate     DateTime
-  description   String?
-  status        String   @default("unreconciled") // "unreconciled" | "matched" | "written_off"
+  id             String    @id @default(uuid())
+  uploadId       String // groups lines from the same file upload
+  format         String // "mt940" | "camt053" | "csv"
+  reference      String?
+  amount         Float
+  currency       String    @default("KES")
+  valueDate      DateTime
+  description    String?
+  status         String    @default("unreconciled") // "unreconciled" | "matched" | "written_off"
   matchedClaimId String?
-  matchedAt     DateTime?
-  matchedBy     String?
+  matchedAt      DateTime?
+  matchedBy      String?
   writeOffReason String?
-  createdAt     DateTime @default(now())
+  createdAt      DateTime  @default(now())
 
   @@index([uploadId])
   @@index([status])
@@ -1422,7 +1466,7 @@ model BankStatementLine {
 /// Maps a claim-type/benefit-category to a GL account code.
 model GlAccountMapping {
   id          String   @id @default(uuid())
-  claimType   String   // "inpatient" | "outpatient" | "dental" | "optical" | "maternity"
+  claimType   String // "inpatient" | "outpatient" | "dental" | "optical" | "maternity"
   accountCode String
   accountName String
   description String?
@@ -1443,7 +1487,7 @@ model GlPostingLog {
   postedAt    DateTime @default(now())
   claimCount  Int
   totalAmount Float
-  target      String   // "csv" | "sap" | "oracle" | "sage"
+  target      String // "csv" | "sap" | "oracle" | "sage"
   status      String   @default("success") // "success" | "failed"
   errorMsg    String?
   outputPath  String?
@@ -1456,16 +1500,16 @@ model GlPostingLog {
 // ── A4: NPS ────────────────────────────────────────────────────────────────
 
 model NpsResponse {
-  id          String   @id @default(uuid())
-  claimId     String?
-  memberId    String?
-  score       Int      // 0-10
-  comment     String?
-  channel     String   @default("in_app") // "in_app" | "whatsapp" | "email"
-  claimType   String?
-  providerId  String?
+  id              String   @id @default(uuid())
+  claimId         String?
+  memberId        String?
+  score           Int // 0-10
+  comment         String?
+  channel         String   @default("in_app") // "in_app" | "whatsapp" | "email"
+  claimType       String?
+  providerId      String?
   rejectionReason String?
-  createdAt   DateTime @default(now())
+  createdAt       DateTime @default(now())
 
   @@index([claimId])
   @@index([memberId])
@@ -1488,8 +1532,8 @@ model ScanMeteringSettings {
   monthlyQuota    Int?
   alertThreshold  Int      @default(80)
 
-  provider        Provider          @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  updatedBy       User?             @relation("ScanMeteringSettingsUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  provider  Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  updatedBy User?    @relation("ScanMeteringSettingsUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
 
   @@map("scan_metering_settings")
 }
@@ -1499,12 +1543,12 @@ model ScanMeteringSettings {
 /// Documents indexed into the assistant's knowledge base.
 /// embedding is stored as vector(1536) once pgvector is enabled via migration.
 model AssistantDocument {
-  id        String   @id @default(uuid())
-  source    String   // e.g. "policy/health-2024.pdf", "circular/MOH-2023-12.md"
+  id        String                       @id @default(uuid())
+  source    String // e.g. "policy/health-2024.pdf", "circular/MOH-2023-12.md"
   content   String
   embedding Unsupported("vector(1536)")?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime                     @default(now())
+  updatedAt DateTime                     @updatedAt
 
   @@index([source])
   @@map("assistant_documents")
@@ -1512,14 +1556,14 @@ model AssistantDocument {
 
 /// Audit log: every query posed to the assistant and its answer + citations.
 model AssistantInteraction {
-  id           String   @id @default(uuid())
-  userId       String?
-  query        String
-  answer       String
-  citations    Json     @default("[]") // [{source, excerpt}]
+  id            String   @id @default(uuid())
+  userId        String?
+  query         String
+  answer        String
+  citations     Json     @default("[]") // [{source, excerpt}]
   topSimilarity Float?
-  refused      Boolean  @default(false)
-  createdAt    DateTime @default(now())
+  refused       Boolean  @default(false)
+  createdAt     DateTime @default(now())
 
   @@index([userId])
   @@index([createdAt])
@@ -1530,18 +1574,18 @@ model AssistantInteraction {
 
 /// Policy rule governing automatic approval of low-risk claims.
 model GreenLaneRule {
-  id                     String   @id @default(uuid())
-  name                   String
-  minValue               Float?
-  maxValue               Float?
-  minScorecardQuality    Float?
-  minOcrConfidence       Float?
-  maxFraudScore          Float?
-  requireNoSignals       Boolean  @default(true)
-  isActive               Boolean  @default(true)
-  providerId             String?  // null = applies globally
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  id                  String   @id @default(uuid())
+  name                String
+  minValue            Float?
+  maxValue            Float?
+  minScorecardQuality Float?
+  minOcrConfidence    Float?
+  maxFraudScore       Float?
+  requireNoSignals    Boolean  @default(true)
+  isActive            Boolean  @default(true)
+  providerId          String? // null = applies globally
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   @@index([isActive])
   @@index([providerId])
@@ -1551,16 +1595,16 @@ model GreenLaneRule {
 // ─── D1: HL7 / FHIR connector ────────────────────────────────────────────────
 
 model HmisProviderConfig {
-  id            String   @id @default(uuid())
-  providerId    String   @unique
-  endpointUrl   String?
-  hl7Version    String   @default("2.5")
-  fhirVersion   String   @default("R4")
-  authType      String   @default("none") // "none" | "basic" | "bearer"
-  authSecret    String?
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id          String   @id @default(uuid())
+  providerId  String   @unique
+  endpointUrl String?
+  hl7Version  String   @default("2.5")
+  fhirVersion String   @default("R4")
+  authType    String   @default("none") // "none" | "basic" | "bearer"
+  authSecret  String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@map("hmis_provider_configs")
 }
@@ -1568,17 +1612,17 @@ model HmisProviderConfig {
 // ─── D2: Telemedicine ────────────────────────────────────────────────────────
 
 model TelemedicineSession {
-  id              String   @id @default(uuid())
-  memberNumber    String
-  providerId      String
-  adapterName     String   // "mock" | "doctolib" | "teladoc"
-  sessionRef      String?  // external booking ref
-  scheduledAt     DateTime
-  status          String   @default("booked") // "booked"|"completed"|"cancelled"
+  id               String   @id @default(uuid())
+  memberNumber     String
+  providerId       String
+  adapterName      String // "mock" | "doctolib" | "teladoc"
+  sessionRef       String? // external booking ref
+  scheduledAt      DateTime
+  status           String   @default("booked") // "booked"|"completed"|"cancelled"
   consultationNote String?
-  claimId         String?  // auto-created claim
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  claimId          String? // auto-created claim
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@index([memberNumber])
   @@index([providerId])
@@ -1589,16 +1633,16 @@ model TelemedicineSession {
 // ─── D3: Pharmacy Benefit Manager ────────────────────────────────────────────
 
 model FormularyDrug {
-  id              String   @id @default(uuid())
-  drugCode        String   @unique
-  brandName       String
-  genericName     String
-  formularyTier   Int      @default(3) // 1=preferred, 2=non-preferred, 3=specialty
-  covered         Boolean  @default(true)
-  genericAlt      String?
-  copayAmount     Float    @default(0)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id            String   @id @default(uuid())
+  drugCode      String   @unique
+  brandName     String
+  genericName   String
+  formularyTier Int      @default(3) // 1=preferred, 2=non-preferred, 3=specialty
+  covered       Boolean  @default(true)
+  genericAlt    String?
+  copayAmount   Float    @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@index([drugCode])
   @@index([covered])
@@ -1608,26 +1652,26 @@ model FormularyDrug {
 // ─── D4: Chronic-disease cohort tracking ─────────────────────────────────────
 
 model ChronicCondition {
-  id              String   @id @default(uuid())
-  code            String   @unique
-  name            String
-  qualifyingRule  Json     // {icd10Prefixes: string[], minEncounters: int, withinDays: int}
-  createdAt       DateTime @default(now())
+  id             String   @id @default(uuid())
+  code           String   @unique
+  name           String
+  qualifyingRule Json // {icd10Prefixes: string[], minEncounters: int, withinDays: int}
+  createdAt      DateTime @default(now())
 
-  memberStatuses  MemberChronicStatus[]
+  memberStatuses MemberChronicStatus[]
 
   @@map("chronic_conditions")
 }
 
 model MemberChronicStatus {
-  id               String   @id @default(uuid())
-  memberNumber     String
-  conditionCode    String
-  confidence       Float    @default(1.0)
-  firstObservedAt  DateTime @default(now())
-  lastObservedAt   DateTime @default(now())
-  status           String   @default("active") // "active"|"resolved"|"suspected"
-  condition        ChronicCondition @relation(fields: [conditionCode], references: [code])
+  id              String           @id @default(uuid())
+  memberNumber    String
+  conditionCode   String
+  confidence      Float            @default(1.0)
+  firstObservedAt DateTime         @default(now())
+  lastObservedAt  DateTime         @default(now())
+  status          String           @default("active") // "active"|"resolved"|"suspected"
+  condition       ChronicCondition @relation(fields: [conditionCode], references: [code])
 
   @@unique([memberNumber, conditionCode])
   @@index([memberNumber])
@@ -1648,8 +1692,8 @@ model ScanEvent {
   userId          String
   providerId      String?
   branchId        String?
-  deviceClass     String           // 'desktop' | 'mobile' | 'camera'
-  os              String?          // 'linux' | 'windows' | 'darwin' | 'android' | 'ios' | 'web'
+  deviceClass     String // 'desktop' | 'mobile' | 'camera'
+  os              String? // 'linux' | 'windows' | 'darwin' | 'android' | 'ios' | 'web'
   machineHostname String?
   userAgent       String?
   scannerName     String?
@@ -1662,9 +1706,9 @@ model ScanEvent {
   errorMessage    String?
   createdAt       DateTime @default(now())
 
-  user      User      @relation("ScanEventUser",     fields: [userId],     references: [id], onDelete: Cascade)
-  provider  Provider? @relation("ScanEventProvider", fields: [providerId], references: [id], onDelete: SetNull)
-  branch    Branch?   @relation("ScanEventBranch",   fields: [branchId],   references: [id], onDelete: SetNull)
+  user     User      @relation("ScanEventUser", fields: [userId], references: [id], onDelete: Cascade)
+  provider Provider? @relation("ScanEventProvider", fields: [providerId], references: [id], onDelete: SetNull)
+  branch   Branch?   @relation("ScanEventBranch", fields: [branchId], references: [id], onDelete: SetNull)
 
   @@index([providerId, createdAt(sort: Desc)])
   @@index([userId, createdAt(sort: Desc)])
@@ -1716,7 +1760,7 @@ model ScanPacingAlert {
   resolvedAt   DateTime?
   createdAt    DateTime  @default(now())
 
-  provider     Provider  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
 
   @@index([providerId, createdAt(sort: Desc)])
   @@index([resolvedAt])
@@ -1745,7 +1789,7 @@ model NotificationPreference {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("notification_preferences")
 }
@@ -1765,7 +1809,7 @@ model NotificationQueue {
   flushedAt    DateTime?
   createdAt    DateTime  @default(now())
 
-  recipient    User      @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  recipient User @relation(fields: [recipientId], references: [id], onDelete: Cascade)
 
   @@index([recipientId])
   @@index([scheduledFor])
@@ -1812,4 +1856,3 @@ model BatchDraftClaim {
   @@index([batchId])
   @@map("batch_draft_claims")
 }
-

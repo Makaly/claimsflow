@@ -6,6 +6,9 @@ import { useAuthStore } from '@/store/authStore'
 import { useClaimsStore } from '@/store/claimsStore'
 import Login from '@/pages/Login'
 import Register from '@/pages/Register'
+import ProviderRegister from '@/pages/ProviderRegister'
+import UserRegister from '@/pages/UserRegister'
+import VerifyEmail from '@/pages/VerifyEmail'
 import ForgotPassword from '@/pages/ForgotPassword'
 import ResetPassword from '@/pages/ResetPassword'
 import Dashboard from '@/pages/Dashboard'
@@ -37,6 +40,7 @@ const BankReconciliation    = lazy(() => import('@/pages/BankReconciliation'))
 
 // Provider chunk
 const ProviderApprovals     = lazy(() => import('@/pages/ProviderApprovals'))
+const ProviderUsers         = lazy(() => import('@/pages/ProviderUsers'))
 const Providers             = lazy(() => import('@/pages/Providers'))
 const Branches              = lazy(() => import('@/pages/Branches'))
 const PreAuth               = lazy(() => import('@/pages/PreAuth'))
@@ -148,6 +152,9 @@ function AppRoutes() {
         path="/register"
         element={sessionLive ? <Navigate to="/" replace /> : <Register />}
       />
+      <Route path="/provider-register" element={<ProviderRegister />} />
+      <Route path="/user-register" element={<UserRegister />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
       <Route
         path="/forgot-password"
         element={sessionLive ? <Navigate to="/" replace /> : <ForgotPassword />}
@@ -175,6 +182,7 @@ function AppRoutes() {
         <Route path="/workflow/claims-officer" element={<ProtectedRoute allowedRoles={['admin','claims_officer']}><ClaimsOfficerQueue /></ProtectedRoute>} />
         <Route path="/workflow/fraud" element={<ProtectedRoute allowedRoles={['admin','fraud_officer','claims_officer']}><FraudQueue /></ProtectedRoute>} />
         <Route path="/provider-approvals" element={<ProtectedRoute allowedRoles={['admin','claims_officer']}><ProviderApprovals /></ProtectedRoute>} />
+        <Route path="/provider-users" element={<ProtectedRoute allowedRoles={['provider_admin']}><ProviderUsers /></ProtectedRoute>} />
         <Route path="/branches" element={<Branches />} />
         <Route path="/users" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><UserManagement /></ProtectedRoute>} />
         <Route path="/roles" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><Roles /></ProtectedRoute>} />

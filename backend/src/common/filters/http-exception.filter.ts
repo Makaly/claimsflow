@@ -30,6 +30,10 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
     let code = isHttp ? this.codeFromStatus(status) : 'INTERNAL_ERROR';
     let message: string | string[] = 'Internal server error';
     let details: unknown = undefined;
+    // Auxiliary metadata (email, providerName, reason, incomplete[]) that
+    // throwing exceptions include so the frontend can route on it. Allowlisted
+    // to avoid leaking arbitrary internals.
+    const extra: Record<string, unknown> = {};
 
     if (isHttp) {
       const response = (exception as HttpException).getResponse();
@@ -38,8 +42,16 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
       } else if (response && typeof response === 'object') {
         const r = response as Record<string, any>;
         message = r.message ?? message;
-        if (typeof r.error === 'string') code = this.normaliseCode(r.error);
+        // Honour a custom `code` set by a thrown exception (e.g. our auth
+        // gates: 'email_not_verified', 'pending_provider_approval',
+        // 'provider_rejected', 'review_incomplete'). Falling back to
+        // `error` for compatibility with the default Nest envelope.
+        if (typeof r.code === 'string') code = r.code;
+        else if (typeof r.error === 'string') code = this.normaliseCode(r.error);
         details = r.details;
+        for (const k of ['email', 'providerName', 'reason', 'incomplete']) {
+          if (r[k] !== undefined) extra[k] = r[k];
+        }
       }
     } else if (exception instanceof Error) {
       // Don't echo the underlying message — Prisma errors expose schema.
@@ -70,6 +82,7 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
       code,
       message,
       details,
+      ...extra,
       requestId,
       timestamp: new Date().toISOString(),
       path: req?.url,

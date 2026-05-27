@@ -1,13 +1,19 @@
-import { Controller, Post, Patch, Body, Get, UseGuards, Request, Response, HttpCode, Query } from '@nestjs/common';
+import { Controller, Post, Patch, Body, Get, UseGuards, Request, Response, HttpCode, Query, BadRequestException, NotFoundException } from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
+import { EmailOtpService } from './email-otp.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private emailOtpService: EmailOtpService,
+    private prisma: PrismaService,
+  ) {}
 
   @Post('register')
   @UseGuards(ThrottlerGuard)
@@ -78,6 +84,24 @@ export class AuthController {
     return this.authService.changePassword(req.user.userId, body.currentPassword, body.newPassword);
   }
 
+  @Post('register-user-under-provider')
+  @HttpCode(201)
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ auth: { ttl: 60_000, limit: 5 } })
+  async registerUserUnderProvider(
+    @Body() body: {
+      name: string; email: string; password: string;
+      providerId: string; phone?: string;
+      acceptTerms: boolean; policyVersion?: string;
+    },
+    @Request() req: any,
+  ) {
+    return this.authService.registerUserUnderProvider(body, {
+      ipAddress: req?.ip,
+      userAgent: req?.headers?.['user-agent'],
+    });
+  }
+
   @Post('register-provider')
   @HttpCode(201)
   @UseGuards(ThrottlerGuard)
@@ -86,7 +110,13 @@ export class AuthController {
     @Body() body: {
       providerName: string; type: string; licenseNumber: string
       phone: string; email: string; physicalAddress: string
-      contactPerson: string; city?: string; region?: string
+      contactPerson: string; city?: string; region?: string; country?: string
+      // Procurement-spec company-profile fields (all optional at registration;
+      // the wizard finalises them before "Submit for approval").
+      companyStructure?: 'sole_proprietorship' | 'partnership' | 'registered_company'
+      registrationNumber?: string; kraPin?: string; incorporationDate?: string
+      numberOfPartners?: number; ownerName?: string; ownerIdNumber?: string
+      yearsProvidingServices?: number
       adminName: string; adminEmail: string; adminPassword: string
       acceptTerms: boolean; policyVersion?: string
     },
@@ -112,6 +142,72 @@ export class AuthController {
   @HttpCode(200)
   async resetPassword(@Body() body: { token: string; password: string }) {
     return this.authService.resetPassword(body.token, body.password);
+  }
+
+  // ── PR2: Public approved-provider list (for user-under-provider registration)
+  // Returns ONLY non-PII fields so anyone can pick a provider during signup
+  // without leaking contact details. Throttled to prevent scraping.
+  @Get('providers/approved')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ auth: { ttl: 60_000, limit: 30 } })
+  async listApprovedProviders(@Query('search') search?: string) {
+    const providers = await this.prisma.provider.findMany({
+      where: {
+        approvalStatus: 'approved',
+        isActive: true,
+        ...(search ? { name: { contains: search, mode: 'insensitive' } } : {}),
+      },
+      select: { id: true, name: true, type: true, city: true, region: true },
+      orderBy: { name: 'asc' },
+      take: 200,
+    });
+    return providers;
+  }
+
+  // ── PR1: Email OTP verification ─────────────────────────────────────────
+  // Unauthenticated by design — the user can't log in until they verify, so
+  // we look up by email. Always returns success regardless of whether the
+  // email exists to prevent enumeration; rate-limited per IP via the throttler.
+  @Post('send-email-otp')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ auth: { ttl: 60_000, limit: 3 } })
+  @HttpCode(200)
+  async sendEmailOtp(@Body() body: { email: string }) {
+    if (!body?.email) throw new BadRequestException('email is required');
+    const user = await this.prisma.user.findUnique({ where: { email: body.email } });
+    if (user && !user.emailVerifiedAt) {
+      await this.emailOtpService.sendOtp(user.id).catch(() => undefined);
+    }
+    return { message: 'If that email matches an unverified account, a code has been sent.' };
+  }
+
+  @Post('verify-email-otp')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ auth: { ttl: 60_000, limit: 10 } })
+  @HttpCode(200)
+  async verifyEmailOtp(
+    @Body() body: { email: string; code: string },
+    @Response({ passthrough: true }) res: any,
+  ) {
+    if (!body?.email || !body?.code) throw new BadRequestException('email and code are required');
+    const user = await this.prisma.user.findUnique({ where: { email: body.email } });
+    if (!user) throw new NotFoundException('No account with that email');
+    const result = await this.emailOtpService.verifyOtp(user.id, body.code);
+
+    // Issue a session cookie on successful verification so the user lands on
+    // the dashboard without a second password prompt.
+    const refreshed = await this.prisma.user.findUnique({ where: { id: user.id } });
+    const access_token = this.authService.issueToken(user.id, user.email);
+    const isProduction = process.env.NODE_ENV === 'production';
+    res.cookie('access_token', access_token, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
+      maxAge: 24 * 60 * 60 * 1000,
+      path: '/',
+    });
+    const { password: _p, ...userResult } = refreshed as any;
+    return { ...result, user: userResult, access_token };
   }
 
   @Post('logout')

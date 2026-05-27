@@ -48,6 +48,7 @@ const navigation: NavItem[] = [
   { name: 'Scan Station', href: '/scan-station', icon: ScanLine, roles: ['admin', 'claims_officer', 'maker_checker'] },
   { name: 'Pre-Auth', href: '/pre-auth', icon: ShieldCheck, roles: ['admin', 'claims_officer', 'provider_admin', 'provider_user'] },
   { name: 'Provider Approvals', href: '/provider-approvals', icon: Shield, roles: ['admin', 'claims_officer'] },
+  { name: 'My Users', href: '/provider-users', icon: Users, roles: ['provider_admin'] },
   { name: 'Appeals', href: '/appeals', icon: Scale, roles: [...CIC_STAFF, 'provider_admin', 'provider_user'] },
   { type: 'separator', name: 'Finance', roles: ['admin', 'finance', 'claims_officer'] as Role[] },
   { name: 'Payment Settlement', href: '/payment', icon: CreditCard, roles: ['admin', 'finance', 'claims_officer'] },

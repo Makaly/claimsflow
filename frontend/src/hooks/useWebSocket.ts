@@ -10,7 +10,11 @@ const RECONNECT_ATTEMPTS     = 12
 
 export interface Notification {
   id: string
-  type: 'claim:assigned' | 'claim:status' | 'sla:breach' | 'appeal:new' | 'batch:complete'
+  type:
+    | 'claim:assigned' | 'claim:status' | 'sla:breach' | 'appeal:new' | 'batch:complete'
+    // PR3 — provider + user approval workflow events.
+    | 'provider:pending' | 'provider:decision'
+    | 'user:pending'     | 'user:decision'
   message: string
   timestamp: number
   read: boolean
@@ -23,6 +27,10 @@ const LISTENED_EVENTS: Notification['type'][] = [
   'sla:breach',
   'appeal:new',
   'batch:complete',
+  'provider:pending',
+  'provider:decision',
+  'user:pending',
+  'user:decision',
 ]
 
 function buildMessage(event: Notification['type'], payload: unknown): string {
@@ -48,6 +56,26 @@ function buildMessage(event: Notification['type'], payload: unknown): string {
       return p?.batchId
         ? `Batch job ${p.batchId} has completed.`
         : 'A batch job has completed.'
+    case 'provider:pending':
+      return p?.providerName
+        ? `New provider awaiting approval: ${p.providerName}.`
+        : 'A new provider is awaiting approval.'
+    case 'provider:decision': {
+      const name = p?.providerName ?? 'Your provider'
+      return p?.decision === 'approved'
+        ? `${name} has been approved by CIC. You can start submitting claims.`
+        : `${name} was not approved. Reason: ${p?.reason ?? p?.comment ?? '—'}`
+    }
+    case 'user:pending':
+      return p?.userName && p?.userEmail
+        ? `${p.userName} (${p.userEmail}) requested access to your provider.`
+        : 'A new user wants to join your provider.'
+    case 'user:decision': {
+      const provider = p?.providerName ?? 'your provider'
+      return p?.decision === 'approved'
+        ? `Your access to ${provider} has been approved. You can sign in now.`
+        : `Your access to ${provider} was not approved. Reason: ${p?.reason ?? p?.comment ?? '—'}`
+    }
     default:
       return 'You have a new notification.'
   }

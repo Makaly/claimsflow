@@ -36,10 +36,12 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    // Leave HMR on the same port Vite actually picked. Hard-coding 3000 made
+    // the WS connection 404 whenever the dev server fell back to 3001 because
+    // port 3000 was busy.
     hmr: {
       protocol: 'ws',
       host: 'localhost',
-      port: 3000,
     },
     proxy: {
       '/api': {

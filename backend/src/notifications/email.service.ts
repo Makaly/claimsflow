@@ -534,6 +534,391 @@ export class EmailService {
     );
   }
 
+  // ─── Email OTP (Provider + User registration verification) ────────────────
+
+  async sendEmailVerificationOtp(dto: { email: string; name: string; code: string }): Promise<void> {
+    const { email, name, code } = dto;
+    // Render the 6-digit code as six big spaced boxes — easier to read on
+    // mobile + matches every other "enter the code" UX users have seen.
+    const digits = code.split('').map(d => `
+      <td style="padding:0 4px">
+        <div style="width:42px;height:54px;background:#18181b;border:1px solid #27272a;border-radius:10px;text-align:center;line-height:54px;font-size:26px;font-weight:800;color:#fafafa;font-family:'Courier New',monospace;letter-spacing:0">${d}</div>
+      </td>`).join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta name="color-scheme" content="dark"/>
+  <title>Your ClaimsFlow verification code</title>
+</head>
+<body style="margin:0;padding:0;background:#09090b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#09090b;padding:32px 12px">
+    <tr><td align="center">
+    <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;width:100%;border-radius:16px;overflow:hidden;border:1px solid #27272a">
+
+      <tr><td style="background:linear-gradient(90deg,#10b981 0%,#06b6d4 50%,#6366f1 100%);height:3px;font-size:0">&nbsp;</td></tr>
+
+      <tr>
+        <td style="background:#111113;padding:32px 36px 24px">
+          <div style="display:inline-block;background:#1c1c1f;border:1px solid #3f3f46;border-radius:8px;padding:5px 12px;margin-bottom:16px">
+            <span style="color:#71717a;font-size:10px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase">CIC Insurance Group</span>
+          </div>
+          <h1 style="margin:0 0 8px;color:#fafafa;font-size:24px;font-weight:700;letter-spacing:-0.5px">Verify your email</h1>
+          <p style="margin:0;color:#71717a;font-size:13px">One step before we activate your ClaimsFlow account.</p>
+        </td>
+      </tr>
+
+      <tr>
+        <td style="background:#0f0f11;padding:28px 36px">
+          <p style="margin:0 0 24px;color:#a1a1aa;font-size:14px;line-height:1.7">
+            Hi <strong style="color:#e4e4e7">${name}</strong>, enter the code below in ClaimsFlow to confirm
+            <strong style="color:#e4e4e7">${email}</strong> belongs to you.
+          </p>
+
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto 24px">
+            <tr>${digits}</tr>
+          </table>
+
+          <p style="margin:0 0 14px;text-align:center;font-size:12px;color:#71717a">
+            This code expires in <strong style="color:#a1a1aa">10 minutes</strong>.
+          </p>
+
+          <p style="margin:20px 0 0;font-size:12px;color:#52525b;background:#18181b;border:1px solid #27272a;border-radius:8px;padding:12px 16px;line-height:1.6">
+            Didn't request this? You can safely ignore this email — without the code, nobody can sign in.
+          </p>
+        </td>
+      </tr>
+
+      <tr>
+        <td style="background:#111113;border-top:1px solid #27272a;padding:20px 36px;text-align:center">
+          <p style="margin:0 0 4px;color:#52525b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px">CIC Insurance Group · Medical Claims Division</p>
+          <p style="margin:0;color:#3f3f46;font-size:10px">P.O. Box 59485-00200, Nairobi &nbsp;·&nbsp; claims@cic.co.ke &nbsp;·&nbsp; © ${new Date().getFullYear()} CIC Insurance Group</p>
+        </td>
+      </tr>
+
+      <tr><td style="background:linear-gradient(90deg,#6366f1 0%,#06b6d4 50%,#10b981 100%);height:3px;font-size:0">&nbsp;</td></tr>
+
+    </table>
+    </td></tr>
+  </table>
+</body></html>`;
+
+    const text = `Hi ${name},\n\nYour ClaimsFlow verification code is: ${code}\n\nThis code expires in 10 minutes.\n\nIf you didn't request this, ignore this email.\n\nCIC Insurance Group — Medical Claims Division`;
+    await this.sendEmail(email, `Your ClaimsFlow verification code: ${code}`, text, html);
+  }
+
+  // ─── Admin: New provider awaiting approval ────────────────────────────────
+
+  async sendAdminNewProviderAlert(dto: {
+    adminEmail: string;
+    adminName?: string;
+    providerName: string;
+    providerType: string;
+    contactPerson: string;
+    contactEmail: string;
+    reviewUrl: string;
+  }): Promise<void> {
+    const { adminEmail, adminName, providerName, providerType, contactPerson, contactEmail, reviewUrl } = dto;
+    const html = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="color-scheme" content="dark"/><title>New provider awaiting approval</title></head>
+<body style="margin:0;padding:0;background:#09090b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#09090b;padding:32px 12px">
+    <tr><td align="center">
+    <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;border-radius:16px;overflow:hidden;border:1px solid #27272a">
+
+      <tr><td style="background:linear-gradient(90deg,#78350f 0%,#d97706 50%,#fbbf24 100%);height:3px;font-size:0">&nbsp;</td></tr>
+
+      <tr><td style="background:#111113;padding:28px 36px 24px">
+        <div style="display:inline-block;background:#1c1c1f;border:1px solid #3f3f46;border-radius:8px;padding:5px 12px;margin-bottom:12px">
+          <span style="color:#71717a;font-size:10px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase">CIC Insurance Group</span>
+        </div><br/>
+        <span style="display:inline-block;background:#1a0e00;border:1px solid #b45309;border-radius:20px;padding:3px 11px;font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:#fbbf24;margin-bottom:14px">Action required</span>
+        <h1 style="margin:0 0 6px;color:#fafafa;font-size:22px;font-weight:700;letter-spacing:-0.3px">New provider awaiting approval</h1>
+        <p style="margin:4px 0 0;color:#71717a;font-size:13px">A provider has submitted their onboarding packet for review.</p>
+      </td></tr>
+
+      <tr><td style="background:#0f0f11;padding:24px 36px">
+        ${adminName ? `<p style="margin:0 0 16px;color:#a1a1aa;font-size:14px">Hi <strong style="color:#e4e4e7">${adminName}</strong>,</p>` : ''}
+
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#18181b;border:1px solid #27272a;border-radius:12px;margin-bottom:20px">
+          <tr><td style="padding:18px 20px">
+            <p style="margin:0 0 6px;font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:1.5px">Provider</p>
+            <p style="margin:0 0 14px;font-size:16px;font-weight:700;color:#fafafa">${providerName}</p>
+            <p style="margin:0 0 6px;font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:1.5px">Type</p>
+            <p style="margin:0 0 14px;font-size:13px;color:#e4e4e7;text-transform:capitalize">${providerType}</p>
+            <p style="margin:0 0 6px;font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:1.5px">Contact</p>
+            <p style="margin:0;font-size:13px;color:#e4e4e7">${contactPerson} &nbsp;·&nbsp; <span style="color:#60a5fa">${contactEmail}</span></p>
+          </td></tr>
+        </table>
+
+        <p style="margin:0 0 18px;color:#a1a1aa;font-size:13px;line-height:1.7">
+          Review the packet — company profile, certifications, references, program of works — and approve or reject with a comment.
+          You must scroll through every page of every uploaded document before approval is enabled.
+        </p>
+
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+          <tr><td style="background:linear-gradient(135deg,#d97706,#b45309);border-radius:10px;padding:13px 26px">
+            <a href="${reviewUrl}" style="color:#fff;font-size:13px;font-weight:700;text-decoration:none;letter-spacing:0.3px">Open review queue →</a>
+          </td></tr>
+        </table>
+      </td></tr>
+
+      <tr><td style="background:#111113;border-top:1px solid #27272a;padding:20px 36px;text-align:center">
+        <p style="margin:0 0 4px;color:#52525b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px">CIC Insurance Group · Medical Claims Division</p>
+        <p style="margin:0;color:#3f3f46;font-size:10px">P.O. Box 59485-00200, Nairobi &nbsp;·&nbsp; claims@cic.co.ke &nbsp;·&nbsp; © ${new Date().getFullYear()} CIC Insurance Group</p>
+      </td></tr>
+
+      <tr><td style="background:linear-gradient(90deg,#fbbf24 0%,#d97706 50%,#78350f 100%);height:3px;font-size:0">&nbsp;</td></tr>
+
+    </table></td></tr>
+  </table>
+</body></html>`;
+
+    const text = `${adminName ? `Hi ${adminName},\n\n` : ''}A new provider is awaiting approval on ClaimsFlow.\n\nProvider: ${providerName}\nType: ${providerType}\nContact: ${contactPerson} (${contactEmail})\n\nReview at: ${reviewUrl}\n\nCIC Insurance Group — Medical Claims Division`;
+    await this.sendEmail(adminEmail, `Action required: ${providerName} awaiting approval`, text, html);
+  }
+
+  // ─── Provider: approval decision ──────────────────────────────────────────
+
+  async sendProviderApprovalDecision(dto: {
+    recipientEmail: string;
+    recipientName: string;
+    providerName: string;
+    decision: 'approved' | 'rejected';
+    comment?: string;
+    rejectionReason?: string;
+    loginUrl: string;
+  }): Promise<void> {
+    const { recipientEmail, recipientName, providerName, decision, comment, rejectionReason, loginUrl } = dto;
+    const approved = decision === 'approved';
+    const accent = approved ? '#10b981' : '#dc2626';
+    const accentDim = approved ? '#065f46' : '#7f1d1d';
+    const badgeBg = approved ? '#052e16' : '#1a0404';
+    const badgeBorder = approved ? '#166534' : '#991b1b';
+    const badgeText = approved ? '#4ade80' : '#f87171';
+    const headline = approved ? 'Your provider account is approved' : 'Your provider application was not approved';
+    const ctaLabel = approved ? 'Sign in to ClaimsFlow' : 'Update your application';
+
+    const commentBlock = (comment || rejectionReason)
+      ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+              style="background:#18181b;border:1px solid #27272a;border-left:3px solid ${badgeBorder};border-radius:8px;margin:16px 0">
+           <tr><td style="padding:14px 16px">
+             <p style="margin:0 0 5px;font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:1px">${approved ? 'Reviewer note' : 'Reason'}</p>
+             <p style="margin:0;font-size:13px;color:#e4e4e7;line-height:1.6">${(rejectionReason ?? comment ?? '').replace(/\n/g, '<br/>')}</p>
+             ${rejectionReason && comment ? `<p style="margin:10px 0 0;font-size:12px;color:#a1a1aa"><em>Additional note:</em> ${comment.replace(/\n/g, '<br/>')}</p>` : ''}
+           </td></tr>
+         </table>`
+      : '';
+
+    const html = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="color-scheme" content="dark"/><title>${headline}</title></head>
+<body style="margin:0;padding:0;background:#09090b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#09090b;padding:32px 12px">
+    <tr><td align="center">
+    <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;border-radius:16px;overflow:hidden;border:1px solid #27272a">
+
+      <tr><td style="background:linear-gradient(90deg,${accentDim} 0%,${accent} 100%);height:3px;font-size:0">&nbsp;</td></tr>
+
+      <tr><td style="background:#111113;padding:28px 36px 24px">
+        <div style="display:inline-block;background:#1c1c1f;border:1px solid #3f3f46;border-radius:8px;padding:5px 12px;margin-bottom:12px">
+          <span style="color:#71717a;font-size:10px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase">CIC Insurance Group</span>
+        </div><br/>
+        <span style="display:inline-block;background:${badgeBg};border:1px solid ${badgeBorder};border-radius:20px;padding:3px 11px;font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:${badgeText};margin-bottom:14px">${approved ? 'Approved' : 'Rejected'}</span>
+        <h1 style="margin:0 0 6px;color:#fafafa;font-size:22px;font-weight:700;letter-spacing:-0.3px;line-height:1.25">${headline}</h1>
+        <p style="margin:4px 0 0;color:#71717a;font-size:13px">${providerName}</p>
+      </td></tr>
+
+      <tr><td style="background:#0f0f11;padding:24px 36px">
+        <p style="margin:0 0 14px;color:#a1a1aa;font-size:14px;line-height:1.7">
+          Hi <strong style="color:#e4e4e7">${recipientName}</strong>,
+        </p>
+        <p style="margin:0 0 14px;color:#a1a1aa;font-size:14px;line-height:1.7">
+          ${approved
+            ? `Your provider account for <strong style="color:#10b981">${providerName}</strong> has been approved by CIC. You can now sign in and start submitting claims.`
+            : `After review, your provider application for <strong style="color:#e4e4e7">${providerName}</strong> could not be approved as submitted. Please address the issue below and re-submit your packet.`}
+        </p>
+
+        ${commentBlock}
+
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:18px 0 4px">
+          <tr><td style="background:linear-gradient(135deg,${accent},${accentDim});border-radius:10px;padding:13px 26px">
+            <a href="${loginUrl}" style="color:#fff;font-size:13px;font-weight:700;text-decoration:none;letter-spacing:0.3px">${ctaLabel} →</a>
+          </td></tr>
+        </table>
+      </td></tr>
+
+      <tr><td style="background:#111113;border-top:1px solid #27272a;padding:20px 36px;text-align:center">
+        <p style="margin:0 0 4px;color:#52525b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px">CIC Insurance Group · Medical Claims Division</p>
+        <p style="margin:0;color:#3f3f46;font-size:10px">P.O. Box 59485-00200, Nairobi &nbsp;·&nbsp; claims@cic.co.ke &nbsp;·&nbsp; © ${new Date().getFullYear()} CIC Insurance Group</p>
+      </td></tr>
+
+      <tr><td style="background:linear-gradient(90deg,${accent} 0%,${accentDim} 100%);height:3px;font-size:0">&nbsp;</td></tr>
+
+    </table></td></tr>
+  </table>
+</body></html>`;
+
+    const text = `Hi ${recipientName},\n\n${approved
+      ? `Your provider account for "${providerName}" has been approved. Sign in at ${loginUrl}.`
+      : `Your provider application for "${providerName}" was not approved.\nReason: ${rejectionReason || comment || '(no reason supplied)'}\n\nUpdate your application at ${loginUrl}.`}\n\nCIC Insurance Group — Medical Claims Division`;
+
+    await this.sendEmail(
+      recipientEmail,
+      approved ? `Approved · ${providerName}` : `Application not approved · ${providerName}`,
+      text,
+      html,
+    );
+  }
+
+  // ─── PR2: Provider admin — new user awaiting approval ──────────────────────
+
+  async sendProviderUserPendingAlert(dto: {
+    adminEmail: string;
+    adminName?: string;
+    providerName: string;
+    userName: string;
+    userEmail: string;
+    reviewUrl: string;
+  }): Promise<void> {
+    const { adminEmail, adminName, providerName, userName, userEmail, reviewUrl } = dto;
+    const html = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="color-scheme" content="dark"/><title>New user awaiting approval</title></head>
+<body style="margin:0;padding:0;background:#09090b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#09090b;padding:32px 12px">
+    <tr><td align="center">
+    <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;border-radius:16px;overflow:hidden;border:1px solid #27272a">
+      <tr><td style="background:linear-gradient(90deg,#1e3a8a 0%,#3b82f6 50%,#06b6d4 100%);height:3px;font-size:0">&nbsp;</td></tr>
+      <tr><td style="background:#111113;padding:28px 36px 24px">
+        <div style="display:inline-block;background:#1c1c1f;border:1px solid #3f3f46;border-radius:8px;padding:5px 12px;margin-bottom:12px">
+          <span style="color:#71717a;font-size:10px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase">CIC Insurance Group</span>
+        </div><br/>
+        <span style="display:inline-block;background:#0c1524;border:1px solid #1d4ed8;border-radius:20px;padding:3px 11px;font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:#60a5fa;margin-bottom:14px">User approval needed</span>
+        <h1 style="margin:0 0 6px;color:#fafafa;font-size:22px;font-weight:700;letter-spacing:-0.3px">A new user wants to join ${providerName}</h1>
+        <p style="margin:4px 0 0;color:#71717a;font-size:13px">Verify the request and grant or deny access.</p>
+      </td></tr>
+
+      <tr><td style="background:#0f0f11;padding:24px 36px">
+        ${adminName ? `<p style="margin:0 0 16px;color:#a1a1aa;font-size:14px">Hi <strong style="color:#e4e4e7">${adminName}</strong>,</p>` : ''}
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#18181b;border:1px solid #27272a;border-radius:12px;margin-bottom:20px">
+          <tr><td style="padding:18px 20px">
+            <p style="margin:0 0 6px;font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:1.5px">Applicant</p>
+            <p style="margin:0 0 12px;font-size:15px;font-weight:600;color:#fafafa">${userName}</p>
+            <p style="margin:0 0 6px;font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:1.5px">Email</p>
+            <p style="margin:0;font-size:13px;color:#60a5fa">${userEmail}</p>
+          </td></tr>
+        </table>
+        <p style="margin:0 0 18px;color:#a1a1aa;font-size:13px;line-height:1.7">
+          The user has verified their email address. They will only be able to sign in once you approve them under <strong style="color:#e4e4e7">${providerName}</strong>.
+        </p>
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+          <tr><td style="background:linear-gradient(135deg,#1d4ed8,#06b6d4);border-radius:10px;padding:13px 26px">
+            <a href="${reviewUrl}" style="color:#fff;font-size:13px;font-weight:700;text-decoration:none;letter-spacing:0.3px">Review and decide →</a>
+          </td></tr>
+        </table>
+      </td></tr>
+
+      <tr><td style="background:#111113;border-top:1px solid #27272a;padding:20px 36px;text-align:center">
+        <p style="margin:0 0 4px;color:#52525b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px">CIC Insurance Group · Medical Claims Division</p>
+        <p style="margin:0;color:#3f3f46;font-size:10px">P.O. Box 59485-00200, Nairobi &nbsp;·&nbsp; claims@cic.co.ke &nbsp;·&nbsp; © ${new Date().getFullYear()} CIC Insurance Group</p>
+      </td></tr>
+      <tr><td style="background:linear-gradient(90deg,#06b6d4 0%,#3b82f6 50%,#1e3a8a 100%);height:3px;font-size:0">&nbsp;</td></tr>
+    </table></td></tr>
+  </table>
+</body></html>`;
+
+    const text = `${adminName ? `Hi ${adminName},\n\n` : ''}${userName} (${userEmail}) requested access to ${providerName} on ClaimsFlow. Approve or reject at: ${reviewUrl}\n\nCIC Insurance Group — Medical Claims Division`;
+    await this.sendEmail(adminEmail, `${userName} requested access to ${providerName}`, text, html);
+  }
+
+  // ─── PR2: User — provider approval decision ───────────────────────────────
+
+  async sendUserApprovalDecision(dto: {
+    recipientEmail: string;
+    recipientName: string;
+    providerName: string;
+    decision: 'approved' | 'rejected';
+    comment?: string;
+    rejectionReason?: string;
+    loginUrl: string;
+  }): Promise<void> {
+    const { recipientEmail, recipientName, providerName, decision, comment, rejectionReason, loginUrl } = dto;
+    const approved = decision === 'approved';
+    const accent = approved ? '#10b981' : '#dc2626';
+    const accentDim = approved ? '#065f46' : '#7f1d1d';
+    const badgeBg = approved ? '#052e16' : '#1a0404';
+    const badgeBorder = approved ? '#166534' : '#991b1b';
+    const badgeText = approved ? '#4ade80' : '#f87171';
+    const headline = approved
+      ? `${providerName} approved your access`
+      : `Access to ${providerName} was not approved`;
+
+    const note = (rejectionReason ?? comment ?? '').trim();
+    const noteBlock = note
+      ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+              style="background:#18181b;border:1px solid #27272a;border-left:3px solid ${badgeBorder};border-radius:8px;margin:16px 0">
+           <tr><td style="padding:14px 16px">
+             <p style="margin:0 0 5px;font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:1px">${approved ? 'Reviewer note' : 'Reason'}</p>
+             <p style="margin:0;font-size:13px;color:#e4e4e7;line-height:1.6">${note.replace(/\n/g, '<br/>')}</p>
+           </td></tr>
+         </table>`
+      : '';
+
+    const html = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="color-scheme" content="dark"/><title>${headline}</title></head>
+<body style="margin:0;padding:0;background:#09090b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#09090b;padding:32px 12px">
+    <tr><td align="center">
+    <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;border-radius:16px;overflow:hidden;border:1px solid #27272a">
+      <tr><td style="background:linear-gradient(90deg,${accentDim} 0%,${accent} 100%);height:3px;font-size:0">&nbsp;</td></tr>
+      <tr><td style="background:#111113;padding:28px 36px 24px">
+        <div style="display:inline-block;background:#1c1c1f;border:1px solid #3f3f46;border-radius:8px;padding:5px 12px;margin-bottom:12px">
+          <span style="color:#71717a;font-size:10px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase">CIC Insurance Group</span>
+        </div><br/>
+        <span style="display:inline-block;background:${badgeBg};border:1px solid ${badgeBorder};border-radius:20px;padding:3px 11px;font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:${badgeText};margin-bottom:14px">${approved ? 'Approved' : 'Not approved'}</span>
+        <h1 style="margin:0 0 6px;color:#fafafa;font-size:22px;font-weight:700;letter-spacing:-0.3px;line-height:1.25">${headline}</h1>
+        <p style="margin:4px 0 0;color:#71717a;font-size:13px">${providerName}</p>
+      </td></tr>
+
+      <tr><td style="background:#0f0f11;padding:24px 36px">
+        <p style="margin:0 0 14px;color:#a1a1aa;font-size:14px;line-height:1.7">Hi <strong style="color:#e4e4e7">${recipientName}</strong>,</p>
+        <p style="margin:0 0 14px;color:#a1a1aa;font-size:14px;line-height:1.7">
+          ${approved
+            ? `Your account has been approved by an admin at <strong style="color:#10b981">${providerName}</strong>. You can now sign in to ClaimsFlow.`
+            : `An admin at <strong style="color:#e4e4e7">${providerName}</strong> has not approved your access. If you believe this was a mistake, contact your provider directly.`}
+        </p>
+        ${noteBlock}
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:18px 0 4px">
+          <tr><td style="background:linear-gradient(135deg,${accent},${accentDim});border-radius:10px;padding:13px 26px">
+            <a href="${loginUrl}" style="color:#fff;font-size:13px;font-weight:700;text-decoration:none;letter-spacing:0.3px">${approved ? 'Sign in to ClaimsFlow' : 'Back to ClaimsFlow'} →</a>
+          </td></tr>
+        </table>
+      </td></tr>
+
+      <tr><td style="background:#111113;border-top:1px solid #27272a;padding:20px 36px;text-align:center">
+        <p style="margin:0 0 4px;color:#52525b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px">CIC Insurance Group · Medical Claims Division</p>
+        <p style="margin:0;color:#3f3f46;font-size:10px">P.O. Box 59485-00200, Nairobi &nbsp;·&nbsp; claims@cic.co.ke &nbsp;·&nbsp; © ${new Date().getFullYear()} CIC Insurance Group</p>
+      </td></tr>
+      <tr><td style="background:linear-gradient(90deg,${accent} 0%,${accentDim} 100%);height:3px;font-size:0">&nbsp;</td></tr>
+    </table></td></tr>
+  </table>
+</body></html>`;
+
+    const text = `Hi ${recipientName},\n\n${approved
+      ? `Your access to ${providerName} has been approved. Sign in at ${loginUrl}.`
+      : `Your access to ${providerName} was not approved.\nReason: ${rejectionReason || comment || '(none supplied)'}.`}\n\nCIC Insurance Group — Medical Claims Division`;
+    await this.sendEmail(
+      recipientEmail,
+      approved ? `Approved · ${providerName}` : `Access not approved · ${providerName}`,
+      text,
+      html,
+    );
+  }
+
   // ─── Workflow Notification Emails ────────────────────────────────────────────
 
   async sendWorkflowEmail(dto: WorkflowEmailDto): Promise<void> {

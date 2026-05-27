@@ -92,6 +92,19 @@ export default function Login() {
     } catch (err: any) {
       if (!err.response) {
         setError('Cannot reach the server. The backend may be starting up — please wait 30 seconds and try again.')
+      } else if (err.response.data?.code === 'email_not_verified') {
+        // PR1 — a fresh OTP was already triggered server-side. Route the user
+        // to the verification screen so they can complete sign-in.
+        const target = err.response.data?.email || data.email
+        navigate(`/verify-email?email=${encodeURIComponent(target)}&auto=0`)
+      } else if (err.response.data?.code === 'pending_provider_approval') {
+        const providerName = err.response.data?.providerName || 'your provider'
+        setError(`Your account is awaiting approval from ${providerName}. You'll get an email the moment it's decided.`)
+      } else if (err.response.data?.code === 'provider_rejected') {
+        const reason = err.response.data?.reason
+        setError(reason
+          ? `Your provider declined access: ${reason}`
+          : 'Your provider has not granted you access. Contact your provider admin to re-apply.')
       } else {
         setError(err.response.data?.message || 'Invalid credentials. Please try again.')
       }
@@ -337,6 +350,24 @@ export default function Login() {
                   className="font-medium text-blue-400 transition-colors hover:text-blue-300"
                 >
                   Create one
+                </Link>
+              </p>
+              <p className="mt-2 text-center text-xs text-slate-500">
+                Healthcare provider?{' '}
+                <Link
+                  to="/provider-register"
+                  className="font-medium text-emerald-400 transition-colors hover:text-emerald-300"
+                >
+                  Register your organisation
+                </Link>
+              </p>
+              <p className="mt-1 text-center text-xs text-slate-500">
+                Joining an existing provider?{' '}
+                <Link
+                  to="/user-register"
+                  className="font-medium text-cyan-400 transition-colors hover:text-cyan-300"
+                >
+                  Register under a provider
                 </Link>
               </p>
             </div>
