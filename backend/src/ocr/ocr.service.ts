@@ -270,7 +270,7 @@ export class OcrService {
         }
       } finally {
         await worker.terminate();
-        try { fs.rmdirSync(tmpDir, { recursive: true }); } catch { /* ignore */ }
+        try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
       }
 
       const totalChars = perPageTexts.reduce((s, t) => s + t.length, 0);

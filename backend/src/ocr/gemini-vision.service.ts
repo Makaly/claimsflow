@@ -283,7 +283,7 @@ async function _buildPageContextHints(pdfPath: string): Promise<string> {
       }
 
       await worker.terminate();
-      try { require('fs').rmdirSync(tmpDir, { recursive: true }); } catch { /* ignore */ }
+      try { require('fs').rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
     } catch { /* pdftoppm or tesseract unavailable — hints work without OCR */ }
 
     const lines = ['=== PAGE PRE-SCAN (authoritative split map — use as primary guidance) ==='];
