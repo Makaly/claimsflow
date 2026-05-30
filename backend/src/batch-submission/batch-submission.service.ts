@@ -33,6 +33,7 @@ export class BatchSubmissionService {
     ipAddress?: string,
     stationId?: string,
     branchId?: string | null,
+    jobSetupId?: string | null,
   ) {
     // Generate batch number
     const batchCount = await this.prisma.batchSubmission.count({
@@ -53,6 +54,7 @@ export class BatchSubmissionService {
         batchNumber,
         providerId,
         ...(branchId ? { branchId } : {}),
+        ...(jobSetupId ? { jobSetupId } : {}),
         submissionMethod,
         totalClaims: files.length,
         totalSize: BigInt(totalSize),
@@ -409,6 +411,8 @@ export class BatchSubmissionService {
     return {
       sessionId:    c.sessionId ?? undefined,
       batchId:      c.batchId      ?? null,
+      jobSetupId:   c.jobSetupId   ?? null,
+      customFields: c.customFields ?? {},
       claimNumber:  c.claimNumber  ?? null,
       fileName:     c.fileName     ?? '',
       fileSize:     c.fileSize     ?? 0,

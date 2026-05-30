@@ -53,6 +53,8 @@ import { TenantModule } from './tenant/tenant.module';
 import { CasesModule } from './cases/cases.module';
 import { CorrespondenceModule } from './correspondence/correspondence.module';
 import { WorkflowDefinitionsModule } from './workflow-definitions/workflow-definitions.module';
+import { LookupModule } from './lookup/lookup.module';
+import { JobSetupModule } from './job-setup/job-setup.module';
 
 @Module({
   imports: [
@@ -118,6 +120,8 @@ import { WorkflowDefinitionsModule } from './workflow-definitions/workflow-defin
     CasesModule,
     CorrespondenceModule,
     WorkflowDefinitionsModule,
+    LookupModule,
+    JobSetupModule,
   ],
   controllers: [AppController],
   providers: [
