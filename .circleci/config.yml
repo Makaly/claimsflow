@@ -32,7 +32,11 @@ jobs:
       - install_backend
       - run:
           name: Generate Prisma client
-          command: npx prisma generate
+          # Prisma 7 loads prisma.config.ts (which resolves env('DATABASE_URL'))
+          # even for `generate`, though generation never connects to a database.
+          # Provide a placeholder URL so the config resolves; the real URL is
+          # injected at deploy/runtime via the @prisma/adapter-pg adapter.
+          command: DATABASE_URL="postgresql://prisma:prisma@localhost:5432/prisma?schema=public" npx prisma generate
           working_directory: backend
       - run:
           name: Build NestJS
