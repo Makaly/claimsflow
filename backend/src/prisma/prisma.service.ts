@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { execSync } from 'child_process';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../generated/prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { decryptField, encryptField } from '../common/services/field-encryption';
 
 /**
@@ -59,7 +60,13 @@ function decryptResult(model: string, result: any): any {
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   constructor() {
-    super();
+    // Prisma 7 removed the built-in Rust query engine; PostgreSQL connections
+    // now go through the @prisma/adapter-pg driver adapter. DATABASE_URL is
+    // loaded by @nestjs/config (ConfigModule.forRoot) before Nest instantiates
+    // this provider, so process.env.DATABASE_URL is populated here.
+    super({
+      adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+    });
     // Prisma 6 removed the `$use` middleware API, so the GDPR field-encryption
     // layer is now a `$extends` query extension (the documented replacement).
     // `$extends` returns a NEW client instead of mutating `this`, so we return

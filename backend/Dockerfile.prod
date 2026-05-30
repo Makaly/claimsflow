@@ -24,12 +24,15 @@ RUN apk add --no-cache tesseract-ocr openssl sane
 COPY package*.json ./
 RUN npm install --omit=dev --legacy-peer-deps
 
-# Copy compiled output and generated Prisma client from builder
+# Copy compiled output from builder. In Prisma 7 the client is generated as
+# TypeScript under src/generated/prisma and compiled into dist/generated/prisma,
+# so it travels inside ./dist — no separate node_modules/.prisma or
+# @prisma/client copy is needed (the prod `npm install` above provides the
+# @prisma/client runtime and @prisma/adapter-pg packages).
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
 COPY prisma ./prisma
 COPY scripts ./scripts
+COPY prisma.config.ts ./prisma.config.ts
 
 EXPOSE 4000
 
