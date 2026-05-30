@@ -25,6 +25,44 @@ export class AuthController {
     });
   }
 
+  /**
+   * Mobile member portal login — distinct from the provider/staff `login`
+   * below because members authenticate with `memberNumber + pin` (4-digit)
+   * rather than email/password. Returns a JWT scoped to `scope: "member"`
+   * with the `memberNumber` claim. Stub: validates input shape only;
+   * AuthService.memberLogin should look up the Member table and verify the
+   * hashed PIN.
+   */
+  @Post('member/login')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ auth: { ttl: 60_000, limit: 10 } })
+  async memberLogin(
+    @Body() body: { memberNumber: string; pin: string },
+    @Response({ passthrough: true }) res: any,
+  ) {
+    if (!body?.memberNumber || !/^\d{4,}$/.test(body?.pin ?? '')) {
+      throw new BadRequestException('memberNumber and 4-digit pin required');
+    }
+    // TODO: hand off to AuthService.memberLogin once it exists; this stub
+    // simply echoes the inputs so the mobile DTO contract can be wired
+    // against a 200. The cookie path mirrors the provider login for parity.
+    const stubToken = `STUB.${Buffer.from(body.memberNumber).toString('base64')}.MEMBER`;
+    const isProduction = process.env.NODE_ENV === 'production';
+    res.cookie('access_token', stubToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
+      maxAge: 24 * 60 * 60 * 1000,
+      path: '/',
+    });
+    return {
+      memberNumber: body.memberNumber,
+      memberName: 'Demo Member',
+      accessToken: stubToken,
+      scope: 'member',
+    };
+  }
+
   @Post('login')
   @UseGuards(ThrottlerGuard)
   @Throttle({ auth: { ttl: 60_000, limit: 10 } })

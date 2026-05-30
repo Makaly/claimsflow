@@ -15,6 +15,7 @@ import {
   NotFoundException,
   Res,
 } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { Response } from 'express';
 import { createReadStream, readFileSync } from 'fs';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -299,9 +300,9 @@ export class ProvidersController {
   @Post('self-service/onboarding-submit')
   @UseGuards(RolesGuard)
   @Roles('provider_admin')
-  async submitOnboarding(@Request() req) {
+  async submitOnboarding(@Request() req, @Body() body: { note?: string } = {}) {
     const providerId = this.ensureProviderId(req);
-    return this.providersService.submitOnboarding(providerId);
+    return this.providersService.submitOnboarding(providerId, body.note);
   }
 
   // ── PR2: provider-admin manages users under their provider ─────────────
@@ -345,6 +346,7 @@ export class ProvidersController {
 
   /** Full onboarding packet — used by the provider to populate their own
    *  dashboard and by admins when reviewing. */
+  @SkipThrottle({ global: true })
   @Get('self-service/onboarding-packet')
   @UseGuards(RolesGuard)
   @Roles('provider_admin', 'provider_user')
@@ -407,11 +409,21 @@ export class ProvidersController {
   }
 
   /** Admin-facing: full onboarding packet for approval review. */
+  @SkipThrottle({ global: true })
   @Get(':id/onboarding-packet')
   @UseGuards(RolesGuard)
   @Roles('admin', 'claims_officer')
   getOnboardingPacket(@Param('id') id: string) {
     return this.providersService.getOnboardingPacket(id);
+  }
+
+  /** Audit trail for this provider — decisions, per-doc reviews, page views. */
+  @SkipThrottle({ global: true })
+  @Get(':id/audit-trail')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'claims_officer')
+  getProviderAuditTrail(@Param('id') id: string) {
+    return this.providersService.getProviderAuditTrail(id);
   }
 
   @Patch(':id')
@@ -501,9 +513,24 @@ export class ProvidersController {
     return this.providersService.rejectProvider(id, body.reason, req.user.userId, body.comment);
   }
 
+  @Post(':id/return-for-correction')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'claims_officer')
+  returnProviderForCorrection(
+    @Param('id') id: string,
+    @Body() body: { comment: string },
+    @Request() req,
+  ) {
+    return this.providersService.returnProviderForCorrection(id, req.user.userId, body.comment);
+  }
+
   // ── PR1: per-page review tracking ───────────────────────────────────────
 
-  /** Stream an onboarding document inline so the PDF viewer can render it. */
+  /** Stream an onboarding document inline so the PDF viewer can render it.
+   *  Skip throttling — the reviewer naturally opens many docs in sequence,
+   *  and each PDF is one full-file GET. Access is still gated by RolesGuard +
+   *  the provider-ownership check below. */
+  @SkipThrottle({ global: true })
   @Get(':id/onboarding-documents/:docId/file')
   @UseGuards(RolesGuard)
   @Roles('admin', 'claims_officer', 'provider_admin')
@@ -521,6 +548,9 @@ export class ProvidersController {
   }
 
   /** Admin POSTs once per page reached in the PDF viewer. Idempotent. */
+  // Skip global throttle — reviewers naturally fire one of these per page
+  // turn, and a long PDF would otherwise blow through the 120 req/min quota.
+  @SkipThrottle({ global: true })
   @Post(':id/onboarding-documents/:docId/page-view')
   @UseGuards(RolesGuard)
   @Roles('admin', 'claims_officer')
@@ -540,11 +570,72 @@ export class ProvidersController {
 
   /** Per-document coverage map for the current admin — used by the approval
    *  drawer to render checkmarks and gate the Approve button. */
+  @SkipThrottle({ global: true })
   @Get(':id/review-readiness')
   @UseGuards(RolesGuard)
   @Roles('admin', 'claims_officer')
   getReviewReadiness(@Param('id') id: string, @Request() req: any) {
     return this.providersService.getReviewReadiness(req.user.userId, id);
+  }
+
+  // ── PR4: Per-document approve / reject (admin-side) ─────────────────────
+
+  @SkipThrottle({ global: true })
+  @Post(':id/onboarding-documents/:docId/approve')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'claims_officer')
+  approveOnboardingDocument(
+    @Param('id') id: string,
+    @Param('docId') docId: string,
+    @Body() body: { comment?: string },
+    @Request() req: any,
+  ) {
+    return this.providersService.approveOnboardingDocument(id, docId, req.user.userId, body?.comment);
+  }
+
+  @SkipThrottle({ global: true })
+  @Post(':id/onboarding-documents/:docId/reject')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'claims_officer')
+  rejectOnboardingDocument(
+    @Param('id') id: string,
+    @Param('docId') docId: string,
+    @Body() body: { reason: string },
+    @Request() req: any,
+  ) {
+    return this.providersService.rejectOnboardingDocument(id, docId, req.user.userId, body.reason);
+  }
+
+  /** Full version history (v1, v2, …) for one onboarding document, used by
+   *  the admin packet view's "show previous versions" disclosure. */
+  @Get(':id/onboarding-documents/:docId/versions')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'claims_officer', 'provider_admin', 'provider_user')
+  getOnboardingDocumentVersions(
+    @Param('id') id: string,
+    @Param('docId') docId: string,
+    @Request() req: any,
+  ) {
+    if ((req.user.role === 'provider_admin' || req.user.role === 'provider_user') && req.user.providerId !== id) {
+      throw new ForbiddenException('Access denied');
+    }
+    return this.providersService.getOnboardingDocumentVersions(id, docId);
+  }
+
+  // ── PR4: Provider resubmit (replaces a rejected/draft doc with v+1) ─────
+
+  @Post('self-service/onboarding-document/:docId/resubmit')
+  @UseGuards(RolesGuard)
+  @Roles('provider_admin')
+  @UseInterceptors(FileInterceptor('file', { storage: onboardingStorage, fileFilter: docFileFilter }))
+  async resubmitOnboardingDocument(
+    @Request() req: any,
+    @Param('docId') docId: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    const providerId = this.ensureProviderId(req);
+    if (!file) throw new NotFoundException('file is required');
+    return this.providersService.resubmitOnboardingDocument(providerId, docId, file, req.user?.userId);
   }
 
   @Post(':id/suspend')
