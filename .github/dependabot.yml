@@ -1,4 +1,16 @@
 version: 2
+
+# Grouping strategy (learned the hard way):
+#   * Tightly-coupled families (react/react-dom + their @types, i18next +
+#     react-i18next, the nestjs and prisma families) are grouped across ALL
+#     update types — including majors — so they can never be merged into an
+#     inconsistent state (e.g. react-dom 19 against react 18).
+#   * Everything else: minor/patch updates are bundled into a single
+#     "all-minor-patch" PR per ecosystem so they land together and CI-tested
+#     as a set, while majors arrive as individual PRs for deliberate review.
+# Combined with branch protection requiring the build checks, this prevents a
+# bulk merge from ever red-lining master again.
+
 updates:
   - package-ecosystem: npm
     directory: /backend
@@ -22,9 +34,12 @@ updates:
         patterns:
           - '@prisma/*'
           - 'prisma'
-      types:
+      all-minor-patch:
         patterns:
-          - '@types/*'
+          - '*'
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: npm
     directory: /frontend
@@ -41,16 +56,27 @@ updates:
       prefix: chore(deps)
       include: scope
     groups:
-      radix:
-        patterns:
-          - '@radix-ui/*'
+      # react runtime + types move as one unit, every update type
       react:
         patterns:
           - 'react'
-          - 'react-*'
-      types:
+          - 'react-dom'
+          - '@types/react'
+          - '@types/react-dom'
+      # i18next core must move with its react binding (peer: i18next >= matching)
+      i18n:
         patterns:
-          - '@types/*'
+          - 'i18next'
+          - 'react-i18next'
+      radix:
+        patterns:
+          - '@radix-ui/*'
+      all-minor-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: github-actions
     directory: /
@@ -65,6 +91,13 @@ updates:
     commit-message:
       prefix: ci(deps)
       include: scope
+    groups:
+      all-minor-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: docker
     directory: /backend
@@ -79,3 +112,24 @@ updates:
     commit-message:
       prefix: chore(docker)
       include: scope
+
+  - package-ecosystem: pip
+    directory: /ml-sidecar
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Africa/Nairobi
+    labels:
+      - dependencies
+      - ml-sidecar
+    commit-message:
+      prefix: chore(deps)
+      include: scope
+    groups:
+      all-minor-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
