@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   FileText, CheckCircle, Building2, Award, Users, Handshake, Calendar,
   Upload, Loader2, RefreshCw, Trash2, Plus, X, FileUp, Clock, ShieldCheck,
+  MessageSquare, ScrollText,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -49,6 +50,8 @@ interface Packet {
   providerId: string
   providerName: string
   approvalStatus: string
+  approvalComment?: string | null
+  providerNote?: string | null
   onboardingSubmittedAt: string | null
   sections: {
     a_companyProfile:    { complete: boolean; companyStructure: string | null; documents: OnboardingDoc[] }
@@ -57,6 +60,7 @@ interface Packet {
     d_certifications:    { complete: boolean; firmDocuments: OnboardingDoc[]; staffDocuments: OnboardingDoc[] }
     e_references:        { complete: boolean; references: Reference[] }
     f_programOfWorks:    { complete: boolean; programOfWorksText: string | null; documents: OnboardingDoc[] }
+    g_registrationDocument: { complete: boolean; proofDocumentName: string | null }
   }
   completedCount: number
   totalSections: number
@@ -75,6 +79,7 @@ export function ProviderOnboarding({ onApproved }: { onApproved: () => void }) {
   const [refreshing, setRefreshing] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [resubmissionNote, setResubmissionNote] = useState('')
 
   const fetchPacket = useCallback(async () => {
     setRefreshing(true)
@@ -90,10 +95,29 @@ export function ProviderOnboarding({ onApproved }: { onApproved: () => void }) {
 
   useEffect(() => { fetchPacket() }, [fetchPacket])
 
+  // Patch a scalar field and update local state — no full refetch.
   const patchInfo = async (body: Record<string, any>) => {
     try {
       await api.patch('/providers/self-service/onboarding-info', body)
-      fetchPacket()
+      setPacket(prev => {
+        if (!prev) return prev
+        const s = prev.sections
+        if ('companyStructure' in body)
+          return { ...prev, sections: { ...s, a_companyProfile: { ...s.a_companyProfile, companyStructure: body.companyStructure } } }
+        if ('yearsProvidingServices' in body)
+          return { ...prev, sections: { ...s, b_yearsOfExperience: { ...s.b_yearsOfExperience, yearsProvidingServices: body.yearsProvidingServices } } }
+        if ('scopeUnderstanding' in body) {
+          const complete = (body.scopeUnderstanding ?? '').trim().length >= 100
+          return { ...prev, sections: { ...s, c_scopeUnderstanding: { ...s.c_scopeUnderstanding, scopeUnderstanding: body.scopeUnderstanding, complete } } }
+        }
+        if ('programOfWorksText' in body) {
+          const complete = (body.programOfWorksText ?? '').trim().length >= 50 || s.f_programOfWorks.documents.length > 0
+          return { ...prev, sections: { ...s, f_programOfWorks: { ...s.f_programOfWorks, programOfWorksText: body.programOfWorksText, complete } } }
+        }
+        return prev
+      })
+      // Refresh completedCount after a patch without a full round-trip.
+      // We use a debounced lightweight refresh only on blur — no loop.
     } catch { /* ignore */ }
   }
 
@@ -102,8 +126,26 @@ export function ProviderOnboarding({ onApproved }: { onApproved: () => void }) {
     fd.append('file', file)
     fd.append('category', category)
     try {
-      await api.post('/providers/self-service/onboarding-document', fd)
-      fetchPacket()
+      const { data: newDoc } = await api.post('/providers/self-service/onboarding-document', fd)
+      // Optimistic: append the new doc to the relevant category list.
+      setPacket(prev => {
+        if (!prev) return prev
+        const s = prev.sections
+        const append = (arr: OnboardingDoc[]) => [...arr, newDoc]
+        let sections = { ...s }
+        if (category === 'company_profile')
+          sections = { ...s, a_companyProfile: { ...s.a_companyProfile, documents: append(s.a_companyProfile.documents), complete: !!s.a_companyProfile.companyStructure } }
+        else if (category === 'experience_evidence')
+          sections = { ...s, b_yearsOfExperience: { ...s.b_yearsOfExperience, documents: append(s.b_yearsOfExperience.documents), complete: (s.b_yearsOfExperience.yearsProvidingServices ?? 0) > 0 } }
+        else if (category === 'firm_certifications')
+          sections = { ...s, d_certifications: { ...s.d_certifications, firmDocuments: append(s.d_certifications.firmDocuments), complete: s.d_certifications.staffDocuments.length > 0 } }
+        else if (category === 'staff_certifications')
+          sections = { ...s, d_certifications: { ...s.d_certifications, staffDocuments: append(s.d_certifications.staffDocuments), complete: s.d_certifications.firmDocuments.length > 0 } }
+        else if (category === 'program_of_works')
+          sections = { ...s, f_programOfWorks: { ...s.f_programOfWorks, documents: append(s.f_programOfWorks.documents), complete: true } }
+        const completedCount = Object.values(sections).filter((sec: any) => sec.complete).length
+        return { ...prev, sections, completedCount, isComplete: completedCount === prev.totalSections }
+      })
     } catch (e: any) {
       alert('Upload failed: ' + (e?.response?.data?.message || e?.message || 'Unknown error'))
     }
@@ -112,14 +154,35 @@ export function ProviderOnboarding({ onApproved }: { onApproved: () => void }) {
   const deleteDoc = async (id: string) => {
     try {
       await api.delete(`/providers/self-service/onboarding-document/${id}`)
-      fetchPacket()
+      // Optimistic: remove from all document lists.
+      setPacket(prev => {
+        if (!prev) return prev
+        const s = prev.sections
+        const rm = (arr: OnboardingDoc[]) => arr.filter(d => d.id !== id)
+        const sections = {
+          ...s,
+          a_companyProfile: { ...s.a_companyProfile, documents: rm(s.a_companyProfile.documents) },
+          b_yearsOfExperience: { ...s.b_yearsOfExperience, documents: rm(s.b_yearsOfExperience.documents) },
+          d_certifications: { ...s.d_certifications, firmDocuments: rm(s.d_certifications.firmDocuments), staffDocuments: rm(s.d_certifications.staffDocuments) },
+          f_programOfWorks: { ...s.f_programOfWorks, documents: rm(s.f_programOfWorks.documents) },
+        }
+        const completedCount = Object.values(sections).filter((sec: any) => sec.complete).length
+        return { ...prev, sections, completedCount, isComplete: completedCount === prev.totalSections }
+      })
     } catch { /* ignore */ }
   }
 
   const addReference = async (ref: Omit<Reference, 'id'>) => {
     try {
-      await api.post('/providers/self-service/references', ref)
-      fetchPacket()
+      const { data: newRef } = await api.post('/providers/self-service/references', ref)
+      setPacket(prev => {
+        if (!prev) return prev
+        const s = prev.sections
+        const refs = [...s.e_references.references, newRef]
+        const sections = { ...s, e_references: { ...s.e_references, references: refs, complete: refs.length >= 2 } }
+        const completedCount = Object.values(sections).filter((sec: any) => sec.complete).length
+        return { ...prev, sections, completedCount, isComplete: completedCount === prev.totalSections }
+      })
     } catch (e: any) {
       alert('Failed: ' + (e?.response?.data?.message || e?.message || 'Unknown error'))
     }
@@ -128,14 +191,46 @@ export function ProviderOnboarding({ onApproved }: { onApproved: () => void }) {
   const deleteReference = async (id: string) => {
     try {
       await api.delete(`/providers/self-service/references/${id}`)
-      fetchPacket()
+      setPacket(prev => {
+        if (!prev) return prev
+        const s = prev.sections
+        const refs = s.e_references.references.filter(r => r.id !== id)
+        const sections = { ...s, e_references: { ...s.e_references, references: refs, complete: refs.length >= 2 } }
+        const completedCount = Object.values(sections).filter((sec: any) => sec.complete).length
+        return { ...prev, sections, completedCount, isComplete: completedCount === prev.totalSections }
+      })
     } catch { /* ignore */ }
+  }
+
+  // (g) Registration document — stored on the provider record itself, not as
+  // an onboarding doc row. Reuses the existing self-service/proof-document API.
+  const uploadRegistrationDocument = async (file: File) => {
+    const fd = new FormData()
+    fd.append('proofDocument', file)
+    try {
+      const { data: updated } = await api.post('/providers/self-service/proof-document', fd)
+      setPacket(prev => {
+        if (!prev) return prev
+        const sections = {
+          ...prev.sections,
+          g_registrationDocument: {
+            complete: true,
+            proofDocumentName: updated?.proofDocumentName ?? file.name,
+          },
+        }
+        const completedCount = Object.values(sections).filter((sec: any) => sec.complete).length
+        return { ...prev, sections, completedCount, isComplete: completedCount === prev.totalSections }
+      })
+    } catch (e: any) {
+      alert('Upload failed: ' + (e?.response?.data?.message || e?.message || 'Unknown error'))
+    }
   }
 
   const submitPacket = async () => {
     setSubmitting(true); setSubmitError(null)
     try {
-      await api.post('/providers/self-service/onboarding-submit')
+      await api.post('/providers/self-service/onboarding-submit', { note: resubmissionNote.trim() || undefined })
+      setResubmissionNote('')
       fetchPacket()
     } catch (e: any) {
       const err = e?.response?.data
@@ -153,6 +248,9 @@ export function ProviderOnboarding({ onApproved }: { onApproved: () => void }) {
   const s = packet.sections
   const progressPct = (packet.completedCount / packet.totalSections) * 100
   const submitted = !!packet.onboardingSubmittedAt
+  const isReturned = packet.approvalStatus === 'returned_for_correction'
+  // Show the submit button when: never submitted yet, OR returned for correction.
+  const canSubmit = !submitted || isReturned
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-12">
@@ -180,7 +278,7 @@ export function ProviderOnboarding({ onApproved }: { onApproved: () => void }) {
             </Button>
           </div>
           <Progress value={progressPct} className="h-2" />
-          {submitted && (
+          {submitted && !isReturned && (
             <div className="flex items-start gap-2 rounded-md bg-blue-500/10 border border-blue-500/30 p-3 mt-3 text-sm">
               <Clock className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
               <div>
@@ -332,7 +430,19 @@ export function ProviderOnboarding({ onApproved }: { onApproved: () => void }) {
         </div>
       </SectionCard>
 
-      {/* Submit */}
+      {/* Section (g) — Registration Document (proof of legal existence) */}
+      <SectionCard
+        letter="g" title="Registration document" icon={ScrollText}
+        complete={s.g_registrationDocument.complete}
+        description="Upload your official registration certificate — certificate of incorporation, business permit, or operating licence."
+      >
+        <RegistrationDocumentUploader
+          name={s.g_registrationDocument.proofDocumentName}
+          onUpload={uploadRegistrationDocument}
+        />
+      </SectionCard>
+
+      {/* Submit / Re-submit */}
       <Card className={packet.isComplete ? 'border-emerald-500/50 bg-emerald-500/5' : ''}>
         <CardContent className="pt-5 space-y-3">
           {packet.isComplete ? (
@@ -341,15 +451,46 @@ export function ProviderOnboarding({ onApproved }: { onApproved: () => void }) {
                 <CheckCircle className="h-5 w-5" />
                 <span className="font-semibold">All 6 sections complete</span>
               </div>
-              <p className="text-sm text-muted-foreground">
-                {submitted
-                  ? 'You have already submitted your packet. Any changes above are saved automatically. CIC staff will review your submission.'
-                  : 'Submit your packet for CIC review. You will be notified by email when your account is activated.'}
-              </p>
-              {!submitted && (
-                <Button onClick={submitPacket} disabled={submitting} className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold">
-                  {submitting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Submitting…</> : <>Submit for CIC review</>}
-                </Button>
+
+              {/* If already under review (not returned), show waiting message */}
+              {submitted && !isReturned && (
+                <p className="text-sm text-muted-foreground">
+                  Your packet is under review. Any changes above are saved automatically — CIC staff will
+                  review your latest data.
+                </p>
+              )}
+
+              {/* Show submit/re-submit when never submitted or when returned for correction */}
+              {canSubmit && (
+                <>
+                  {isReturned && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs flex items-center gap-1.5">
+                        <MessageSquare className="h-3.5 w-3.5" />
+                        Cover note for the reviewer <span className="text-muted-foreground">(optional)</span>
+                      </Label>
+                      <Textarea
+                        rows={3}
+                        placeholder="Briefly describe what you corrected or updated in this re-submission…"
+                        value={resubmissionNote}
+                        onChange={e => setResubmissionNote(e.target.value)}
+                        className="text-sm"
+                      />
+                    </div>
+                  )}
+                  <Button
+                    onClick={submitPacket}
+                    disabled={submitting}
+                    className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold"
+                  >
+                    {submitting
+                      ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Submitting…</>
+                      : isReturned
+                        ? <><Upload className="h-4 w-4 mr-2" /> Re-submit for CIC review</>
+                        : <>Submit for CIC review</>
+                    }
+                  </Button>
+                </>
               )}
             </>
           ) : (
@@ -361,7 +502,7 @@ export function ProviderOnboarding({ onApproved }: { onApproved: () => void }) {
                 </span>
               </p>
               <Button disabled className="opacity-60 cursor-not-allowed">
-                Submit for CIC review ({packet.completedCount}/{packet.totalSections})
+                {isReturned ? 'Re-submit for CIC review' : 'Submit for CIC review'} ({packet.completedCount}/{packet.totalSections})
               </Button>
             </>
           )}
@@ -561,6 +702,49 @@ function ReferencesEditor({
 
       <p className="text-xs text-muted-foreground">
         Minimum 2 references. Currently {references.length} / 2+.
+      </p>
+    </div>
+  )
+}
+
+function RegistrationDocumentUploader({
+  name, onUpload,
+}: {
+  name: string | null
+  onUpload: (file: File) => void | Promise<void>
+}) {
+  const [uploading, setUploading] = useState(false)
+  const hasDoc = !!name
+
+  return (
+    <div className="space-y-3">
+      {hasDoc && (
+        <div className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm">
+          <FileText className="h-4 w-4 text-emerald-500 shrink-0" />
+          <span className="flex-1 truncate font-medium">{name}</span>
+          <span className="text-[10px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-semibold">uploaded</span>
+        </div>
+      )}
+      <label className="cursor-pointer w-fit block">
+        <input
+          type="file"
+          className="hidden"
+          accept=".pdf,.jpg,.jpeg,.png"
+          disabled={uploading}
+          onChange={async e => {
+            const f = e.target.files?.[0]
+            if (!f) return
+            setUploading(true)
+            try { await onUpload(f) } finally { setUploading(false); e.target.value = '' }
+          }}
+        />
+        <div className="flex items-center gap-2 rounded-md border border-dashed border-primary/40 bg-primary/5 hover:bg-primary/10 px-3 py-2 text-xs text-primary font-medium w-fit transition-colors">
+          {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileUp className="h-3.5 w-3.5" />}
+          {uploading ? 'Uploading…' : hasDoc ? 'Replace document' : 'Upload registration document'}
+        </div>
+      </label>
+      <p className="text-[11px] text-muted-foreground">
+        Accepts PDF, JPG, or PNG. This is the official document CIC will check against the regulator's public register.
       </p>
     </div>
   )
