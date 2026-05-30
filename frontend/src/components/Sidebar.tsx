@@ -102,7 +102,7 @@ export function Sidebar() {
           </div>
           {!sidebarCollapsed && (
             <div className="flex flex-col">
-              <span className="text-sm font-semibold">ClaimFlow</span>
+              <span className="text-sm font-semibold">ClaimsFlow</span>
               <span className="text-[10px] text-muted-foreground">Medical Automation</span>
             </div>
           )}
