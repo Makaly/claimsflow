@@ -9,6 +9,33 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **Provider onboarding lifecycle — per-document review & resubmission**
+  (`backend/src/providers`, `frontend/src/components/OnboardingPacketReview.tsx`,
+  `ProviderApprovalGate.tsx`, `ProviderOnboarding.tsx`, `pages/Providers.tsx`) —
+  each uploaded onboarding document is now individually reviewable. Admins can
+  approve or reject a single file with a comment; the provider then uploads a
+  corrected version, which supersedes the previous one while the prior version
+  is retained (`isLatest = false`) for the audit trail. A packet can be
+  returned for correction with a free-text provider note captured on
+  resubmission. Backed by the `pr4_per_doc_approval` and `provider_note`
+  migrations.
+
+- **Provider self-registration with email-OTP verification**
+  (`backend/src/auth`, `frontend/src/pages/ProviderRegister.tsx`,
+  `VerifyEmail.tsx`) — providers (and users under a provider) can self-register
+  and verify their email via a one-time passcode before entering the onboarding
+  flow. Anonymous auth endpoints no longer force a logout on a `401`, so
+  validation messages surface instead of destroying form state.
+
+- **Job Setups — per-document-type indexing profiles**
+  (`backend/src/job-setup`, `backend/src/lookup`,
+  `frontend/src/pages/JobSetups.tsx`, `LookupSources.tsx`,
+  `components/DynamicIndexForm.tsx`, `JobSetupPicker.tsx`) — configurable
+  indexing profiles with custom fields per document type, isolated per-setup
+  learning of frequent field values, and pluggable reference-data lookup
+  sources for field auto-population. Batches and OCR extractions are bound to a
+  profile via `jobSetupId`. Backed by the `job_setups` migration.
+
 - **ADF batch scanning with multi-page PDF output** (`scan-agent/agent.js`) —
   the `/scan` endpoint now accepts a `source` parameter (`flatbed`, `feeder`,
   `feeder-duplex`, `auto`). When `feeder` or `feeder-duplex` is selected on
@@ -82,6 +109,18 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- **Prisma upgraded to v6** (`backend/package.json`,
+  `backend/src/prisma/prisma.service.ts`) — bumped `prisma`/`@prisma/client`
+  from 5.22 to 6.19 and moved the CLI to `devDependencies`. The v6 `$use`
+  middleware API was removed, so the GDPR field-encryption layer is
+  re-implemented as a `$extends` query extension fronted by a Proxy, keeping
+  call sites (`prisma.<model>.<op>()`) and Nest lifecycle hooks unchanged.
+
+- **Product name unified to "ClaimsFlow"** (`Sidebar.tsx`, `FraudQueue.tsx`,
+  `MakerQueue.tsx`) — corrected stray "ClaimFlow" occurrences in the sidebar,
+  email footers and fraud report header. Added a scalable SVG app icon wired
+  into `index.html` and the PWA manifest.
+
 - **Scanner list redesigned in Batch Upload** (`BatchUpload.tsx`) — both
   scanner list panels (cloud-hosted path and scan-agent path) now display:
 
@@ -104,6 +143,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   instead of surfacing a confusing CORS or network error to the user.
 
 ### Fixed
+
+- **Vite dev server HMR and chart chunking** (`frontend/vite.config.js`) —
+  dropped the hard-coded HMR port so the websocket follows whatever port Vite
+  binds (fixes a WS `404` when it falls back to 3001), and stopped isolating
+  `recharts`/`d3` into a separate vendor chunk (circular imports triggered a
+  TDZ crash when Rollup split them out).
 
 - **`scanimage -L` listing time reduced from ~9 s to <1 s on Linux/macOS**
   (`scan-agent/agent.js`, `scan-agent/sane.d/`) — the system `dll.conf`
