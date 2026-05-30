@@ -42,6 +42,7 @@ import { stampBarcodeOnPdf, stampBarcodeOnImage, splitAndStampPdf } from '@/lib/
 import { extractInvoicesFromPdf, type ExtractedInvoiceData } from '@/lib/pdfTextExtract'
 import api from '@/services/api'
 import { JobSetupPicker } from '@/components/JobSetupPicker'
+import { DynamicIndexForm } from '@/components/DynamicIndexForm'
 import { jobSetupApi, type JobSetup } from '@/services/jobSetupService'
 import { useScanMetering } from '@/hooks/useScanMetering'
 import { getDeviceInfo as getDeviceInfoForScan } from '@/lib/deviceInfo'
@@ -73,6 +74,7 @@ interface ExtractedClaim {
   aiConfidence: number
   aiVerified: boolean
   status: 'extracting' | 'extracted' | 'verified' | 'published' | 'error'
+  customFields?: Record<string, any>   // values for the active job setup's custom index fields
   fileBytes?: Uint8Array   // stamped PDF bytes kept in memory for IDB caching
   splitFrom?: string
   invoiceIndex?: number
@@ -484,12 +486,16 @@ function ToolBtn({ active, onClick, icon, label, color, trailingIcon }: {
 }
 
 // ---- Full-screen Document Preview Modal ----
-function DocPreviewModal({ doc, onClose, onSave, sessionId }: {
+function DocPreviewModal({ doc, onClose, onSave, sessionId, jobSetup }: {
   doc: ExtractedClaim
   onClose: () => void
   sessionId?: string
   onSave: (updated: ExtractedClaim) => void
+  jobSetup?: JobSetup | null
 }) {
+  // Values for the active job setup's custom index fields (auto-populated +
+  // editable). Synced to the draft alongside the standard fields below.
+  const [customFields, setCustomFields] = useState<Record<string, any>>(doc.customFields ?? {})
   // Editable mirror of doc fields
   const [edit, setEdit] = useState({
     patientName:   doc.patientName,
@@ -611,6 +617,7 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId }: {
       setSavedStatus('saving')
       const updated = {
         ...doc,
+        customFields,
         patientName:   edit.patientName,
         patientId:     edit.patientId,
         memberNumber:  edit.memberNumber,
@@ -638,7 +645,7 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId }: {
       setSavedStatus('saved')
     }, 600)
     return () => { if (autoSaveRef.current) clearTimeout(autoSaveRef.current) }
-  }, [edit]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [edit, customFields]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [pdfDoc, setPdfDoc]     = useState<pdfjsLib.PDFDocumentProxy | null>(null)
   const [pageNum, setPageNum]   = useState(1)
@@ -1594,6 +1601,24 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId }: {
                 {doc.splitFrom && <Badge variant="secondary" className="text-[9px] px-1.5 py-0 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">Split {doc.invoiceIndex}/{doc.totalInvoicesInPdf}</Badge>}
               </div>
             </div>
+
+            {/* Custom index fields from the selected job setup — auto-populated
+                via lookups + this setup's isolated learning. */}
+            {jobSetup && jobSetup.fields.length > 0 && (
+              <div className="rounded-xl border border-violet-500/20 bg-violet-950/10 p-3">
+                <DynamicIndexForm
+                  setup={jobSetup}
+                  values={customFields}
+                  onChange={setCustomFields}
+                  extracted={{
+                    patientName: edit.patientName, patientId: edit.patientId, memberNumber: edit.memberNumber,
+                    providerName: edit.providerName, invoiceNumber: edit.invoiceNumber, invoiceDate: edit.invoiceDate,
+                    invoiceAmount: edit.invoiceAmount, serviceDate: edit.serviceDate, diagnosis: edit.diagnosis,
+                    diagnosisCode: edit.diagnosisCode, procedureCode: edit.procedureCode, treatment: edit.treatment,
+                  }}
+                />
+              </div>
+            )}
 
             {/* Patient — editable */}
             <DPSection icon={<User className="h-3.5 w-3.5 text-blue-400" />} label="Patient">
@@ -3420,6 +3445,17 @@ export default function BatchUpload() {
           if (c.annotations?.length && savedClaim?.id) {
             await api.patch(`/claims/${savedClaim.id}/annotations`, { annotations: c.annotations }).catch(() => {})
           }
+
+          // Teach the selected job setup from this confirmed claim. Recorded
+          // against jobSetupId, so this knowledge stays isolated to this setup.
+          if (jobSetupRef.current) {
+            jobSetupApi.learn(jobSetupRef.current, {
+              ...(c.customFields || {}),
+              patientName: c.patientName, memberNumber: c.memberNumber,
+              providerName: c.providerName, invoiceNumber: c.invoiceNumber,
+              diagnosis: c.diagnosis, diagnosisCode: c.diagnosisCode, procedureCode: c.procedureCode,
+            }).catch(() => {})
+          }
         } catch (err: any) {
           console.error(`Failed to save claim ${c.claimNumber}:`, err?.response?.data || err.message)
         }
@@ -5194,6 +5230,7 @@ export default function BatchUpload() {
         <DocPreviewModal
           doc={previewDoc}
           sessionId={session?.sessionId}
+          jobSetup={jobSetup}
           onClose={() => setPreviewDoc(null)}
           onSave={(updated) => {
             setClaims(prev => prev.map(c => c.id === updated.id ? updated : c))
