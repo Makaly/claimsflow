@@ -41,6 +41,8 @@ import { cacheFile, cacheFiles, restoreFiles, restoreAsFiles, clearCachedFiles }
 import { stampBarcodeOnPdf, stampBarcodeOnImage, splitAndStampPdf } from '@/lib/pdfBarcode'
 import { extractInvoicesFromPdf, type ExtractedInvoiceData } from '@/lib/pdfTextExtract'
 import api from '@/services/api'
+import { JobSetupPicker } from '@/components/JobSetupPicker'
+import { jobSetupApi, type JobSetup } from '@/services/jobSetupService'
 import { useScanMetering } from '@/hooks/useScanMetering'
 import { getDeviceInfo as getDeviceInfoForScan } from '@/lib/deviceInfo'
 
@@ -2186,10 +2188,23 @@ export default function BatchUpload() {
   const [approvedProviders, setApprovedProviders] = useState<{ id: string; name: string }[]>([])
   const [providerBranches, setProviderBranches] = useState<{ id: string; name: string; code: string }[]>([])
   const [isProviderUser, setIsProviderUser] = useState(false)  // true when logged-in user is provider staff
+  // Job setup chosen at the start of the upload: drives custom index fields,
+  // lookups and the per-setup (isolated) learning for this batch.
+  const [jobSetup, setJobSetup] = useState<JobSetup | null>(null)
+  const jobSetupRef = useRef<string | null>(null)
   const [step, setStep] = useState<Step>('upload')
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
   const [claims, setClaims] = useState<ExtractedClaim[]>([])
   const claimsRef = useRef<ExtractedClaim[]>([])   // always mirrors claims — safe to read in async publish
+  // Keep the job-setup id ref current, and re-hydrate the full setup after a
+  // page reload from the persisted session meta.
+  useEffect(() => { jobSetupRef.current = jobSetup?.id ?? null }, [jobSetup])
+  useEffect(() => {
+    if (!jobSetup && session?.jobSetupId) {
+      jobSetupApi.get(session.jobSetupId).then(setJobSetup).catch(() => {})
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.jobSetupId])
   const [currentExtractIndex, setCurrentExtractIndex] = useState(0)
   const [publishProgress, setPublishProgress] = useState(0)
   const [publishValidationErrors, setPublishValidationErrors] = useState<Record<string, string[]>>({})
@@ -2606,7 +2621,7 @@ export default function BatchUpload() {
         api.post('/batch-submissions/draft-claims', {
           sessionId: sid,
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          claims: claims.map(({ fileBytes, ...c }) => c),
+          claims: claims.map(({ fileBytes, ...c }) => ({ ...c, jobSetupId: jobSetupRef.current })),
         }).catch(() => {})
       })
     }
@@ -3741,6 +3756,26 @@ export default function BatchUpload() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-5 pt-6">
+                {/* ── Job setup picker — choose what we're uploading first ── */}
+                <div className="rounded-lg border bg-muted/30 p-4">
+                  <JobSetupPicker
+                    selectedId={jobSetup?.id}
+                    onSelect={(s) => {
+                      setJobSetup(s)
+                      jobSetupRef.current = s.id
+                      const sid = session?.sessionId ?? `ses-${Date.now()}`
+                      upsertSession({ sessionId: sid, jobSetupId: s.id, jobSetupName: s.name })
+                    }}
+                  />
+                  {jobSetup && (
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      Indexing as <span className="font-medium text-foreground">{jobSetup.name}</span>
+                      {' · '}{jobSetup.fields.length} custom field{jobSetup.fields.length !== 1 ? 's' : ''}
+                      {jobSetup.fields.some((f) => f.source === 'lookup') && ' · auto-populated via lookups'}
+                    </p>
+                  )}
+                </div>
+
                 {/* ── Provider field ── */}
                 <div className="space-y-1.5">
                   {isProviderUser ? (

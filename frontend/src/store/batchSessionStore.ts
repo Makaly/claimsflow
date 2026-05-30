@@ -38,6 +38,8 @@ interface BatchSessionMeta {
   sessionId: string
   step: SessionStep
   provider: string
+  jobSetupId?: string
+  jobSetupName?: string
   totalFiles: number
   extractedCount: number
   publishProgress: number
