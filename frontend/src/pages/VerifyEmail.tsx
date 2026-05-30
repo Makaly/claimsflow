@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { ShieldCheck, KeyRound, Loader2, CheckCircle2, RefreshCw, ArrowRight } from 'lucide-react'
@@ -31,6 +31,18 @@ export default function VerifyEmail() {
     const id = setInterval(() => setResendIn((s) => (s > 0 ? s - 1 : 0)), 1000)
     return () => clearInterval(id)
   }, [resendIn])
+
+  // Auto-submit when the user lands on the 6th digit so they don't have
+  // to click the button. Guarded by a ref so a failed attempt doesn't
+  // loop on the same value.
+  const lastFiredRef = useRef<string>('')
+  useEffect(() => {
+    if (email && code.length === 6 && !busy && lastFiredRef.current !== code) {
+      lastFiredRef.current = code
+      verify()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code, busy, email])
 
   const verify = async () => {
     if (!email || !/^\d{6}$/.test(code)) { toast.error('Enter your email and a 6-digit code'); return }

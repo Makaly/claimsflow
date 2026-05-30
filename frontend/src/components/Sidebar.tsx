@@ -5,7 +5,7 @@ import {
   UserCheck, UserCog, Users, Activity, BarChart3, Shield,
   Settings, ChevronLeft, ChevronRight, Network, AlertOctagon,
   KeyRound, ShieldCheck, FileQuestion, Scale, CreditCard, Clock, SlidersHorizontal,
-  ScanLine, Database, ScanBarcode,
+  ScanLine, Database, ScanBarcode, Layers,
 } from 'lucide-react'
 import { useUnknownDocCount } from '@/hooks/useUnknownDocCount'
 import { cn } from '@/lib/utils'
@@ -38,6 +38,8 @@ const navigation: NavItem[] = [
   { name: 'Providers', href: '/providers', icon: Building2, roles: ['admin', 'claims_officer', 'maker_checker', 'fraud_officer'] },
   { name: 'Branches', href: '/branches', icon: Network, roles: [...CIC_STAFF, 'provider_admin'] },
   { name: 'Batch Upload', href: '/batch-upload', icon: Upload, roles: ['admin', 'claims_officer', 'maker_checker', 'provider_admin', 'provider_user'] },
+  { name: 'Job Setups', href: '/job-setups', icon: Layers, roles: ['admin', 'claims_officer'] },
+  { name: 'Lookup Sources', href: '/lookup-sources', icon: Database, roles: ['admin', 'claims_officer'] },
   { type: 'separator', name: 'Workflow', roles: CIC_STAFF },
   { name: 'Workflow', href: '/workflow', icon: GitBranch, roles: CIC_STAFF },
   { name: 'Maker Queue', href: '/workflow/maker', icon: UserCog, roles: ['admin', 'maker_checker'] },
@@ -102,7 +104,7 @@ export function Sidebar() {
           </div>
           {!sidebarCollapsed && (
             <div className="flex flex-col">
-              <span className="text-sm font-semibold">ClaimFlow</span>
+              <span className="text-sm font-semibold">ClaimsFlow</span>
               <span className="text-[10px] text-muted-foreground">Medical Automation</span>
             </div>
           )}

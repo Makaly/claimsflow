@@ -84,8 +84,23 @@ export function getStatusColor(status: string): string {
     active: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
     suspended: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300',
     inactive: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300',
+    // PR4 — distinct color so admins + providers see at a glance that an
+    // application was sent back for revisions (vs. a brand-new pending one).
+    returned_for_correction: 'bg-amber-100 text-amber-900 dark:bg-amber-900 dark:text-amber-300',
   }
   return colors[status] || 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
+}
+
+/** Renders raw status keys as human-readable labels for badges + tooltips. */
+export function formatStatusLabel(status: string): string {
+  switch (status) {
+    case 'returned_for_correction': return 'Returned'
+    case 'pending_approval': return 'Pending'
+    case 'fraud_confirmed': return 'Fraud Confirmed'
+    case 'fraud_hold': return 'Fraud Hold'
+    case 'under_review': return 'Under Review'
+    default: return status
+  }
 }
 
 /** Returns "—" when OCR stored a filesystem path or other clearly-invalid value instead of a real name/number. */

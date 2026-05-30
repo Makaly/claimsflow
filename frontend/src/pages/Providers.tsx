@@ -10,7 +10,7 @@ import {
   Upload, FileText, X, ChevronRight, ChevronLeft,
   Briefcase, Users, Building, Trash2, ShieldCheck, ShieldOff,
   Download, Pencil, ScanText, Save, RotateCcw, XCircle, AlertCircle,
-  DollarSign,
+  DollarSign, Loader2, Lock, History,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,7 +35,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { Pagination } from '@/components/Pagination'
-import { formatDate, getStatusColor } from '@/lib/utils'
+import { formatDate, getStatusColor, formatStatusLabel } from '@/lib/utils'
 import api from '@/services/api'
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -66,6 +66,9 @@ interface Provider {
   ownerIdNumber?: string
   proofDocumentPath?: string
   proofDocumentName?: string
+  approvalStatus?: string
+  approvalComment?: string | null
+  rejectionReason?: string | null
 }
 
 type CompanyStructure = 'sole_proprietorship' | 'partnership' | 'registered_company' | ''
@@ -198,7 +201,8 @@ export default function Providers() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null)
-  const [proofDocTab, setProofDocTab] = useState<'info' | 'document' | 'edit' | 'billing'>('info')
+  const [proofDocTab, setProofDocTab] = useState<'info' | 'document' | 'packet' | 'audit' | 'edit' | 'billing'>('info')
+  const [reviewReady, setReviewReady] = useState<{ ready: boolean; completed: number; total: number }>({ ready: false, completed: 0, total: 0 })
   const [actionProvider, setActionProvider] = useState<{ provider: Provider; type: 'approve' | 'decline' | 'suspend' | 'reactivate' } | null>(null)
   const [actionNote, setActionNote] = useState('')
   const [actionSaving, setActionSaving] = useState(false)
@@ -384,6 +388,7 @@ export default function Providers() {
     setProofDocTab('info')
     setOcrText(null)
     setDocBlobUrl(null)
+    setReviewReady({ ready: false, completed: 0, total: 0 })
   }
 
   const closeViewDialog = () => {
@@ -515,11 +520,12 @@ export default function Providers() {
       setOcrText(null)
       await loadDocBlob(next.id)
       return
-    } catch { /* fall through to optimistic */ }
-    setProviders(prev => prev.map(p => p.id === optimistic.id ? optimistic : p))
-    setSelectedProvider(optimistic)
-    setDocUploading(false)
-    setOcrText(null)
+    } catch (e: any) {
+      // Upload failed — surface the error so the admin sees what's wrong
+      // instead of silently leaving a broken optimistic state.
+      toast.error(e?.response?.data?.message || 'Document upload failed')
+      setDocUploading(false)
+    }
     await loadDocBlob(optimistic.id)
   }
 
@@ -800,7 +806,7 @@ export default function Providers() {
                   </TableCell>
                   <TableCell>
                     <Badge className={getStatusColor(provider.status)} variant="secondary">
-                      {provider.status}
+                      {formatStatusLabel(provider.status)}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm">{formatDate(provider.createdAt)}</TableCell>
@@ -867,7 +873,7 @@ export default function Providers() {
 
       {/* ── View / Edit Dialog ──────────────────────────────────────────────── */}
       <Dialog open={!!selectedProvider} onOpenChange={closeViewDialog}>
-        <DialogContent className="max-w-3xl p-0 gap-0 overflow-hidden h-[85vh] flex flex-col">
+        <DialogContent className="max-w-[1140px] p-0 gap-0 overflow-hidden h-[90vh] flex flex-col">
           <DialogTitle className="sr-only">{selectedProvider?.name}</DialogTitle>
 
           {selectedProvider && (
@@ -888,8 +894,9 @@ export default function Providers() {
                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold border ${
                       selectedProvider.status === 'approved' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' :
                       selectedProvider.status === 'suspended' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
+                      selectedProvider.status === 'returned_for_correction' ? 'bg-orange-500/10 text-orange-600 border-orange-500/30' :
                       'bg-amber-500/10 text-amber-600 border-amber-500/20'
-                    }`}>{selectedProvider.status}</span>
+                    }`}>{formatStatusLabel(selectedProvider.status)}</span>
                     <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-muted border text-muted-foreground capitalize">{selectedProvider.type}</span>
                     {selectedProvider.canSubmitClaims && (
                       <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-blue-500/10 text-blue-500 border border-blue-500/20">
@@ -911,14 +918,32 @@ export default function Providers() {
                 </div>
               </div>
 
+              {/* PR4 — overall provider decision bar (Approve / Decline /
+                  Return for correction). Visible only for non-terminal
+                  providers so a finalised record doesn't grow new buttons. */}
+              {(user?.role === 'admin' || user?.role === 'claims_officer') && selectedProvider.status !== 'approved' && (
+                <ProviderDecisionBar
+                  provider={selectedProvider}
+                  reviewReady={reviewReady.ready}
+                  reviewCompleted={reviewReady.completed}
+                  reviewTotal={reviewReady.total}
+                  onDone={(next) => {
+                    setSelectedProvider(next)
+                    fetchProviders().catch(() => undefined)
+                  }}
+                />
+              )}
+
               {/* Tab bar */}
               <div className="flex border-b shrink-0 bg-background px-6 gap-1">
                 {([
                   { key: 'info', label: 'Provider Details', icon: null },
                   { key: 'document', label: 'Registration Document', icon: <FileText className="h-3 w-3" /> },
+                  { key: 'packet', label: 'Onboarding Packet', icon: <FileText className="h-3 w-3" /> },
+                  { key: 'audit', label: 'Audit Trail', icon: <History className="h-3 w-3" /> },
                   { key: 'edit', label: 'Edit', icon: <Pencil className="h-3 w-3" /> },
                   { key: 'billing', label: 'Scan Billing', icon: <DollarSign className="h-3 w-3" /> },
-                ] as { key: 'info' | 'document' | 'edit' | 'billing'; label: string; icon: React.ReactNode }[]).map(({ key, label, icon }) => (
+                ] as { key: 'info' | 'document' | 'packet' | 'audit' | 'edit' | 'billing'; label: string; icon: React.ReactNode }[]).map(({ key, label, icon }) => (
                   <button key={key} onClick={() => { setProofDocTab(key); if (key === 'edit') openEditTab(selectedProvider) }}
                     className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors -mb-px ${
                       proofDocTab === key ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -932,7 +957,7 @@ export default function Providers() {
               </div>
 
               {/* Tab content */}
-              <div className="flex-1 overflow-y-auto">
+              <div className={proofDocTab === 'packet' ? 'flex-1 flex flex-col min-h-0' : 'flex-1 overflow-y-auto'}>
 
                 {/* ─ Info tab ─ */}
                 {proofDocTab === 'info' && (
@@ -1380,6 +1405,25 @@ export default function Providers() {
                   </div>
                 )}
 
+                {/* ─ Onboarding Packet tab ─ */}
+                {proofDocTab === 'packet' && (
+                  <div className="flex-1 min-h-0 flex flex-col">
+                    <OnboardingPacketReview
+                      providerId={selectedProvider.id}
+                      onReadinessChange={(ready, completed, total) =>
+                        setReviewReady({ ready, completed, total })
+                      }
+                    />
+                  </div>
+                )}
+
+                {/* ─ Audit Trail tab ─ */}
+                {proofDocTab === 'audit' && (
+                  <div className="p-6">
+                    <ProviderAuditTrail providerId={selectedProvider.id} />
+                  </div>
+                )}
+
                 {/* ─ Billing tab ─ */}
                 {proofDocTab === 'billing' && (
                   <div className="p-6">
@@ -1744,6 +1788,366 @@ export default function Providers() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PR4: Overall provider decision bar — Approve / Decline / Return-for-correction
+// ─────────────────────────────────────────────────────────────────────────────
+function ProviderDecisionBar({
+  provider, onDone, reviewReady, reviewCompleted, reviewTotal,
+}: {
+  provider: Provider
+  onDone: (next: Provider) => void
+  reviewReady: boolean
+  reviewCompleted: number
+  reviewTotal: number
+}) {
+  const [open, setOpen] = useState<null | 'approve' | 'decline' | 'return'>(null)
+  const [comment, setComment] = useState('')
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const isReturned = provider.status === 'returned_for_correction' || provider.approvalStatus === 'returned_for_correction'
+
+  const closeForm = () => { setOpen(null); setComment(''); setReason(''); setError(null) }
+
+  const submit = async () => {
+    setBusy(true); setError(null)
+    try {
+      let res: any
+      if (open === 'approve') {
+        if (!comment.trim()) { setError('Approval comment is required'); setBusy(false); return }
+        res = await api.post(`/providers/${provider.id}/approve`, { comment })
+        toast.success(`${provider.name} approved`)
+      } else if (open === 'decline') {
+        if (!reason.trim()) { setError('Rejection reason is required'); setBusy(false); return }
+        res = await api.post(`/providers/${provider.id}/reject`, { reason, comment: comment.trim() || undefined })
+        toast.success(`${provider.name} declined`)
+      } else if (open === 'return') {
+        if (!comment.trim()) { setError('Tell the provider what needs fixing'); setBusy(false); return }
+        res = await api.post(`/providers/${provider.id}/return-for-correction`, { comment })
+        toast.success(`${provider.name} returned for correction`)
+      }
+      if (res?.data) onDone(res.data as Provider)
+      closeForm()
+    } catch (e: any) {
+      const data = e?.response?.data
+      if (data?.code === 'review_incomplete') {
+        setError(`You must open and read every page of every document before approving. (${reviewCompleted}/${reviewTotal} documents fully read — switch to the Onboarding Packet tab to continue.)`)
+      } else {
+        setError(data?.message || 'Action failed')
+      }
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <div className={`border-b px-6 py-3 ${isReturned ? 'bg-amber-500/5' : 'bg-muted/30'}`}>
+      {isReturned && (
+        <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+          <RotateCcw className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <div>
+            <p className="font-medium">Returned for correction — waiting on the provider.</p>
+            {provider.approvalComment && (
+              <p className="mt-0.5 opacity-90">Your note: <em>"{provider.approvalComment}"</em></p>
+            )}
+            <p className="mt-0.5 opacity-70">When they resubmit, this banner clears and you can review again.</p>
+          </div>
+        </div>
+      )}
+      {!isReturned && (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mr-2">Decision</span>
+
+            {/* Approve — locked until all docs are fully read */}
+            <div className="relative group">
+              <Button
+                size="sm"
+                className={`h-7 text-xs gap-1.5 ${
+                  reviewReady
+                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                    : 'bg-muted text-muted-foreground cursor-not-allowed opacity-60'
+                }`}
+                onClick={() => { if (reviewReady) { setOpen('approve'); setError(null) } }}
+                disabled={busy || !reviewReady}
+                title={reviewReady ? 'Approve this provider' : `Read all documents first — ${reviewCompleted}/${reviewTotal} done`}
+              >
+                {reviewReady
+                  ? <CheckCircle className="h-3 w-3" />
+                  : <Lock className="h-3 w-3" />}
+                Approve
+                {!reviewReady && reviewTotal > 0 && (
+                  <span className="ml-0.5 text-[9px] opacity-70">({reviewCompleted}/{reviewTotal})</span>
+                )}
+              </Button>
+            </div>
+
+            <Button size="sm" variant="outline" className="h-7 border-amber-500/40 text-amber-600 hover:bg-amber-500/10 text-xs gap-1.5"
+              onClick={() => { setOpen('return'); setError(null) }} disabled={busy}>
+              <RotateCcw className="h-3 w-3" /> Return for correction
+            </Button>
+            <Button size="sm" variant="outline" className="h-7 border-red-500/40 text-red-600 hover:bg-red-500/10 text-xs gap-1.5"
+              onClick={() => { setOpen('decline'); setError(null) }} disabled={busy}>
+              <XCircle className="h-3 w-3" /> Decline
+            </Button>
+          </div>
+
+          {/* Reading progress hint when not all docs reviewed */}
+          {!reviewReady && reviewTotal > 0 && (
+            <p className="text-[10px] text-muted-foreground">
+              Approve unlocks after you read all pages in the <strong>Onboarding Packet</strong> tab — {reviewCompleted}/{reviewTotal} documents fully read.
+            </p>
+          )}
+        </div>
+      )}
+
+      {open && (
+        <div className="mt-3 rounded-md border bg-card p-3 space-y-2">
+          <p className="text-xs font-medium">
+            {open === 'approve' && 'Approve this provider'}
+            {open === 'decline' && 'Decline this provider (terminal)'}
+            {open === 'return' && 'Return packet to the provider for correction'}
+          </p>
+          {open === 'decline' && (
+            <Textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)}
+              placeholder="Reason — emailed to the provider" />
+          )}
+          <Textarea rows={2} value={comment} onChange={(e) => setComment(e.target.value)}
+            placeholder={
+              open === 'approve' ? 'Approval comment (required) — internal note'
+              : open === 'decline' ? 'Internal comment (optional)'
+              : 'What needs to be corrected? — emailed to the provider'
+            } />
+          {error && (
+            <div className="flex items-start gap-1.5 rounded-md bg-red-500/10 border border-red-500/30 px-2 py-1.5 text-[11px] text-red-600">
+              <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={closeForm}>Cancel</Button>
+            <Button size="sm" className={`h-7 text-xs ${
+              open === 'approve' ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+              : open === 'decline' ? 'bg-red-600 hover:bg-red-700 text-white'
+              : 'bg-amber-600 hover:bg-amber-700 text-white'
+            }`} onClick={submit} disabled={busy}>
+              {busy ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+              Confirm
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Audit Trail timeline for a single provider — shows every approval decision,
+// per-doc review action, return-for-correction, and page view for compliance.
+// ─────────────────────────────────────────────────────────────────────────────
+interface AuditEntry {
+  id: string
+  action: string
+  entity: string | null
+  entityId: string | null
+  actor: string
+  actorRole?: string | null
+  ipAddress?: string | null
+  at: string
+  metadata?: any
+}
+
+const ACTION_META: Record<string, { label: string; tone: string; Icon: any }> = {
+  approve_provider:                { label: 'Provider approved',                   tone: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30',   Icon: CheckCircle },
+  reject_provider:                 { label: 'Provider declined',                   tone: 'bg-red-500/15 text-red-600 border-red-500/30',               Icon: XCircle },
+  return_provider_for_correction:  { label: 'Returned for correction',             tone: 'bg-amber-500/15 text-amber-600 border-amber-500/30',         Icon: RotateCcw },
+  approve_onboarding_document:     { label: 'Document approved',                   tone: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30',   Icon: CheckCircle },
+  reject_onboarding_document:      { label: 'Document rejected',                   tone: 'bg-red-500/15 text-red-600 border-red-500/30',               Icon: XCircle },
+  resubmit_onboarding_document:    { label: 'Document re-submitted',               tone: 'bg-purple-500/15 text-purple-600 border-purple-500/30',      Icon: Upload },
+  provider_user_approved:          { label: 'Provider user approved',              tone: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30',   Icon: CheckCircle },
+  provider_user_rejected:          { label: 'Provider user rejected',              tone: 'bg-red-500/15 text-red-600 border-red-500/30',               Icon: XCircle },
+  view_page:                       { label: 'Document page viewed',                tone: 'bg-blue-500/15 text-blue-600 border-blue-500/30',            Icon: Eye },
+}
+
+function ProviderAuditTrail({ providerId }: { providerId: string }) {
+  const [entries, setEntries] = useState<AuditEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showPageViews, setShowPageViews] = useState(false)
+  const [docSummaryOpen, setDocSummaryOpen] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    api.get(`/providers/${providerId}/audit-trail`)
+      .then(({ data }) => { if (!cancelled) setEntries(data) })
+      .catch(() => { if (!cancelled) setEntries([]) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [providerId])
+
+  if (loading) return (
+    <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+      <Loader2 className="h-4 w-4 animate-spin" /> Loading audit trail…
+    </div>
+  )
+
+  const filtered = showPageViews ? entries : entries.filter(e => e.action !== 'view_page')
+  const decisionCount = entries.filter(e => e.action !== 'view_page').length
+  const pageViews = entries.filter(e => e.action === 'view_page')
+  const pageViewCount = pageViews.length
+
+  // Group page views by document for the "Documents viewed" summary so the
+  // reviewer can see at a glance which docs were opened, by whom, when, and
+  // which pages — without having to scroll through 33+ timeline entries.
+  const docSummary = new Map<string, { fileName: string; category: string; views: AuditEntry[]; reviewers: Set<string> }>()
+  for (const v of pageViews) {
+    const fileName = v.metadata?.fileName || v.entityId || 'Unknown document'
+    const category = v.metadata?.category || ''
+    const key = `${v.entityId}|${fileName}`
+    if (!docSummary.has(key)) docSummary.set(key, { fileName, category, views: [], reviewers: new Set() })
+    const e = docSummary.get(key)!
+    e.views.push(v)
+    e.reviewers.add(v.actor)
+  }
+
+  if (entries.length === 0) return (
+    <div className="rounded-lg border bg-card p-6 text-center text-sm text-muted-foreground">
+      <History className="h-8 w-8 mx-auto mb-2 opacity-30" />
+      <p>No audit events recorded for this provider yet.</p>
+    </div>
+  )
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-semibold">Audit Trail</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {decisionCount} decision{decisionCount !== 1 ? 's' : ''}, {pageViewCount} page view{pageViewCount !== 1 ? 's' : ''}
+          </p>
+        </div>
+        <label className="flex items-center gap-2 text-xs cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showPageViews}
+            onChange={e => setShowPageViews(e.target.checked)}
+            className="rounded border-border"
+          />
+          Show page views in timeline
+        </label>
+      </div>
+
+      {/* Documents viewed — collapsible summary keyed by doc */}
+      {docSummary.size > 0 && (
+        <div className="rounded-lg border bg-card">
+          <button
+            type="button"
+            onClick={() => setDocSummaryOpen(v => !v)}
+            className="flex w-full items-center justify-between px-3 py-2.5 border-b hover:bg-muted/40 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Eye className="h-3.5 w-3.5 text-blue-500" />
+              <span className="text-sm font-semibold">Documents viewed</span>
+              <Badge variant="outline" className="text-[10px]">{docSummary.size} doc{docSummary.size !== 1 ? 's' : ''}</Badge>
+            </div>
+            <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${docSummaryOpen ? 'rotate-90' : ''}`} />
+          </button>
+          {docSummaryOpen && (
+            <div className="divide-y">
+              {Array.from(docSummary.entries()).map(([key, d]) => {
+                const sorted = [...d.views].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
+                const firstAt = sorted[0]?.at
+                const lastAt = sorted[sorted.length - 1]?.at
+                const pages = new Set(sorted.map(v => v.metadata?.pageNumber).filter(p => p != null))
+                return (
+                  <div key={key} className="px-3 py-2.5 text-xs space-y-1.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <FileText className="h-3 w-3 text-muted-foreground shrink-0" />
+                      <span className="font-medium truncate flex-1">{d.fileName}</span>
+                      {d.category && <Badge variant="outline" className="text-[9px] uppercase">{d.category.replace(/_/g, ' ')}</Badge>}
+                      <Badge className="bg-blue-500/15 text-blue-600 border-blue-500/30 text-[9px]">
+                        {pages.size} page{pages.size !== 1 ? 's' : ''} read
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-3 text-[10px] text-muted-foreground pl-5 flex-wrap">
+                      <span>By {Array.from(d.reviewers).join(', ')}</span>
+                      <span>· First: {new Date(firstAt).toLocaleString()}</span>
+                      <span>· Last: {new Date(lastAt).toLocaleString()}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1 pl-5">
+                      {sorted.map(v => (
+                        <span
+                          key={v.id}
+                          className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[9px] tabular-nums"
+                          title={`${v.actor} viewed page ${v.metadata?.pageNumber} at ${new Date(v.at).toLocaleString()}`}
+                        >
+                          <span className="font-mono opacity-60">p{v.metadata?.pageNumber}</span>
+                          <span className="opacity-50">·</span>
+                          <span className="opacity-70">{new Date(v.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {filtered.map(e => {
+          const meta = ACTION_META[e.action] || { label: e.action, tone: 'bg-muted text-muted-foreground border-border', Icon: History }
+          const Icon = meta.Icon
+          return (
+            <div key={e.id} className="flex items-start gap-3 rounded-md border bg-card p-3">
+              <div className={`h-7 w-7 rounded-full flex items-center justify-center shrink-0 border ${meta.tone}`}>
+                <Icon className="h-3.5 w-3.5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap text-sm">
+                  <span className="font-semibold">{meta.label}</span>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="text-muted-foreground text-xs">{e.actor}</span>
+                  {e.actorRole && (
+                    <Badge variant="outline" className="text-[9px] uppercase tracking-wider">{e.actorRole}</Badge>
+                  )}
+                  <span className="ml-auto text-[10px] text-muted-foreground">
+                    {new Date(e.at).toLocaleString()}
+                  </span>
+                </div>
+                {/* Context-specific details */}
+                {e.metadata && (
+                  <div className="mt-1.5 text-xs text-muted-foreground space-y-0.5">
+                    {e.metadata.fileName && (
+                      <p>📄 <strong>{e.metadata.fileName}</strong>{e.metadata.category && <span className="opacity-70"> ({String(e.metadata.category).replace(/_/g, ' ')})</span>}</p>
+                    )}
+                    {e.metadata.pageNumber != null && (
+                      <p className="opacity-70">Page {e.metadata.pageNumber}</p>
+                    )}
+                    {e.metadata.comment && (
+                      <p className="italic">"{e.metadata.comment}"</p>
+                    )}
+                    {e.metadata.reason && (
+                      <p className="italic text-destructive">Reason: "{e.metadata.reason}"</p>
+                    )}
+                    {e.metadata.version && e.metadata.version > 1 && (
+                      <p className="opacity-70">Version {e.metadata.version}</p>
+                    )}
+                    {e.ipAddress && (
+                      <p className="text-[10px] opacity-50">IP {e.ipAddress}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

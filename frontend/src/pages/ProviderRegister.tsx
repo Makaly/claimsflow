@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -7,8 +7,9 @@ import { toast } from 'sonner'
 import {
   ShieldCheck, Building2, Mail, Lock, Eye, EyeOff, Loader2, ArrowRight,
   ArrowLeft, CheckCircle2, Upload, FileText, X, Plus, AlertCircle, Trash2,
-  KeyRound, RefreshCw, Send, Sparkles,
+  KeyRound, RefreshCw, Send, Sparkles, FileImage, FileType2,
 } from 'lucide-react'
+import { useDropzone } from 'react-dropzone'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -64,6 +65,9 @@ type DocCategory = typeof ONBOARDING_CATEGORIES[number]['key']
 interface OnboardingDoc {
   id: string; category: string; fileName: string; mimeType?: string;
   fileSize?: number; pageCount?: number;
+  status?: 'pending' | 'approved' | 'rejected';
+  reviewComment?: string | null;
+  version?: number;
 }
 interface ProviderReference {
   id: string; clientName: string; contactPerson: string; contactEmail?: string;
@@ -84,7 +88,15 @@ type StepKey = typeof STEPS[number]['key']
 export default function ProviderRegister() {
   const navigate = useNavigate()
   const { login, user, isAuthenticated } = useAuthStore()
-  const [step, setStep] = useState<StepKey>('account')
+  // If the user is already signed in as a provider_admin (because they
+  // registered + verified in a previous session but never finished the
+  // onboarding packet), skip the account+OTP steps and drop them at the
+  // first authenticated step. They can still walk Back if they need to.
+  const [step, setStep] = useState<StepKey>(() => (
+    isAuthenticated && user?.role === 'provider_admin' && user?.providerId
+      ? 'scope'
+      : 'account'
+  ))
   const [showPwd, setShowPwd] = useState(false)
   const [busy, setBusy] = useState(false)
   const [registeredEmail, setRegisteredEmail] = useState<string | null>(null)
@@ -93,6 +105,22 @@ export default function ProviderRegister() {
   // Surface the most recent registration error as a persistent banner — the
   // toast disappears too fast for users to read while debugging a stuck form.
   const [submitError, setSubmitError] = useState<string | null>(null)
+  // PR4 — surface the "returned for correction" comment to the provider so
+  // they immediately understand what CIC needs them to fix.
+  const [returnedComment, setReturnedComment] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!(isAuthenticated && user?.role === 'provider_admin')) { setReturnedComment(null); return }
+    api.get('/providers/self-service/profile')
+      .then(({ data }) => {
+        if (data?.approvalStatus === 'returned_for_correction') {
+          setReturnedComment(data?.approvalComment || 'CIC asked you to revise your packet — please update and re-submit.')
+        } else {
+          setReturnedComment(null)
+        }
+      })
+      .catch(() => setReturnedComment(null))
+  }, [isAuthenticated, user?.role, user?.providerId])
 
   const form = useForm<AccountForm>({
     resolver: zodResolver(accountSchema),
@@ -212,6 +240,16 @@ export default function ProviderRegister() {
               onResend={resendOtp}
               onVerify={verifyOtp}
             />
+          )}
+          {isAuthenticated && returnedComment && (step === 'scope' || step === 'docs' || step === 'refs' || step === 'submit') && (
+            <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-200">
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+              <div>
+                <p className="font-semibold">CIC returned your application for correction.</p>
+                <p className="mt-1 italic opacity-90">"{returnedComment}"</p>
+                <p className="mt-1 text-xs opacity-80">Make the requested updates in any of the steps below, then go to "Review &amp; submit" to send it back.</p>
+              </div>
+            </div>
           )}
           {step === 'scope' && isAuthenticated && (
             <ScopeStep onDone={() => setStep('docs')} onBack={() => setStep('verify')} />
@@ -460,6 +498,16 @@ function VerifyStep({
   email: string; code: string; setCode: (s: string) => void; busy: boolean;
   resendIn: number; onResend: () => void; onVerify: () => void;
 }) {
+  // Auto-submit the moment the 6th digit is entered — the user shouldn't
+  // need to reach for the mouse. We track the last code we auto-fired so
+  // a failed verify doesn't loop on every re-render with the same value.
+  const lastFiredRef = useRef<string>('')
+  useEffect(() => {
+    if (code.length === 6 && !busy && lastFiredRef.current !== code) {
+      lastFiredRef.current = code
+      onVerify()
+    }
+  }, [code, busy, onVerify])
   return (
     <Card className="mx-auto max-w-xl border-white/10 bg-white/[0.03]">
       <CardContent className="space-y-6 p-8 text-center">
@@ -561,79 +609,124 @@ function DocumentsStep({ onDone, onBack }: { onDone: () => void; onBack: () => v
   const [loading, setLoading] = useState(true)
   const [uploadingFor, setUploadingFor] = useState<DocCategory | null>(null)
 
-  const refresh = async () => {
-    const { data } = await api.get('/providers/self-service/onboarding-packet')
-    const flat: OnboardingDoc[] = []
-    for (const k of Object.keys(data?.sections ?? {})) {
-      const docsAtKey = (data.sections as any)[k].documents
-      if (Array.isArray(docsAtKey)) flat.push(...docsAtKey)
-    }
-    setDocs(flat)
-  }
-  useEffect(() => { refresh().finally(() => setLoading(false)) }, [])
-
-  const upload = async (cat: DocCategory, file: File) => {
-    setUploadingFor(cat)
-    try {
-      const fd = new FormData()
-      fd.append('file', file)
-      fd.append('category', cat)
-      await api.post('/providers/self-service/onboarding-document', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+  // Single fetch on mount. After that we update local state from each upload's
+  // response — no need to refetch the whole packet, which would otherwise
+  // burn through the 120 req/min global throttle in a few clicks.
+  useEffect(() => {
+    let cancelled = false
+    api.get('/providers/self-service/onboarding-packet')
+      .then(({ data }) => {
+        if (cancelled) return
+        const flat: OnboardingDoc[] = []
+        for (const k of Object.keys(data?.sections ?? {})) {
+          const docsAtKey = (data.sections as any)[k].documents
+          if (Array.isArray(docsAtKey)) flat.push(...docsAtKey)
+        }
+        setDocs(flat)
       })
-      await refresh()
-      toast.success(`Uploaded ${file.name}`)
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Upload failed')
-    } finally { setUploadingFor(null) }
+      .catch(() => undefined)
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  const uploadMany = async (cat: DocCategory, files: File[]) => {
+    if (!files.length) return
+    setUploadingFor(cat)
+    let ok = 0, failed = 0
+    for (const file of files) {
+      try {
+        const fd = new FormData()
+        fd.append('file', file)
+        fd.append('category', cat)
+        const { data } = await api.post('/providers/self-service/onboarding-document', fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
+        // The endpoint returns the created row — append to local state so
+        // the UI updates without re-fetching the entire packet.
+        if (data?.id) setDocs((prev) => [...prev, data as OnboardingDoc])
+        ok++
+      } catch (err: any) {
+        failed++
+        toast.error(`${file.name}: ${err?.response?.data?.message || 'upload failed'}`)
+      }
+    }
+    setUploadingFor(null)
+    if (ok > 0) toast.success(`${ok} file${ok === 1 ? '' : 's'} uploaded`)
+    if (failed === 0 && ok === 0) toast.error('No files uploaded')
   }
 
   const remove = async (docId: string) => {
+    // Optimistic: drop from local state first, restore on error.
+    const previous = docs
+    setDocs((prev) => prev.filter((d) => d.id !== docId))
     try {
       await api.delete(`/providers/self-service/onboarding-document/${docId}`)
-      await refresh()
-    } catch { toast.error('Could not remove document') }
+    } catch {
+      setDocs(previous)
+      toast.error('Could not remove document')
+    }
+  }
+
+  // Upload a corrected file for a rejected document. Backend supersedes the
+  // old row and returns the new v+1 row, which replaces the old one in the
+  // list so the user sees the new status (pending) immediately.
+  const resubmit = async (oldDocId: string, file: File) => {
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const { data: replacement } = await api.post(
+        `/providers/self-service/onboarding-document/${oldDocId}/resubmit`,
+        fd,
+        { headers: { 'Content-Type': 'multipart/form-data' } },
+      )
+      if (replacement?.id) {
+        setDocs((prev) => prev.filter((d) => d.id !== oldDocId).concat(replacement as OnboardingDoc))
+      }
+      toast.success(`Replaced with v${replacement?.version ?? '?'} — sent for re-review`)
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Resubmit failed')
+    }
   }
 
   if (loading) return <Card className="border-white/10 bg-white/[0.03]"><CardContent className="p-10 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></CardContent></Card>
 
+  // Treat company_profile/experience_evidence/firm/staff/program_of_works as
+  // "required" categories (mirrors the backend section completeness rules).
+  const REQUIRED_CATS = ['company_profile','experience_evidence','firm_certifications','staff_certifications','program_of_works'] as const
+  const filledRequired = REQUIRED_CATS.filter((c) => docs.some((d) => d.category === c)).length
+
   return (
     <Card className="border-white/10 bg-white/[0.03]">
       <CardContent className="space-y-5 p-6">
-        <div>
-          <h3 className="text-lg font-semibold text-white">Supporting documents</h3>
-          <p className="mt-1 text-xs text-slate-400">PDF, JPEG, PNG and TIFF accepted. You can upload more than one file per category.</p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold text-white">Supporting documents</h3>
+            <p className="mt-1 text-xs text-slate-400">PDF, JPEG, PNG and TIFF up to 10 MB each. Drag a file onto a category — or click to browse.</p>
+          </div>
+          <Badge className={filledRequired === REQUIRED_CATS.length
+            ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/30'
+            : 'bg-amber-500/20 text-amber-200 border border-amber-500/30'}>
+            {filledRequired}/{REQUIRED_CATS.length} required categories
+          </Badge>
         </div>
 
         <div className="grid gap-3">
           {ONBOARDING_CATEGORIES.map(({ key, label, spec }) => {
             const here = docs.filter((d) => d.category === key)
+            const isRequired = (REQUIRED_CATS as readonly string[]).includes(key)
             return (
-              <div key={key} className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium text-slate-100">{label}</p>
-                    <p className="text-xs text-slate-500">{spec}</p>
-                  </div>
-                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-medium text-cyan-200 hover:bg-cyan-500/20">
-                    {uploadingFor === key ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                    Upload file
-                    <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.tif,.tiff"
-                      onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(key, f); e.currentTarget.value = '' }}
-                    />
-                  </label>
-                </div>
-                {here.length > 0 && (
-                  <ul className="mt-3 space-y-1.5">
-                    {here.map((d) => (
-                      <li key={d.id} className="flex items-center justify-between rounded-md bg-black/30 px-3 py-2 text-xs text-slate-300">
-                        <span className="flex items-center gap-2 truncate"><FileText className="h-3.5 w-3.5 text-slate-500 shrink-0" />{d.fileName}{d.pageCount ? <span className="ml-2 text-slate-500">· {d.pageCount} page{d.pageCount === 1 ? '' : 's'}</span> : null}</span>
-                        <button onClick={() => remove(d.id)} className="text-slate-500 hover:text-red-400" title="Remove"><Trash2 className="h-3.5 w-3.5" /></button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+              <DocCategoryCard
+                key={key}
+                category={key}
+                label={label}
+                spec={spec}
+                required={isRequired}
+                docs={here}
+                busy={uploadingFor === key}
+                onUpload={(files) => uploadMany(key, files)}
+                onRemove={remove}
+                onResubmit={resubmit}
+              />
             )
           })}
         </div>
@@ -642,6 +735,148 @@ function DocumentsStep({ onDone, onBack }: { onDone: () => void; onBack: () => v
       </CardContent>
     </Card>
   )
+}
+
+function DocCategoryCard({
+  category, label, spec, required, docs, busy, onUpload, onRemove, onResubmit,
+}: {
+  category: DocCategory
+  label: string
+  spec: string
+  required: boolean
+  docs: OnboardingDoc[]
+  busy: boolean
+  onUpload: (files: File[]) => void | Promise<void>
+  onRemove: (id: string) => void | Promise<void>
+  onResubmit: (oldDocId: string, file: File) => void | Promise<void>
+}) {
+  const complete = docs.length > 0
+  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
+    multiple: true,
+    noClick: true,        // we render our own click target so the whole card isn't a button
+    noKeyboard: true,
+    disabled: busy,
+    accept: {
+      'application/pdf': ['.pdf'],
+      'image/jpeg': ['.jpg', '.jpeg'],
+      'image/png':  ['.png'],
+      'image/tiff': ['.tif', '.tiff'],
+    },
+    onDrop: (accepted) => onUpload(accepted),
+  })
+
+  return (
+    <div
+      {...getRootProps()}
+      className={cn(
+        'rounded-xl border p-4 transition-colors',
+        isDragActive
+          ? 'border-cyan-400/70 bg-cyan-500/10'
+          : complete
+            ? 'border-emerald-500/30 bg-emerald-500/[0.04]'
+            : 'border-white/10 bg-white/[0.02]',
+      )}
+    >
+      <input {...getInputProps()} />
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-medium text-slate-100">{label}</p>
+            {required && <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-300">required</span>}
+            {complete && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />}
+          </div>
+          <p className="mt-0.5 text-xs text-slate-500">{spec}</p>
+        </div>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); open() }}
+          disabled={busy}
+          className="inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-medium text-cyan-200 transition hover:bg-cyan-500/20 disabled:opacity-50"
+        >
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+          {busy ? 'Uploading…' : 'Choose files'}
+        </button>
+      </div>
+
+      {isDragActive && (
+        <div className="mt-3 rounded-md border border-dashed border-cyan-400/40 bg-cyan-500/5 p-3 text-center text-xs font-medium text-cyan-200">
+          Drop to upload to "{label}"
+        </div>
+      )}
+
+      {docs.length > 0 && (
+        <ul className="mt-3 space-y-1.5">
+          {docs.map((d) => {
+            const status = d.status || 'pending'
+            const statusPill =
+              status === 'approved' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+              : status === 'rejected' ? 'bg-red-500/15 text-red-300 border-red-500/30'
+              : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+            return (
+              <li key={d.id} className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2 rounded-md bg-black/30 px-3 py-2 text-xs text-slate-300">
+                  <span className="flex min-w-0 flex-1 items-center gap-2 truncate">
+                    <DocIcon mime={d.mimeType} />
+                    <span className="truncate" title={d.fileName}>{d.fileName}</span>
+                    {d.version && d.version > 1 ? <span className="rounded-full bg-purple-500/15 px-1.5 py-0.5 text-[10px] font-medium text-purple-300">v{d.version}</span> : null}
+                    <span className="ml-1 text-slate-500 shrink-0">
+                      {d.pageCount ? `· ${d.pageCount} pg` : ''}
+                      {d.fileSize ? ` · ${formatBytes(d.fileSize)}` : ''}
+                    </span>
+                  </span>
+                  <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium capitalize ${statusPill}`}>{status}</span>
+                  {status !== 'approved' && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onRemove(d.id) }}
+                      className="shrink-0 text-slate-500 transition hover:text-red-400"
+                      title="Remove"
+                    ><Trash2 className="h-3.5 w-3.5" /></button>
+                  )}
+                </div>
+
+                {status === 'rejected' && (
+                  <div className="rounded-md border border-red-500/30 bg-red-500/10 p-2 text-[11px] text-red-200">
+                    <p className="font-medium">CIC reviewer flagged this file for revision.</p>
+                    {d.reviewComment && <p className="mt-1 italic">"{d.reviewComment}"</p>}
+                    <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/15 px-2 py-1 text-[11px] font-medium text-amber-200 transition hover:bg-amber-500/25">
+                      <Upload className="h-3 w-3" />
+                      Upload corrected version
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept=".pdf,.jpg,.jpeg,.png,.tif,.tiff"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0]
+                          if (f) onResubmit(d.id, f)
+                          e.currentTarget.value = ''
+                        }}
+                      />
+                    </label>
+                  </div>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
+      {docs.length === 0 && !isDragActive && (
+        <p className="mt-3 text-[11px] text-slate-500">No files yet — drag one here, or use the button.</p>
+      )}
+    </div>
+  )
+}
+
+function DocIcon({ mime }: { mime?: string }) {
+  if (mime?.startsWith('image/')) return <FileImage className="h-3.5 w-3.5 shrink-0 text-purple-400" />
+  if (mime === 'application/pdf') return <FileType2 className="h-3.5 w-3.5 shrink-0 text-red-400" />
+  return <FileText className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / 1024 / 1024).toFixed(1)} MB`
 }
 
 // ── Step 5: References (≥2) ─────────────────────────────────────────────────

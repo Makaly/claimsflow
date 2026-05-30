@@ -60,29 +60,51 @@ function decryptResult(model: string, result: any): any {
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   constructor() {
     super();
-    // Prisma 5 still supports $use; we use it (rather than $extends) because
-    // it intercepts on the same client instance, so the rest of the codebase
-    // can keep calling `prisma.claim.findMany(...)` without changes.
-    this.$use(async (params, next) => {
-      const model = params.model;
-      if (model && ENCRYPTED_FIELDS[model]) {
-        const action = params.action;
-        if (action === 'create' || action === 'update') {
-          encryptWritePayload(model, params.args?.data);
-        } else if (action === 'upsert') {
-          encryptWritePayload(model, params.args?.create);
-          encryptWritePayload(model, params.args?.update);
-        } else if (action === 'updateMany' || action === 'createMany') {
-          // createMany accepts data: T | T[]
-          const d = params.args?.data;
-          if (Array.isArray(d)) d.forEach(row => encryptWritePayload(model, row));
-          else encryptWritePayload(model, d);
-        }
-      }
-      const result = await next(params);
-      if (model && ENCRYPTED_FIELDS[model]) return decryptResult(model, result);
-      return result;
+    // Prisma 6 removed the `$use` middleware API, so the GDPR field-encryption
+    // layer is now a `$extends` query extension (the documented replacement).
+    // `$extends` returns a NEW client instead of mutating `this`, so we return
+    // a Proxy from the constructor: model/operation access is routed to the
+    // extended client (encryption applied), while our Nest lifecycle hooks
+    // (onModuleInit/onModuleDestroy) stay bound to this base instance. The rest
+    // of the codebase keeps calling `prisma.claim.findMany(...)` unchanged.
+    const base = this;
+    const extended = this.$extends({
+      query: {
+        $allModels: {
+          async $allOperations({ model, operation, args, query }) {
+            const encrypted = !!ENCRYPTED_FIELDS[model];
+            if (encrypted) {
+              if (operation === 'create' || operation === 'update') {
+                encryptWritePayload(model, (args as AnyObject)?.data);
+              } else if (operation === 'upsert') {
+                encryptWritePayload(model, (args as AnyObject)?.create);
+                encryptWritePayload(model, (args as AnyObject)?.update);
+              } else if (operation === 'updateMany' || operation === 'createMany') {
+                // createMany accepts data: T | T[]
+                const d = (args as AnyObject)?.data;
+                if (Array.isArray(d)) d.forEach(row => encryptWritePayload(model, row));
+                else encryptWritePayload(model, d);
+              }
+            }
+            const result = await query(args);
+            if (encrypted) return decryptResult(model, result);
+            return result;
+          },
+        },
+      },
     });
+
+    return new Proxy(extended, {
+      get(target, prop, receiver) {
+        // Nest lifecycle hooks are defined on the PrismaService class, not on
+        // the extended client — route them to the base instance. ($connect /
+        // $disconnect called inside them share the same underlying engine.)
+        if (prop === 'onModuleInit' || prop === 'onModuleDestroy') {
+          return (base as AnyObject)[prop].bind(base);
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    }) as unknown as PrismaService;
   }
 
   async onModuleInit() {

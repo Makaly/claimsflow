@@ -35,14 +35,20 @@ export function ReviewPdfPager({ url, alreadyViewed = [], onLoadPages, onPageVie
   const [zoom, setZoom] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // Increments each time a document finishes loading so the render useEffect
+  // always fires after the canvas is mounted (page/zoom may not change on first load).
+  const [docKey, setDocKey] = useState(0)
 
   // Re-seed the reported set whenever the parent gives us a new baseline.
   useEffect(() => {
     reportedRef.current = new Set(alreadyViewed)
   }, [alreadyViewed.join(',')])
 
-  // Load the document.
+  // Load the document. Reset the reported-pages set SYNCHRONOUSLY on URL
+  // change — otherwise the previous doc's viewed pages bleed into the next
+  // doc and the page-view effect skips recording page 1 of the new doc.
   useEffect(() => {
+    reportedRef.current = new Set(alreadyViewed)
     let cancelled = false
     setLoading(true); setError(null)
     pdfjsLib.getDocument({ url, withCredentials: true }).promise
@@ -51,6 +57,7 @@ export function ReviewPdfPager({ url, alreadyViewed = [], onLoadPages, onPageVie
         docRef.current = doc
         setPageCount(doc.numPages)
         setPage(1)
+        setDocKey(k => k + 1)   // trigger render after canvas mounts
         onLoadPages?.(doc.numPages)
       })
       .catch((e) => { if (!cancelled) setError(e?.message || 'Failed to load document') })
@@ -62,15 +69,20 @@ export function ReviewPdfPager({ url, alreadyViewed = [], onLoadPages, onPageVie
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url])
 
-  // Render the active page.
+  // Render the active page. Depends on docKey so it re-fires after first load
+  // even when page and zoom stay at their initial values (1 / 100%).
   const render = useCallback(async () => {
     const doc = docRef.current
-    if (!doc || !canvasRef.current) return
+    // Capture ref immediately — before any await — so unmount between here
+    // and getContext can't produce a null-dereference.
+    const canvas = canvasRef.current
+    if (!doc || !canvas) return
     renderTaskRef.current?.cancel()
     try {
       const p = await doc.getPage(page)
+      // Guard again: component may have unmounted during the async getPage call.
+      if (!canvasRef.current) return
       const viewport = p.getViewport({ scale: zoom })
-      const canvas = canvasRef.current
       const ctx = canvas.getContext('2d')!
       canvas.width = viewport.width
       canvas.height = viewport.height
@@ -79,7 +91,8 @@ export function ReviewPdfPager({ url, alreadyViewed = [], onLoadPages, onPageVie
     } catch (e: any) {
       if (e?.name !== 'RenderingCancelledException') console.error(e)
     }
-  }, [page, zoom])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, zoom, docKey])
 
   useEffect(() => { render() }, [render])
 
@@ -94,44 +107,46 @@ export function ReviewPdfPager({ url, alreadyViewed = [], onLoadPages, onPageVie
     })
   }, [page, pageCount, onPageView])
 
-  if (loading) {
-    return (
-      <div className="flex h-72 items-center justify-center text-muted-foreground">
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading document…
-      </div>
-    )
-  }
   if (error) {
     return <div className="flex h-72 items-center justify-center text-sm text-red-500">{error}</div>
   }
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/40 px-3 py-2 text-sm">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="h-7 w-7" disabled={page <= 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}>
-            <ChevronLeft className="h-3.5 w-3.5" />
-          </Button>
-          <span className="font-medium tabular-nums">{page} / {pageCount}</span>
-          <Button variant="ghost" size="icon" className="h-7 w-7" disabled={page >= pageCount}
-            onClick={() => setPage((p) => Math.min(pageCount, p + 1))}>
-            <ChevronRight className="h-3.5 w-3.5" />
-          </Button>
-          {reportedRef.current.size >= pageCount && pageCount > 0 && (
-            <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-              <CheckCircle2 className="h-3 w-3" /> All pages viewed
-            </span>
-          )}
+      {/* Controls — hidden while loading */}
+      {!loading && (
+        <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/40 px-3 py-2 text-sm">
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" className="h-7 w-7" disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}>
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </Button>
+            <span className="font-medium tabular-nums">{page} / {pageCount}</span>
+            <Button variant="ghost" size="icon" className="h-7 w-7" disabled={page >= pageCount}
+              onClick={() => setPage((p) => Math.min(pageCount, p + 1))}>
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+            {reportedRef.current.size >= pageCount && pageCount > 0 && (
+              <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                <CheckCircle2 className="h-3 w-3" /> All pages viewed
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))}><ZoomOut className="h-3.5 w-3.5" /></Button>
+            <span className="w-12 text-center text-xs">{Math.round(zoom * 100)}%</span>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setZoom((z) => Math.min(3, z + 0.25))}><ZoomIn className="h-3.5 w-3.5" /></Button>
+          </div>
         </div>
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))}><ZoomOut className="h-3.5 w-3.5" /></Button>
-          <span className="w-12 text-center text-xs">{Math.round(zoom * 100)}%</span>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setZoom((z) => Math.min(3, z + 0.25))}><ZoomIn className="h-3.5 w-3.5" /></Button>
-        </div>
-      </div>
+      )}
 
-      <div className="max-h-[70vh] overflow-auto rounded-md border bg-muted/30 p-3 text-center">
+      {/* Canvas area — always in the DOM so canvasRef is available for the first render */}
+      <div className="relative max-h-[70vh] overflow-auto rounded-md border bg-white dark:bg-muted/30 p-3 text-center">
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-background/70 z-10">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        )}
         <canvas ref={canvasRef} className="mx-auto shadow-sm" />
       </div>
     </div>

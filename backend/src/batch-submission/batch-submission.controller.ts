@@ -56,6 +56,7 @@ export class BatchSubmissionController {
     @UploadedFiles() files: Express.Multer.File[],
     @Request() req,
     @Query('providerId') providerId?: string,
+    @Query('jobSetupId') jobSetupId?: string,
   ) {
     if (!files || files.length === 0) {
       throw new BadRequestException('No files uploaded');
@@ -79,6 +80,7 @@ export class BatchSubmissionController {
       req.ip,
       undefined,
       req.user?.branchId ?? null,
+      jobSetupId || null,
     );
   }
 

@@ -61,6 +61,23 @@ export class PolicyController {
     return this.policyService.getMemberByNumber(memberNumber);
   }
 
+  /**
+   * Mobile member-portal endpoint. Returns the member's plan + benefit
+   * envelope in the shape `MemberPolicyDto` expects on the mobile side
+   * (see INTEGRATION_SPRINT_8.md for the canonical wire shape). Guarded by
+   * `JwtAuthGuard` at the class level — service must additionally check
+   * `req.user.scope === 'member'` and `req.user.memberNumber === memberNumber`
+   * before returning; provider tokens MUST receive a 403.
+   *
+   * Stub: returns the demo plan from PolicyService.getMemberByNumber until
+   * the dedicated assembly logic lands.
+   */
+  @Get('member/:memberNumber')
+  getPolicyForMember(@Param('memberNumber') memberNumber: string) {
+    // TODO: enforce scope/member-number guard.
+    return this.policyService.getMemberByNumber(memberNumber);
+  }
+
   @Post('members')
   @UseGuards(RolesGuard)
   @Roles('admin', 'claims_officer')

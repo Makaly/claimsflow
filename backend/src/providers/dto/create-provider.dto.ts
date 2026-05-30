@@ -107,4 +107,10 @@ export class CreateProviderDto {
   @IsString()
   @IsOptional()
   proofDocumentName?: string;
+
+  /** Multer extracts this into a separate File, but the FormData field name
+   *  still arrives in the request body. Whitelist it so the validator doesn't
+   *  reject the PATCH with "property proofDocument should not exist". */
+  @IsOptional()
+  proofDocument?: any;
 }

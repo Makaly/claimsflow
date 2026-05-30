@@ -70,6 +70,8 @@ const CaseList              = lazy(() => import('@/pages/CaseList'))
 const CaseDetail            = lazy(() => import('@/pages/CaseDetail'))
 const LetterTemplates       = lazy(() => import('@/pages/LetterTemplates'))
 const WorkflowDesigner      = lazy(() => import('@/pages/WorkflowDesigner'))
+const JobSetups             = lazy(() => import('@/pages/JobSetups'))
+const LookupSources         = lazy(() => import('@/pages/LookupSources'))
 
 // Shared fallback spinner — keep lightweight (no external deps)
 function PageFallback() {
@@ -216,6 +218,8 @@ function AppRoutes() {
         <Route path="/cases/:id" element={<ProtectedRoute allowedRoles={CIC_STAFF}><CaseDetail /></ProtectedRoute>} />
         <Route path="/letter-templates" element={<ProtectedRoute allowedRoles={['admin','claims_officer']}><LetterTemplates /></ProtectedRoute>} />
         <Route path="/workflow-designer" element={<ProtectedRoute allowedRoles={['admin','claims_officer']}><WorkflowDesigner /></ProtectedRoute>} />
+        <Route path="/job-setups" element={<ProtectedRoute allowedRoles={['admin','claims_officer']}><JobSetups /></ProtectedRoute>} />
+        <Route path="/lookup-sources" element={<ProtectedRoute allowedRoles={['admin','claims_officer']}><LookupSources /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

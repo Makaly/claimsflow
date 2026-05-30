@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, BadRequestException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, ForbiddenException, ConflictException, Inject, forwardRef } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
@@ -59,7 +59,10 @@ export class AuthService {
     });
 
     if (existingUser) {
-      throw new UnauthorizedException('User already exists');
+      // 409 Conflict, not 401: this is a duplicate-resource error and
+      // returning 401 would trick the global axios interceptor into
+      // logging the anonymous user out and bouncing them to /login.
+      throw new ConflictException('A user with this email already exists');
     }
 
     // Hash password
@@ -299,7 +302,7 @@ export class AuthService {
       throw new BadRequestException('You must accept the Terms of Service and Privacy Policy to register.')
     }
     const existing = await this.prisma.user.findUnique({ where: { email: dto.adminEmail } })
-    if (existing) throw new UnauthorizedException('A user with this email already exists')
+    if (existing) throw new ConflictException('A user with this email already exists')
 
     // Create provider (pending approval)
     const provider = await this.prisma.provider.create({
@@ -437,7 +440,7 @@ export class AuthService {
     }
 
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
-    if (existing) throw new UnauthorizedException('A user with this email already exists');
+    if (existing) throw new ConflictException('A user with this email already exists');
 
     const hashed = await bcrypt.hash(dto.password, 10);
     const user = await this.prisma.user.create({

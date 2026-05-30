@@ -44,4 +44,26 @@ export class NotificationsController {
   findOne(@Param('id') id: string) {
     return this.notificationsService.findOne(id);
   }
+
+  /**
+   * Mobile push-token registration endpoint. The mobile shared module calls
+   * this from `App.kt`'s LaunchedEffect after the user authenticates — see
+   * `NotificationsRepository.registerDevice` in the mobile tree. Idempotent
+   * by `(userId, platform, token)`; the service layer should upsert and
+   * delete superseded tokens for the same device.
+   */
+  @Post('devices')
+  registerDevice(
+    @Body() body: { token: string; platform: 'android' | 'ios' },
+  ) {
+    // Stub — wire into NotificationsService.registerDevice once the
+    // ProviderDevice / MemberDevice schema is in Prisma. Tracked as part of
+    // INTEGRATION_PLATFORM_PUSH.md (mobile side).
+    return {
+      success: true,
+      token: body.token,
+      platform: body.platform,
+      note: 'stub — service-side persistence pending',
+    };
+  }
 }

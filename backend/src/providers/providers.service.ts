@@ -243,12 +243,21 @@ export class ProvidersService {
 
   async update(id: string, updateProviderDto: UpdateProviderDto) {
     try {
+      // Strip the FormData file alias — the controller already stored
+      // file.path/name; the raw "proofDocument" field would otherwise be
+      // passed to Prisma as an unknown column and blow up.
+      const { proofDocument: _proofDocument, ...data } = updateProviderDto as any;
       return await this.prisma.provider.update({
         where: { id },
-        data: updateProviderDto,
+        data,
       });
-    } catch (error) {
-      throw new NotFoundException(`Provider with ID ${id} not found`);
+    } catch (error: any) {
+      // P2025 = record not found; anything else is a real bug we want to see.
+      if (error?.code === 'P2025') {
+        throw new NotFoundException(`Provider with ID ${id} not found`);
+      }
+      console.error('[providers.update] unexpected error', { id, error: error?.message, code: error?.code });
+      throw error;
     }
   }
 
@@ -344,7 +353,7 @@ export class ProvidersService {
     if (provider.approvalStatus === 'approved') {
       return provider;
     }
-    if (!['pending_approval', 'pending'].includes(provider.approvalStatus)) {
+    if (!['pending_approval', 'pending', 'returned_for_correction'].includes(provider.approvalStatus)) {
       throw new BadRequestException(
         `Provider cannot be approved from its current status: ${provider.approvalStatus}`,
       );
@@ -434,7 +443,7 @@ export class ProvidersService {
     if (!provider) {
       throw new NotFoundException(`Provider with ID ${id} not found`);
     }
-    if (!['pending_approval', 'pending'].includes(provider.approvalStatus)) {
+    if (!['pending_approval', 'pending', 'returned_for_correction'].includes(provider.approvalStatus)) {
       throw new BadRequestException('Provider is not pending approval');
     }
     if (!reason || !reason.trim()) {
@@ -709,7 +718,7 @@ export class ProvidersService {
           status: 'success',
           ipAddress: meta?.ipAddress,
           userAgent: meta?.userAgent,
-          metadata: { pageNumber, providerId: doc.providerId, category: doc.category },
+          metadata: { pageNumber, providerId: doc.providerId, category: doc.category, fileName: doc.fileName },
         },
       });
     }
@@ -750,7 +759,7 @@ export class ProvidersService {
    */
   async getReviewReadiness(adminUserId: string, providerId: string) {
     const docs = await this.prisma.providerOnboardingDocument.findMany({
-      where: { providerId },
+      where: { providerId, isLatest: true },
       orderBy: [{ category: 'asc' }, { uploadedAt: 'asc' }],
     });
 
@@ -804,6 +813,283 @@ export class ProvidersService {
     return this.prisma.providerOnboardingDocument.delete({ where: { id: docId } });
   }
 
+  /**
+   * PR4 — overall "return the whole packet to the provider for correction".
+   * Distinct from rejectProvider() (which is terminal) — this resets the
+   * provider's approval flag to pending so they can update their packet and
+   * resubmit, and emails them with the admin's comment. No individual
+   * document statuses are touched; that's done via reject-document.
+   */
+  async returnProviderForCorrection(
+    providerId: string,
+    actingAdminId: string,
+    comment: string,
+  ) {
+    if (!comment || !comment.trim()) {
+      throw new BadRequestException('A comment is required so the provider knows what to fix.');
+    }
+    const provider = await this.prisma.provider.findUnique({
+      where: { id: providerId },
+      include: { users: { where: { role: 'provider_admin' }, take: 5 } },
+    });
+    if (!provider) throw new NotFoundException('Provider not found');
+
+    const updated = await this.prisma.provider.update({
+      where: { id: providerId },
+      data: {
+        // Distinct from 'pending_approval' (brand-new submission) so the
+        // admin list + provider wizard can render a clear "needs revision"
+        // state. approveProvider() accepts both values as preconditions.
+        approvalStatus: 'returned_for_correction',
+        status: 'returned_for_correction',
+        approvalComment: comment.trim(),
+        rejectionReason: null,
+        onboardingSubmittedAt: null,
+      },
+    });
+
+    const admin = await this.prisma.user.findUnique({
+      where: { id: actingAdminId }, select: { name: true, role: true },
+    });
+    await this.prisma.activityLog.create({
+      data: {
+        userId: actingAdminId,
+        username: admin?.name,
+        userRole: admin?.role,
+        action: 'return_provider_for_correction',
+        entity: 'provider',
+        entityId: providerId,
+        status: 'success',
+        metadata: { comment: comment.trim() },
+      },
+    });
+
+    // Dedicated "please revise" template — distinct from the terminal
+    // rejection email so the provider isn't told their application was
+    // declined when it's only paused for corrections.
+    const resubmitUrl = `${process.env.APP_URL || 'http://localhost:3000'}/`;
+    for (const u of provider.users) {
+      this.emailService.sendProviderReturnedForCorrection({
+        recipientEmail: u.email,
+        recipientName: u.name,
+        providerName: provider.name,
+        comment: comment.trim(),
+        resubmitUrl,
+      }).catch(() => undefined);
+    }
+    const adminIds = provider.users.map((u) => u.id);
+    if (adminIds.length) {
+      // Re-use the provider:decision event with a softer payload so the bell
+      // toast can render an amber "needs revision" entry instead of a red
+      // rejection. The frontend useWebSocket hook already treats this as a
+      // provider:decision event.
+      this.eventsGateway.emitProviderDecision(adminIds, {
+        providerId, providerName: provider.name, decision: 'rejected',
+        comment: `Returned for correction: ${comment.trim()}`,
+      });
+    }
+
+    return updated;
+  }
+
+  // ── PR4: Per-document approval workflow ─────────────────────────────────
+
+  /** Admin marks one onboarding document as approved. Records the reviewer
+   *  + optional comment. Does NOT touch the overall provider approval state —
+   *  that still happens via approveProvider() once every doc is reviewed. */
+  async approveOnboardingDocument(
+    providerId: string,
+    docId: string,
+    adminUserId: string,
+    comment?: string,
+  ) {
+    const doc = await this.prisma.providerOnboardingDocument.findFirst({
+      where: { id: docId, providerId, isLatest: true },
+    });
+    if (!doc) throw new NotFoundException('Onboarding document not found');
+    if (doc.status === 'approved') return doc; // idempotent
+
+    const updated = await this.prisma.providerOnboardingDocument.update({
+      where: { id: docId },
+      data: {
+        status: 'approved',
+        reviewedBy: adminUserId,
+        reviewedAt: new Date(),
+        reviewComment: comment?.trim() || null,
+      },
+    });
+
+    const admin = await this.prisma.user.findUnique({ where: { id: adminUserId }, select: { name: true, role: true } });
+    await this.prisma.activityLog.create({
+      data: {
+        userId: adminUserId,
+        username: admin?.name,
+        userRole: admin?.role,
+        action: 'approve_onboarding_document',
+        entity: 'provider_onboarding_document',
+        entityId: docId,
+        status: 'success',
+        metadata: { providerId, category: doc.category, fileName: doc.fileName, version: doc.version, comment: comment?.trim() ?? null },
+      },
+    });
+    return updated;
+  }
+
+  /**
+   * Admin rejects one onboarding document with a required reason. The
+   * provider's admin users receive an email + WebSocket nudge so they can
+   * upload a corrected version. The rejected row stays in place (isLatest
+   * remains true) until a replacement supersedes it.
+   */
+  async rejectOnboardingDocument(
+    providerId: string,
+    docId: string,
+    adminUserId: string,
+    reason: string,
+  ) {
+    if (!reason || !reason.trim()) {
+      throw new BadRequestException('A rejection reason is required.');
+    }
+    const doc = await this.prisma.providerOnboardingDocument.findFirst({
+      where: { id: docId, providerId, isLatest: true },
+      include: { provider: { select: { name: true, users: { where: { role: 'provider_admin' }, select: { id: true, email: true, name: true } } } } },
+    });
+    if (!doc) throw new NotFoundException('Onboarding document not found');
+
+    const updated = await this.prisma.providerOnboardingDocument.update({
+      where: { id: docId },
+      data: {
+        status: 'rejected',
+        reviewedBy: adminUserId,
+        reviewedAt: new Date(),
+        reviewComment: reason.trim(),
+      },
+    });
+
+    const admin = await this.prisma.user.findUnique({ where: { id: adminUserId }, select: { name: true, role: true } });
+    await this.prisma.activityLog.create({
+      data: {
+        userId: adminUserId,
+        username: admin?.name,
+        userRole: admin?.role,
+        action: 'reject_onboarding_document',
+        entity: 'provider_onboarding_document',
+        entityId: docId,
+        status: 'success',
+        metadata: { providerId, category: doc.category, fileName: doc.fileName, version: doc.version, reason: reason.trim() },
+      },
+    });
+
+    // Notify the provider's admin user(s).
+    const recipients = doc.provider?.users ?? [];
+    const resubmitUrl = `${process.env.APP_URL || 'http://localhost:3000'}/provider-register`;
+    for (const r of recipients) {
+      this.emailService.sendOnboardingDocumentRejected({
+        recipientEmail: r.email,
+        recipientName: r.name,
+        providerName: doc.provider?.name ?? 'your provider',
+        fileName: doc.fileName,
+        category: doc.category,
+        reason: reason.trim(),
+        resubmitUrl,
+      }).catch(() => undefined);
+      this.eventsGateway.emitToUser(r.id, 'document:rejected', {
+        documentId: docId, fileName: doc.fileName, category: doc.category, reason: reason.trim(), timestamp: new Date(),
+      });
+    }
+    return updated;
+  }
+
+  /**
+   * Provider uploads a corrected file for a previously rejected document.
+   * Creates a new row (v+1), points its supersedesId at the original, and
+   * flips the original's isLatest to false. Pre-PR4 rows that lack a
+   * rejection are also permitted to be replaced if the provider needs to.
+   */
+  async resubmitOnboardingDocument(
+    providerId: string,
+    oldDocId: string,
+    file: { originalname: string; path: string; size: number; mimetype: string },
+    uploadedBy?: string,
+  ) {
+    const old = await this.prisma.providerOnboardingDocument.findFirst({
+      where: { id: oldDocId, providerId, isLatest: true },
+    });
+    if (!old) throw new NotFoundException('Onboarding document not found');
+
+    // Extract page count for the new file (same logic as addOnboardingDocument).
+    let pageCount: number | null = null;
+    if (file.mimetype === 'application/pdf') {
+      try {
+        const pdfParse = await import('pdf-parse');
+        const buf = readFileSync(file.path);
+        const parsed = await (pdfParse.default || (pdfParse as any))(buf);
+        if (parsed?.numpages && parsed.numpages > 0) pageCount = parsed.numpages;
+      } catch {
+        pageCount = null;
+      }
+    } else if (file.mimetype.startsWith('image/')) {
+      pageCount = 1;
+    }
+
+    // Two writes in a transaction so we never have two "latest" rows or
+    // zero "latest" rows for the same category.
+    const [, replacement] = await this.prisma.$transaction([
+      this.prisma.providerOnboardingDocument.update({
+        where: { id: oldDocId },
+        data: { isLatest: false },
+      }),
+      this.prisma.providerOnboardingDocument.create({
+        data: {
+          providerId,
+          category: old.category,
+          fileName: file.originalname,
+          filePath: file.path,
+          fileSize: file.size,
+          mimeType: file.mimetype,
+          pageCount: pageCount ?? undefined,
+          uploadedBy: uploadedBy,
+          version: old.version + 1,
+          supersedesId: old.id,
+          isLatest: true,
+          status: 'pending',
+        },
+      }),
+    ]);
+
+    // Log + alert CIC reviewers that a new version arrived.
+    await this.prisma.activityLog.create({
+      data: {
+        userId: uploadedBy,
+        action: 'resubmit_onboarding_document',
+        entity: 'provider_onboarding_document',
+        entityId: replacement.id,
+        status: 'success',
+        metadata: { providerId, supersedesId: old.id, category: old.category, version: replacement.version },
+      },
+    });
+    this.eventsGateway.emitToRole('admin',          'document:resubmitted', { providerId, documentId: replacement.id, category: old.category, version: replacement.version, timestamp: new Date() });
+    this.eventsGateway.emitToRole('claims_officer', 'document:resubmitted', { providerId, documentId: replacement.id, category: old.category, version: replacement.version, timestamp: new Date() });
+
+    return replacement;
+  }
+
+  /** Returns the version history (all versions, newest first) for a doc. */
+  async getOnboardingDocumentVersions(providerId: string, docId: string) {
+    const doc = await this.prisma.providerOnboardingDocument.findFirst({
+      where: { id: docId, providerId },
+    });
+    if (!doc) throw new NotFoundException('Onboarding document not found');
+    // Walk the chain: from the supplied doc upward to the root (no supersedesId),
+    // then list all descendants. Simpler: query all rows with the same category
+    // that are linked via this lineage.
+    const all = await this.prisma.providerOnboardingDocument.findMany({
+      where: { providerId, category: doc.category },
+      orderBy: { version: 'desc' },
+    });
+    return all;
+  }
+
   async addReference(
     providerId: string,
     data: {
@@ -838,12 +1124,69 @@ export class ProvidersService {
     return this.prisma.providerReference.delete({ where: { id: refId } });
   }
 
+  /**
+   * Returns the human-readable audit trail for a provider — every approval
+   * decision, per-doc review, return-for-correction, and document re-submission
+   * recorded against this provider. Excludes noisy middleware "read" entries
+   * so the timeline focuses on actionable events.
+   */
+  async getProviderAuditTrail(providerId: string) {
+    const ACTIONS = [
+      'approve_provider',
+      'reject_provider',
+      'return_provider_for_correction',
+      'approve_onboarding_document',
+      'reject_onboarding_document',
+      'resubmit_onboarding_document',
+      'provider_user_approved',
+      'provider_user_rejected',
+      'view_page',
+    ];
+
+    const rows = await this.prisma.activityLog.findMany({
+      where: {
+        action: { in: ACTIONS },
+        OR: [
+          { entity: 'provider', entityId: providerId },
+          { metadata: { path: ['providerId'], equals: providerId } },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      select: {
+        id: true,
+        action: true,
+        entity: true,
+        entityId: true,
+        username: true,
+        userRole: true,
+        ipAddress: true,
+        createdAt: true,
+        metadata: true,
+      },
+    });
+
+    return rows.map((r) => ({
+      id: r.id,
+      action: r.action,
+      entity: r.entity,
+      entityId: r.entityId,
+      actor: r.username || 'System',
+      actorRole: r.userRole,
+      ipAddress: r.ipAddress,
+      at: r.createdAt,
+      metadata: r.metadata,
+    }));
+  }
+
   /** Returns the full onboarding packet + a per-section completeness report. */
   async getOnboardingPacket(providerId: string) {
     const provider = await this.prisma.provider.findUnique({
       where: { id: providerId },
       include: {
-        onboardingDocuments: { orderBy: { uploadedAt: 'desc' } },
+        // PR4 — only surface the latest version of each document. Superseded
+        // (isLatest=false) versions are reachable via getOnboardingDocumentVersions.
+        onboardingDocuments: { where: { isLatest: true }, orderBy: { uploadedAt: 'desc' } },
         references: { orderBy: { createdAt: 'desc' } },
       },
     });
@@ -889,6 +1232,21 @@ export class ProvidersService {
         programOfWorksText: provider.programOfWorksText,
         documents: docsByCategory('program_of_works'),
       },
+      // (g) Registration document — official certificate of incorporation,
+      // operating licence, or business registration. Stored on the provider
+      // record itself (proofDocumentPath) so it survives existing flows.
+      g_registrationDocument: {
+        complete: !!provider.proofDocumentPath,
+        proofDocumentName: provider.proofDocumentName,
+        proofDocumentPath: provider.proofDocumentPath ? true : false,
+      },
+      // (h) Any additional / supplementary documents the provider attached
+      // outside the standard categories. Always complete (no minimum count),
+      // but the admin still needs to read them for the overall Approve gate.
+      h_otherDocuments: {
+        complete: true,
+        documents: docsByCategory('other'),
+      },
     };
 
     const sectionKeys = Object.keys(sections) as (keyof typeof sections)[];
@@ -900,6 +1258,8 @@ export class ProvidersService {
       providerId: provider.id,
       providerName: provider.name,
       approvalStatus: provider.approvalStatus,
+      approvalComment: provider.approvalComment,
+      providerNote: provider.providerNote,
       onboardingSubmittedAt: provider.onboardingSubmittedAt,
       sections,
       completedCount,
@@ -911,7 +1271,7 @@ export class ProvidersService {
 
   /** Called by the provider when they've filled every section and are ready
    *  for CIC review. Refuses to mark as submitted if the packet is incomplete. */
-  async submitOnboarding(providerId: string) {
+  async submitOnboarding(providerId: string, note?: string) {
     const packet = await this.getOnboardingPacket(providerId);
     if (!packet.isComplete) {
       throw new BadRequestException({
@@ -926,6 +1286,8 @@ export class ProvidersService {
         approvalStatus: 'pending_approval',
         status: 'pending',
         rejectionReason: null,
+        approvalComment: null,
+        providerNote: note ?? null,
       },
     });
   }

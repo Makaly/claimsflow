@@ -16,8 +16,8 @@ export default defineConfig({
                 // Matches the lazy() chunk groupings in App.tsx.
                 manualChunks: function (id) {
                     // Vendor chunks (large deps isolated for long-term caching)
-                    if (id.includes('node_modules/recharts') || id.includes('node_modules/d3'))
-                        return 'vendor-charts';
+                    // recharts/d3 intentionally excluded from a separate chunk — circular
+                    // imports inside recharts cause a TDZ crash when Rollup isolates them.
                     if (id.includes('node_modules/@radix-ui'))
                         return 'vendor-radix';
                     if (id.includes('node_modules'))
@@ -40,10 +40,12 @@ export default defineConfig({
     },
     server: {
         port: 3000,
+        // Leave HMR on the same port Vite actually picked. Hard-coding 3000 made
+        // the WS connection 404 whenever the dev server fell back to 3001 because
+        // port 3000 was busy.
         hmr: {
             protocol: 'ws',
             host: 'localhost',
-            port: 3000,
         },
         proxy: {
             '/api': {

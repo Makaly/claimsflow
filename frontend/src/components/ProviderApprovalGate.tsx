@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  FileUp, Upload, Loader2, XCircle,
+  FileUp, Upload, Loader2, XCircle, RotateCcw,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuthStore } from '@/store/authStore'
@@ -10,9 +10,11 @@ import api from '@/services/api'
 interface ProviderInfo {
   name: string
   approvalStatus: string
+  status?: string
   canSubmitClaims: boolean
   proofDocumentName?: string
   rejectionReason?: string
+  approvalComment?: string | null
 }
 
 /**
@@ -81,6 +83,7 @@ export function ProviderApprovalGate({ children }: { children: React.ReactNode }
 
   const isApproved = providerInfo?.approvalStatus === 'approved' && providerInfo?.canSubmitClaims
   const isRejected = providerInfo?.approvalStatus === 'rejected'
+  const isReturned = providerInfo?.approvalStatus === 'returned_for_correction' || providerInfo?.status === 'returned_for_correction'
 
   // Approved → let them use the app.
   // If providerInfo couldn't be fetched we fail CLOSED (block) — never let an
@@ -145,6 +148,28 @@ export function ProviderApprovalGate({ children }: { children: React.ReactNode }
   }
 
   // Pending — render full onboarding packet form (the 6-section checklist).
-  // The new form calls fetchStatus when the provider gets approved server-side.
-  return <ProviderOnboarding onApproved={fetchStatus} />
+  // If we were returned for correction, surface that as a prominent banner
+  // above the onboarding form so the provider immediately sees the reviewer's
+  // note and knows the next step is to update + re-submit.
+  return (
+    <>
+      {isReturned && (
+        <div className="mx-auto mt-4 max-w-4xl px-4">
+          <div className="flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-amber-700 dark:text-amber-300">
+            <RotateCcw className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+            <div>
+              <p className="text-sm font-semibold">CIC returned your application for correction.</p>
+              {providerInfo?.approvalComment && (
+                <p className="mt-1 text-sm italic opacity-90">"{providerInfo.approvalComment}"</p>
+              )}
+              <p className="mt-1 text-xs opacity-80">
+                Update what they flagged in the sections below, then click "Submit for review" at the bottom to send it back.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      <ProviderOnboarding onApproved={fetchStatus} />
+    </>
+  )
 }

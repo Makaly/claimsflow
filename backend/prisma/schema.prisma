@@ -276,6 +276,9 @@ model Provider {
   createdAt              DateTime                     @default(now())
   updatedAt              DateTime                     @updatedAt
   onboardingSubmittedAt  DateTime?
+  // Note the provider adds when re-submitting after a returned-for-correction.
+  // Shown to the reviewing admin in the onboarding packet panel.
+  providerNote           String?
   programOfWorksText     String?
   scopeUnderstanding     String?
   yearsProvidingServices Int?
@@ -319,10 +322,26 @@ model ProviderOnboardingDocument {
   pageCount  Int?
   uploadedAt DateTime @default(now())
   uploadedBy String?
+  // PR4 — per-document approval workflow.
+  // status: pending | approved | rejected. Set by the reviewing admin.
+  status        String    @default("pending")
+  reviewedBy    String?
+  reviewedAt    DateTime?
+  reviewComment String?
+  // PR4 — versioning. When an admin rejects a document, the provider can
+  // upload a corrected file which becomes the next version. The old row
+  // is kept (isLatest=false) so the audit history remains intact.
+  version       Int       @default(1)
+  supersedesId  String?
+  supersedes    ProviderOnboardingDocument?  @relation("DocVersion", fields: [supersedesId], references: [id])
+  supersededBy  ProviderOnboardingDocument[] @relation("DocVersion")
+  isLatest      Boolean   @default(true)
   provider   Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
 
   @@index([providerId])
   @@index([providerId, category])
+  @@index([providerId, isLatest])
+  @@index([status])
   @@map("provider_onboarding_documents")
 }
 
@@ -392,6 +411,7 @@ model BatchSubmission {
   updatedAt        DateTime  @updatedAt
   completedAt      DateTime?
   branchId         String?
+  jobSetupId       String?
   tenantId         String?
   provider         Provider  @relation(fields: [providerId], references: [id])
   tenant           Tenant?   @relation(fields: [tenantId], references: [id])
@@ -403,6 +423,7 @@ model BatchSubmission {
   @@index([status])
   @@index([createdAt])
   @@index([tenantId])
+  @@index([jobSetupId])
   @@map("batch_submissions")
 }
 
@@ -657,6 +678,8 @@ model OcrExtraction {
   reviewedBy        String?
   reviewedAt        DateTime?
   rawText           String?
+  jobSetupId        String?
+  customFields      Json?     @default("{}") // values for the job setup's custom index fields
   anomalyScore      Float?
   possibleFraud     Boolean   @default(false)
   anomalyReasons    String[]
@@ -1824,6 +1847,8 @@ model BatchDraftClaim {
   id            String    @id @default(uuid())
   sessionId     String
   batchId       String?
+  jobSetupId    String?
+  customFields  Json      @default("{}") // values for the job setup's custom index fields
   barcode       String    @unique
   claimNumber   String?
   fileName      String
@@ -1854,5 +1879,144 @@ model BatchDraftClaim {
 
   @@index([sessionId])
   @@index([batchId])
+  @@index([jobSetupId])
   @@map("batch_draft_claims")
+}
+
+// ─── Job Setups: per-document-type indexing profiles ─────────────────────────
+//
+// A "Job Setup" is the configuration the user picks BEFORE/while uploading.
+// It owns a set of custom index fields, how each field is auto-populated
+// (extraction or reference-data lookup), and — crucially — it scopes the
+// system's learning. Knowledge accumulated for the "Invoice" setup
+// (JobSetupKnowledge rows) is keyed by jobSetupId and is never used to
+// suggest values in another setup, so each setup learns independently.
+
+/// A reusable batch/document-type profile selected at upload time.
+model JobSetup {
+  id                      String              @id @default(uuid())
+  name                    String
+  slug                    String              @unique
+  description             String?
+  /// Optional association to a document type (mirrors OcrTemplate.documentType).
+  documentType            String?
+  /// Optional link to an OcrTemplate so this setup reuses zone extraction.
+  templateId              String?
+  icon                    String?
+  color                   String?
+  isActive                Boolean             @default(true)
+  /// When false, this setup neither records nor uses learned knowledge.
+  learningEnabled         Boolean             @default(true)
+  /// Auto-suggest field values from THIS setup's own confirmed history.
+  autoPopulateFromHistory Boolean             @default(true)
+  sortOrder               Int                 @default(0)
+  createdBy               String?
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+  fields                  JobSetupField[]
+  knowledge               JobSetupKnowledge[]
+
+  @@index([slug])
+  @@index([isActive])
+  @@map("job_setups")
+}
+
+/// One user-defined index field on a JobSetup.
+/// source = manual | extraction | lookup. When source=extraction, extractionKey
+/// maps to a key on the OCR/ParsedInvoice payload. When auto-populate is on, a
+/// change to lookupKeyField triggers a lookup against lookupSourceId and the
+/// lookupReturn column fills this field.
+model JobSetupField {
+  id              String   @id @default(uuid())
+  jobSetupId      String
+  key             String
+  label           String
+  type            String   @default("text") // text|number|date|select|currency|boolean|textarea
+  required        Boolean  @default(false)
+  sortOrder       Int      @default(0)
+  placeholder     String?
+  defaultValue    String?
+  options         Json     @default("[]") // select options: [{ value, label }]
+  validationRegex String?
+  source          String   @default("manual") // manual|extraction|lookup
+  extractionKey   String?
+  lookupSourceId  String?
+  lookupKeyField  String? // key of the field whose value is the lookup key
+  lookupReturn    String? // which column of the lookup result fills this field
+  autoPopulate    Boolean  @default(false)
+  /// Marks a field whose value is a lookup key that triggers populating others.
+  isKey           Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  jobSetup        JobSetup @relation(fields: [jobSetupId], references: [id], onDelete: Cascade)
+
+  @@unique([jobSetupId, key])
+  @@index([jobSetupId])
+  @@index([lookupSourceId])
+  @@map("job_setup_fields")
+}
+
+/// A registered reference-data source the indexing engine can resolve against.
+/// type: member_policy | drug_formulary | diagnosis | eoxegen_eligibility
+///       | provider | excel | csv | rest_api
+/// Built-in DB/API types resolve live; excel|csv ingest an uploaded file into
+/// LookupRow; rest_api calls a configured endpoint.
+model LookupSource {
+  id          String      @id @default(uuid())
+  name        String
+  slug        String      @unique
+  type        String
+  description String?
+  isActive    Boolean     @default(true)
+  config      Json        @default("{}") // type-specific (url, authHeader, keyParam, returnMap…)
+  fileName    String?
+  filePath    String?
+  keyColumn   String? // file-backed sources: the column used as the lookup key
+  columns     Json        @default("[]") // [{ name, label }]
+  rowCount    Int         @default(0)
+  lastSyncAt  DateTime?
+  createdBy   String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  rows        LookupRow[]
+
+  @@index([slug])
+  @@index([type])
+  @@index([isActive])
+  @@map("lookup_sources")
+}
+
+/// One ingested row from a file-backed (excel/csv) LookupSource.
+model LookupRow {
+  id        String       @id @default(uuid())
+  sourceId  String
+  keyValue  String // normalized lookup key (lowercased, trimmed)
+  data      Json // full row { column: value }
+  createdAt DateTime     @default(now())
+  source    LookupSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([sourceId, keyValue])
+  @@map("lookup_rows")
+}
+
+/// Per-job-setup learned knowledge — ISOLATED by jobSetupId.
+/// One row per (jobSetup, field, normalized value). frequency accumulates each
+/// time a value is confirmed on save, powering autosuggest + auto-populate.
+/// Because every query is scoped by jobSetupId, "Invoice" knowledge is never
+/// surfaced inside, say, a "Discharge Summary" setup.
+model JobSetupKnowledge {
+  id           String   @id @default(uuid())
+  jobSetupId   String
+  fieldKey     String
+  valueNorm    String
+  valueDisplay String
+  context      Json     @default("{}") // co-occurring field values
+  frequency    Int      @default(1)
+  lastSeenAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+  jobSetup     JobSetup @relation(fields: [jobSetupId], references: [id], onDelete: Cascade)
+
+  @@unique([jobSetupId, fieldKey, valueNorm])
+  @@index([jobSetupId, fieldKey])
+  @@map("job_setup_knowledge")
 }

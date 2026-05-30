@@ -834,6 +834,168 @@ export class EmailService {
     await this.sendEmail(adminEmail, `${userName} requested access to ${providerName}`, text, html);
   }
 
+  // ─── PR4: Provider — whole packet returned for correction ────────────────
+
+  async sendProviderReturnedForCorrection(dto: {
+    recipientEmail: string;
+    recipientName: string;
+    providerName: string;
+    comment: string;
+    resubmitUrl: string;
+  }): Promise<void> {
+    const { recipientEmail, recipientName, providerName, comment, resubmitUrl } = dto;
+    const html = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="color-scheme" content="dark"/><title>Application returned for correction</title></head>
+<body style="margin:0;padding:0;background:#09090b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#09090b;padding:32px 12px">
+    <tr><td align="center">
+    <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;border-radius:16px;overflow:hidden;border:1px solid #27272a">
+      <tr><td style="background:linear-gradient(90deg,#78350f 0%,#d97706 50%,#fbbf24 100%);height:3px;font-size:0">&nbsp;</td></tr>
+
+      <tr><td style="background:#111113;padding:28px 36px 24px">
+        <div style="display:inline-block;background:#1c1c1f;border:1px solid #3f3f46;border-radius:8px;padding:5px 12px;margin-bottom:12px">
+          <span style="color:#71717a;font-size:10px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase">CIC Insurance Group</span>
+        </div><br/>
+        <span style="display:inline-block;background:#1a0e00;border:1px solid #b45309;border-radius:20px;padding:3px 11px;font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:#fbbf24;margin-bottom:14px">Action needed</span>
+        <h1 style="margin:0 0 6px;color:#fafafa;font-size:22px;font-weight:700;letter-spacing:-0.3px">Your application needs a few corrections</h1>
+        <p style="margin:4px 0 0;color:#71717a;font-size:13px">${providerName}</p>
+      </td></tr>
+
+      <tr><td style="background:#0f0f11;padding:24px 36px">
+        <p style="margin:0 0 14px;color:#a1a1aa;font-size:14px;line-height:1.7">Hi <strong style="color:#e4e4e7">${recipientName}</strong>,</p>
+        <p style="margin:0 0 14px;color:#a1a1aa;font-size:14px;line-height:1.7">
+          The reviewer at CIC has sent your provider application for
+          <strong style="color:#e4e4e7">${providerName}</strong> back to you for revisions.
+          Your application is <strong style="color:#fbbf24">not declined</strong> — once you
+          update the items below and re-submit, the review picks up where it left off.
+        </p>
+
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+               style="background:#18181b;border:1px solid #27272a;border-left:3px solid #b45309;border-radius:8px;margin:16px 0">
+          <tr><td style="padding:14px 16px">
+            <p style="margin:0 0 5px;font-size:10px;font-weight:700;color:#fbbf24;text-transform:uppercase;letter-spacing:1px">Reviewer's note</p>
+            <p style="margin:0;font-size:13px;color:#e4e4e7;line-height:1.6">${comment.replace(/\n/g, '<br/>')}</p>
+          </td></tr>
+        </table>
+
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:18px 0 4px">
+          <tr><td style="background:linear-gradient(135deg,#d97706,#b45309);border-radius:10px;padding:13px 26px">
+            <a href="${resubmitUrl}" style="color:#fff;font-size:13px;font-weight:700;text-decoration:none;letter-spacing:0.3px">Open my application →</a>
+          </td></tr>
+        </table>
+
+        <p style="margin:18px 0 0;font-size:11px;color:#71717a;line-height:1.6">
+          If you have questions about what to change, reply to this email or contact
+          <a href="mailto:claims@cic.co.ke" style="color:#60a5fa">claims@cic.co.ke</a>.
+        </p>
+      </td></tr>
+
+      <tr><td style="background:#111113;border-top:1px solid #27272a;padding:20px 36px;text-align:center">
+        <p style="margin:0 0 4px;color:#52525b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px">CIC Insurance Group · Medical Claims Division</p>
+        <p style="margin:0;color:#3f3f46;font-size:10px">P.O. Box 59485-00200, Nairobi &nbsp;·&nbsp; claims@cic.co.ke &nbsp;·&nbsp; © ${new Date().getFullYear()} CIC Insurance Group</p>
+      </td></tr>
+      <tr><td style="background:linear-gradient(90deg,#fbbf24 0%,#d97706 50%,#78350f 100%);height:3px;font-size:0">&nbsp;</td></tr>
+    </table></td></tr>
+  </table>
+</body></html>`;
+
+    const text = `Hi ${recipientName},\n\nYour provider application for "${providerName}" has been returned for correction by CIC. Your application is NOT declined — update what they asked for and re-submit to continue the review.\n\nReviewer's note:\n${comment}\n\nOpen your application: ${resubmitUrl}\n\nCIC Insurance Group — Medical Claims Division`;
+
+    await this.sendEmail(
+      recipientEmail,
+      `Action needed: please revise ${providerName}`,
+      text,
+      html,
+    );
+  }
+
+  // ─── PR4: Provider — single onboarding document needs revision ───────────
+
+  async sendOnboardingDocumentRejected(dto: {
+    recipientEmail: string;
+    recipientName: string;
+    providerName: string;
+    fileName: string;
+    category: string;
+    reason: string;
+    resubmitUrl: string;
+  }): Promise<void> {
+    const { recipientEmail, recipientName, providerName, fileName, category, reason, resubmitUrl } = dto;
+    const niceCategory = ({
+      company_profile: 'Company profile (item a)',
+      experience_evidence: 'Experience evidence (item b)',
+      firm_certifications: 'Firm certifications (item d)',
+      staff_certifications: 'Staff certifications (item d)',
+      program_of_works: 'Program of works (item f)',
+      other: 'Supporting documents',
+    } as Record<string, string>)[category] ?? category;
+
+    const html = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="color-scheme" content="dark"/><title>Document needs revision</title></head>
+<body style="margin:0;padding:0;background:#09090b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#09090b;padding:32px 12px">
+    <tr><td align="center">
+    <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;border-radius:16px;overflow:hidden;border:1px solid #27272a">
+      <tr><td style="background:linear-gradient(90deg,#78350f 0%,#d97706 50%,#fbbf24 100%);height:3px;font-size:0">&nbsp;</td></tr>
+
+      <tr><td style="background:#111113;padding:28px 36px 24px">
+        <div style="display:inline-block;background:#1c1c1f;border:1px solid #3f3f46;border-radius:8px;padding:5px 12px;margin-bottom:12px">
+          <span style="color:#71717a;font-size:10px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase">CIC Insurance Group</span>
+        </div><br/>
+        <span style="display:inline-block;background:#1a0e00;border:1px solid #b45309;border-radius:20px;padding:3px 11px;font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:#fbbf24;margin-bottom:14px">Revision needed</span>
+        <h1 style="margin:0 0 6px;color:#fafafa;font-size:22px;font-weight:700;letter-spacing:-0.3px">One of your documents needs an update</h1>
+        <p style="margin:4px 0 0;color:#71717a;font-size:13px">${providerName}</p>
+      </td></tr>
+
+      <tr><td style="background:#0f0f11;padding:24px 36px">
+        <p style="margin:0 0 14px;color:#a1a1aa;font-size:14px;line-height:1.7">Hi <strong style="color:#e4e4e7">${recipientName}</strong>,</p>
+        <p style="margin:0 0 14px;color:#a1a1aa;font-size:14px;line-height:1.7">
+          A reviewer at CIC could not approve one of the documents you uploaded
+          for <strong style="color:#e4e4e7">${providerName}</strong>. Please address the issue
+          below and upload a corrected version — the earlier file stays on record
+          as version&nbsp;1 and the corrected one will become version&nbsp;2.
+        </p>
+
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#18181b;border:1px solid #27272a;border-radius:12px;margin-bottom:16px">
+          <tr><td style="padding:16px 20px">
+            <p style="margin:0 0 6px;font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:1.5px">Section</p>
+            <p style="margin:0 0 12px;font-size:14px;color:#fafafa">${niceCategory}</p>
+            <p style="margin:0 0 6px;font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:1.5px">File</p>
+            <p style="margin:0;font-size:13px;color:#e4e4e7;font-family:'Courier New',monospace">${fileName}</p>
+          </td></tr>
+        </table>
+
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+               style="background:#18181b;border:1px solid #27272a;border-left:3px solid #b45309;border-radius:8px;margin-bottom:18px">
+          <tr><td style="padding:14px 16px">
+            <p style="margin:0 0 5px;font-size:10px;font-weight:700;color:#fbbf24;text-transform:uppercase;letter-spacing:1px">Reason</p>
+            <p style="margin:0;font-size:13px;color:#e4e4e7;line-height:1.6">${reason.replace(/\n/g, '<br/>')}</p>
+          </td></tr>
+        </table>
+
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+          <tr><td style="background:linear-gradient(135deg,#d97706,#b45309);border-radius:10px;padding:13px 26px">
+            <a href="${resubmitUrl}" style="color:#fff;font-size:13px;font-weight:700;text-decoration:none;letter-spacing:0.3px">Upload corrected version →</a>
+          </td></tr>
+        </table>
+      </td></tr>
+
+      <tr><td style="background:#111113;border-top:1px solid #27272a;padding:20px 36px;text-align:center">
+        <p style="margin:0 0 4px;color:#52525b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px">CIC Insurance Group · Medical Claims Division</p>
+        <p style="margin:0;color:#3f3f46;font-size:10px">P.O. Box 59485-00200, Nairobi &nbsp;·&nbsp; claims@cic.co.ke &nbsp;·&nbsp; © ${new Date().getFullYear()} CIC Insurance Group</p>
+      </td></tr>
+      <tr><td style="background:linear-gradient(90deg,#fbbf24 0%,#d97706 50%,#78350f 100%);height:3px;font-size:0">&nbsp;</td></tr>
+    </table></td></tr>
+  </table>
+</body></html>`;
+
+    const text = `Hi ${recipientName},\n\nOne of your onboarding documents for "${providerName}" was not approved and needs a corrected version.\n\nSection: ${niceCategory}\nFile: ${fileName}\nReason: ${reason}\n\nUpload a corrected version at: ${resubmitUrl}\n\nCIC Insurance Group — Medical Claims Division`;
+
+    await this.sendEmail(recipientEmail, `Revision needed: ${fileName}`, text, html);
+  }
+
   // ─── PR2: User — provider approval decision ───────────────────────────────
 
   async sendUserApprovalDecision(dto: {

@@ -27,14 +27,25 @@ api.interceptors.request.use((config) => {
 // CORS-headerless 502 from the edge while the container boots.
 attachRetryInterceptor(api)
 
+// Endpoints where a 401 does NOT mean "stale session, log the user out".
+// Anonymous registration/verification/lookup endpoints commonly 401 on
+// validation failure or duplicate-resource cases — bouncing the user to
+// /login in those cases hides the actual server message and destroys
+// whatever form state they just typed in.
+const ANON_AUTH_PATHS = [
+  '/auth/logout', '/auth/login',
+  '/auth/register', '/auth/register-provider', '/auth/register-user-under-provider',
+  '/auth/send-email-otp', '/auth/verify-email-otp',
+  '/auth/forgot-password', '/auth/reset-password',
+  '/auth/providers/approved',
+]
+
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Skip logout logic for the logout endpoint itself to avoid an infinite
-      // cycle (expired token → 401 on /auth/logout → tries logout again → …).
       const url: string = error.config?.url ?? ''
-      if (!url.includes('/auth/logout') && !url.includes('/auth/login')) {
+      if (!ANON_AUTH_PATHS.some((p) => url.includes(p))) {
         // Import lazily to avoid circular dep: api ← authStore ← api.
         import('@/store/authStore').then(({ useAuthStore }) => {
           useAuthStore.getState().logout()
