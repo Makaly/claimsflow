@@ -693,6 +693,15 @@ async function main() {
 
   console.log('✅ Activity logs created');
 
+  // Mark every seeded user as email-verified so dev/demo accounts can log in
+  // without going through the OTP flow. Real users created via the registration
+  // form start unverified and must verify via OTP.
+  await prisma.user.updateMany({
+    where: { emailVerifiedAt: null },
+    data: { emailVerifiedAt: new Date() },
+  });
+  console.log('✅ Seeded users email-verified');
+
   console.log('\n🎉 Seed complete!\n');
 
   // Demo accounts and their shared password are dev-only conveniences.
