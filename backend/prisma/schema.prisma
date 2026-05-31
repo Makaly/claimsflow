@@ -94,6 +94,7 @@ model User {
   tenant                  Tenant?                  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   casesOwned              Case[]                   @relation("CaseOwner")
   caseComments            CaseComment[]            @relation("CaseCommentAuthor")
+  trustedDevices          TrustedDevice[]
 
   @@index([providerId])
   @@index([email])
@@ -116,11 +117,34 @@ model EmailVerificationToken {
   consumedAt DateTime?
   attempts   Int       @default(0)
   createdAt  DateTime  @default(now())
+  // What the code authorises: "email_verification" (registration — the original
+  // use), "login" (new-device second factor), or "password_change". Scoping by
+  // purpose keeps the three OTP flows from consuming each other's codes.
+  purpose    String    @default("email_verification")
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([email])
+  @@index([userId, purpose])
   @@map("email_verification_tokens")
+}
+
+/// Devices a user has confirmed via an emailed login code. A login from a
+/// device NOT listed here triggers email 2FA before a token is issued; a known
+/// device skips straight to the token. Used by the mobile app, which sends a
+/// stable `deviceId`; the web app sends none and is unaffected.
+model TrustedDevice {
+  id         String   @id @default(uuid())
+  userId     String
+  deviceId   String
+  label      String?
+  lastUsedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceId])
+  @@index([userId])
+  @@map("trusted_devices")
 }
 
 /// Records every consent grant or withdrawal under KDPA Art. 7 / GDPR Art. 7.

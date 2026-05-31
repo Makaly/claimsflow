@@ -191,6 +191,24 @@ export class AuthService {
       throw new ProviderApprovalRejectedException(user.providerRejectionReason);
     }
 
+    // Device-bound email 2FA (mobile opt-in). The client sends a stable
+    // deviceId; a login from a device we haven't seen emails a 6-digit code and
+    // withholds the token until /auth/login/verify-otp confirms it. The web app
+    // sends no deviceId, so this whole branch is skipped and login is unchanged.
+    if (loginDto.deviceId) {
+      const trusted = await this.prisma.trustedDevice.findUnique({
+        where: { userId_deviceId: { userId: user.id, deviceId: loginDto.deviceId } },
+      });
+      if (!trusted) {
+        this.emailOtpService.sendActionOtp(user.id, 'login').catch(() => undefined);
+        return { requiresEmailOtp: true as const, email: user.email };
+      }
+      await this.prisma.trustedDevice.update({
+        where: { id: trusted.id },
+        data: { lastUsedAt: new Date() },
+      });
+    }
+
     const { password: _, ...result } = user;
     const access_token = this.generateToken(user.id, user.email);
 
@@ -199,6 +217,48 @@ export class AuthService {
       access_token,
       rememberMe: !!rememberMe,
     };
+  }
+
+  /**
+   * Completes a new-device sign-in: verifies the emailed login code, trusts the
+   * device for next time, and issues a token — the same success shape as
+   * [login]. Reuses the deleted/inactive account guards before honouring the code.
+   */
+  async verifyLoginOtp(params: {
+    email: string;
+    code: string;
+    deviceId: string;
+    deviceLabel?: string;
+    rememberMe?: boolean;
+  }) {
+    const { email, code, deviceId, deviceLabel, rememberMe } = params;
+    if (!deviceId) throw new BadRequestException('deviceId is required');
+
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user || user.deletedAt) throw new UnauthorizedException('Invalid credentials');
+    if (!user.isActive) throw new UnauthorizedException('Account is inactive');
+
+    // Throws BadRequestException on a wrong/expired/exhausted code.
+    await this.emailOtpService.verifyActionOtp(user.id, code, 'login');
+
+    await this.prisma.trustedDevice.upsert({
+      where: { userId_deviceId: { userId: user.id, deviceId } },
+      create: { userId: user.id, deviceId, label: deviceLabel ?? null },
+      update: { lastUsedAt: new Date(), ...(deviceLabel ? { label: deviceLabel } : {}) },
+    });
+
+    const { password: _, ...result } = user;
+    const access_token = this.generateToken(user.id, user.email);
+    return {
+      user: { ...result, failedLoginAttempts: 0, lockedUntil: null },
+      access_token,
+      rememberMe: !!rememberMe,
+    };
+  }
+
+  /** Emails a password-change confirmation code to the signed-in user. */
+  async sendPasswordChangeOtp(userId: string) {
+    return this.emailOtpService.sendActionOtp(userId, 'password_change');
   }
 
   async validateUser(email: string, password: string): Promise<any> {
@@ -560,12 +620,25 @@ export class AuthService {
     );
   }
 
-  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+    otpCode?: string,
+  ) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException('User not found');
 
     const valid = await bcrypt.compare(currentPassword, user.password);
     if (!valid) throw new UnauthorizedException('Current password is incorrect');
+
+    // Second factor: when the client supplies an otpCode (the mobile app always
+    // does, after /auth/change-password/send-otp), require it to be a valid
+    // emailed password-change code. Clients that omit it (web today) are
+    // unchanged. Throws BadRequestException on a wrong/expired code.
+    if (otpCode !== undefined) {
+      await this.emailOtpService.verifyActionOtp(userId, otpCode, 'password_change');
+    }
 
     const hashed = await bcrypt.hash(newPassword, 10);
     await this.prisma.user.update({

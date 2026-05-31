@@ -68,6 +68,11 @@ export class AuthController {
   @Throttle({ auth: { ttl: 60_000, limit: 10 } })
   async login(@Body() loginDto: LoginDto, @Response({ passthrough: true }) res: any) {
     const result = await this.authService.login(loginDto);
+    // New-device email-2FA challenge: no token yet, so don't set a cookie —
+    // the client collects the emailed code and calls /auth/login/verify-otp.
+    if ('requiresEmailOtp' in result) {
+      return result;
+    }
     const isProduction = process.env.NODE_ENV === 'production';
     // In production the frontend (claimsflow-frontend.onrender.com) calls the
     // backend (claimsflow-backend.onrender.com) cross-origin — SameSite=None;Secure
@@ -77,6 +82,42 @@ export class AuthController {
     const maxAge = result.rememberMe
       ? 30 * 24 * 60 * 60 * 1000   // 30 days
       : 24 * 60 * 60 * 1000;        // 1 day (default)
+    res.cookie('access_token', result.access_token, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
+      maxAge,
+      path: '/',
+    });
+    return result;
+  }
+
+  /**
+   * Second step of a new-device sign-in: the client posts the 6-digit code that
+   * was emailed by the `requiresEmailOtp` branch of `login`, along with its
+   * deviceId. On success we trust the device and issue the session cookie —
+   * identical shape to `login`.
+   */
+  @Post('login/verify-otp')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ auth: { ttl: 60_000, limit: 10 } })
+  @HttpCode(200)
+  async loginVerifyOtp(
+    @Body() body: { email: string; code: string; deviceId: string; deviceLabel?: string; rememberMe?: boolean },
+    @Response({ passthrough: true }) res: any,
+  ) {
+    if (!body?.email || !body?.code || !body?.deviceId) {
+      throw new BadRequestException('email, code and deviceId are required');
+    }
+    const result = await this.authService.verifyLoginOtp({
+      email: body.email,
+      code: body.code,
+      deviceId: body.deviceId,
+      deviceLabel: body.deviceLabel,
+      rememberMe: body.rememberMe,
+    });
+    const isProduction = process.env.NODE_ENV === 'production';
+    const maxAge = result.rememberMe ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
     res.cookie('access_token', result.access_token, {
       httpOnly: true,
       secure: isProduction,
@@ -113,13 +154,27 @@ export class AuthController {
     return this.authService.updateProfile(req.user.userId, body);
   }
 
+  /** Emails a password-change confirmation code to the signed-in user. The
+   *  mobile app calls this before submitting change-password with the code. */
+  @Post('change-password/send-otp')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(200)
+  async sendChangePasswordOtp(@Request() req) {
+    return this.authService.sendPasswordChangeOtp(req.user.userId);
+  }
+
   @Post('change-password')
   @UseGuards(JwtAuthGuard)
   async changePassword(
     @Request() req,
-    @Body() body: { currentPassword: string; newPassword: string },
+    @Body() body: { currentPassword: string; newPassword: string; otpCode?: string },
   ) {
-    return this.authService.changePassword(req.user.userId, body.currentPassword, body.newPassword);
+    return this.authService.changePassword(
+      req.user.userId,
+      body.currentPassword,
+      body.newPassword,
+      body.otpCode,
+    );
   }
 
   @Post('register-user-under-provider')
