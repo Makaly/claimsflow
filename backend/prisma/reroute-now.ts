@@ -3,9 +3,12 @@
  * it to the least-loaded active claims_officer. Prints before/after counts.
  * Run with: npx ts-node prisma/reroute-now.ts
  */
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../src/generated/prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+});
 
 async function main() {
   const orphans = await prisma.claim.findMany({

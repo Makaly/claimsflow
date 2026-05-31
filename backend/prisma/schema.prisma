@@ -1,11 +1,19 @@
 generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+  // Prisma 7: the `prisma-client` generator (no `-js`) replaces the legacy
+  // `prisma-client-js`. It emits TypeScript into `output` instead of into
+  // node_modules/@prisma/client. moduleFormat=cjs keeps it compatible with our
+  // CommonJS NestJS build; runtime=nodejs uses the standard pg driver adapter.
+  // binaryTargets is gone — v7 has no Rust query engine.
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+  runtime      = "nodejs"
 }
 
 datasource db {
+  // Prisma 7 moved the connection URL out of the schema. Migrate/Studio read it
+  // from prisma.config.ts; the app runtime connects via @prisma/adapter-pg.
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model User {
