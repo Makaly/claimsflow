@@ -5,8 +5,9 @@ const cors = require('cors');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const { writeFile, readFile, unlink } = require('fs/promises');
+const { readFileSync: fsReadFileSync } = require('fs');
 const { tmpdir, platform, hostname } = require('os');
-const { join } = require('path');
+const { join, dirname } = require('path');
 const { randomUUID } = require('crypto');
 const zlib = require('zlib');
 const PDFDocument = require('pdfkit');
@@ -16,6 +17,12 @@ const PDFDocument = require('pdfkit');
 // escl   → eSCL/AirScan HTTP protocol; covers network scanners from all vendors
 const naps2Driver = (() => { try { return require('./drivers/naps2'); } catch { return null; } })();
 const esclDriver  = (() => { try { return require('./drivers/escl');  } catch { return null; } })();
+// bootstrap → detects attached scanners and fetches OFFICIAL vendor drivers
+// (winget / vendor URL). Never redistributes locked vendor/ISIS driver files.
+const bootstrapDriver = (() => { try { return require('./drivers/bootstrap'); } catch { return null; } })();
+const { renderWelcome } = require('./welcome');
+
+const AGENT_VERSION = '1.3.0';
 
 const execFileAsync = promisify(execFile);
 
@@ -445,11 +452,47 @@ async function getScannerCapabilities(deviceId) {
 }
 
 // ── Routes ──────────────────────────────────────────────────────────────────
+// Premium onboarding / control page (served on localhost only).
+const CLAIMSFLOW_URL = process.env.CLAIMSFLOW_URL || 'https://claimsflow-frontend.onrender.com';
+app.get('/', (_req, res) => {
+  res.type('html').send(renderWelcome({ version: AGENT_VERSION, port: PORT, claimsflowUrl: CLAIMSFLOW_URL }));
+});
+// Optional branded artwork (drop assets/hero.webp, logo, etc.). Served via
+// fs.readFileSync from __dirname/assets — this works both for plain Node and
+// inside the pkg snapshot (express.static's stat-based streaming does not read
+// bundled pkg assets). Localhost-only, read-only, with strict name validation.
+const ASSET_TYPES = {
+  '.webp': 'image/webp', '.png': 'image/png', '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.svg': 'image/svg+xml',
+  '.mp4': 'video/mp4', '.webm': 'video/webm', '.ico': 'image/x-icon',
+};
+// Assets live in a real folder next to the agent so they can be swapped without
+// rebuilding. In a pkg binary, files are read relative to the executable's
+// directory (NOT the read-only snapshot, which a dynamic path can't reach); in
+// plain Node they sit beside this script.
+const ASSETS_DIR = process.pkg
+  ? join(dirname(process.execPath), 'assets')
+  : join(__dirname, 'assets');
+app.get('/assets/:file', (req, res) => {
+  const file = req.params.file;
+  // Reject anything but a plain filename (no traversal, no subdirs).
+  if (!/^[\w.-]+$/.test(file) || file.includes('..')) return res.sendStatus(400);
+  const ext = file.slice(file.lastIndexOf('.')).toLowerCase();
+  const type = ASSET_TYPES[ext];
+  if (!type) return res.sendStatus(404);
+  try {
+    const buf = fsReadFileSync(join(ASSETS_DIR, file));
+    res.type(type).set('Cache-Control', 'public, max-age=3600').send(buf);
+  } catch {
+    res.sendStatus(404);
+  }
+});
+
 app.get('/health', async (_req, res) => {
   const naps2Available = naps2Driver ? await naps2Driver.isNaps2Available().catch(() => false) : false;
   res.json({
     ok: true,
-    version: '1.1.0',
+    version: AGENT_VERSION,
     os: OS,
     hostname: hostname(),
     port: PORT,
@@ -491,6 +534,40 @@ app.get('/diagnostics', async (_req, res) => {
   }
 
   res.json(result);
+});
+
+// ── Driver bootstrap ──────────────────────────────────────────────────────────
+// Detect the attached scanner and recommend / fetch the OFFICIAL vendor driver.
+// We never redistribute locked vendor drivers; winget pulls them signed from the
+// vendor, and anything without a winget package routes to the official URL.
+app.get('/drivers/catalog', (_req, res) => {
+  if (!bootstrapDriver) return res.status(501).json({ error: 'driver bootstrap unavailable on this platform' });
+  res.json({ catalog: bootstrapDriver.CATALOG });
+});
+
+app.get('/drivers/recommend', async (_req, res) => {
+  if (!bootstrapDriver) return res.status(501).json({ error: 'driver bootstrap unavailable on this platform' });
+  try {
+    res.json(await bootstrapDriver.recommendDrivers());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/drivers/install', async (req, res) => {
+  if (!bootstrapDriver) return res.status(501).json({ error: 'driver bootstrap unavailable on this platform' });
+  const key = (req.query.key ?? req.body?.key ?? '').toString();
+  // installDriver itself rejects keys not in the curated catalog; this is a fast
+  // pre-check so a bad request never reaches winget.
+  if (!key || !bootstrapDriver.CATALOG[key]) {
+    return res.status(400).json({ error: 'unknown or missing driver key' });
+  }
+  try {
+    const result = await bootstrapDriver.installDriver(key);
+    res.status(result.ok ? 200 : 502).json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('/scanners', async (_req, res) => {
@@ -568,9 +645,10 @@ app.listen(PORT, HOST, async () => {
 
   console.log(`
 ╔══════════════════════════════════════════════════════════╗
-║          ClaimsFlow Local Scan Agent v1.1.0              ║
+║          ClaimsFlow Local Scan Agent v${AGENT_VERSION}              ║
 ╠══════════════════════════════════════════════════════════╣
 ║  Listening on  http://127.0.0.1:${PORT}                    ║
+║  Welcome page  http://127.0.0.1:${PORT}/                   ║
 ║  Platform      ${OS.padEnd(42)}║
 ╠══════════════════════════════════════════════════════════╣
 ║  Active drivers:                                         ║
