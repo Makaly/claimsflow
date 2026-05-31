@@ -16,9 +16,24 @@
  */
 
 const { execSync } = require('child_process');
-const { PrismaClient } = require('@prisma/client');
+// Prisma 7: the client is generated into src/generated/prisma and compiled to
+// dist/generated/prisma; connections go through the pg driver adapter. This
+// script runs in production after `npm run build`, so the compiled client
+// exists. DATABASE_URL is provided by the container environment.
+const { PrismaClient } = require('../dist/generated/prisma/client');
+const { PrismaPg } = require('@prisma/adapter-pg');
 
-const prisma = new PrismaClient();
+// Pin the Migrate CLI to the version generating this client. The prod image is
+// built with `npm install --omit=dev`, so the `prisma` CLI (a devDependency) is
+// NOT present and `npx prisma …` would otherwise resolve to whatever is latest
+// on npm — a newer major than this schema, which fails get-config (the outage
+// that motivated the Prisma 7 move). Keep this in lockstep with the `prisma`
+// and `@prisma/client` versions in package.json.
+const PRISMA_CLI = 'prisma@7.8.0';
+
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+});
 
 function run(cmd) {
   execSync(cmd, { stdio: 'inherit' });
@@ -41,12 +56,12 @@ async function main() {
     console.log(`[migrate] found ${failed.length} failed migration(s) — resolving…`);
     for (const { migration_name } of failed) {
       console.log(`[migrate] resolve --rolled-back ${migration_name}`);
-      run(`npx prisma migrate resolve --rolled-back "${migration_name}"`);
+      run(`npx ${PRISMA_CLI} migrate resolve --rolled-back "${migration_name}"`);
     }
   }
 
   console.log('[migrate] running prisma migrate deploy');
-  run('npx prisma migrate deploy');
+  run(`npx ${PRISMA_CLI} migrate deploy`);
 
   console.log('[migrate] all migrations applied successfully');
 }

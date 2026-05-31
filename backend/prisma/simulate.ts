@@ -7,10 +7,13 @@
  *
  * Run with: npx ts-node prisma/simulate.ts  (from backend/)
  */
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../src/generated/prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import * as bcrypt from 'bcryptjs';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+});
 
 type ActorCtx = { userId: string; ipAddress?: string; userAgent?: string };
 

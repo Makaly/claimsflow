@@ -13,7 +13,8 @@
  * Logs a final summary to stdout.
  */
 
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../generated/prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { encryptField, isEncrypted } from '../common/services/field-encryption';
 
 const PAGE = 200;
@@ -27,7 +28,10 @@ async function main() {
 
   // Use a raw PrismaClient — NOT the PrismaService — so the middleware doesn't
   // double-encrypt values we're writing. We read and write raw ciphertext here.
-  const prisma = new PrismaClient({ log: ['warn', 'error'] });
+  const prisma = new PrismaClient({
+    adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+    log: ['warn', 'error'],
+  });
 
   let claimRows = 0, claimUpdated = 0;
   let ocrRows = 0, ocrUpdated = 0;
