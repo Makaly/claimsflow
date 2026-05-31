@@ -1,5 +1,15 @@
 import 'dotenv/config';
-import { defineConfig } from 'prisma/config';
+
+// NOTE: we intentionally do NOT `import { defineConfig } from 'prisma/config'`.
+// The prod image installs runtime deps with `npm install --omit=dev`, so the
+// `prisma` package (a devDependency) is absent from node_modules. Prisma's
+// config loader resolves this file's imports relative to the file itself, so a
+// `prisma/config` import throws `Cannot find module 'prisma/config'` at boot —
+// after schema validation passes, which is why it surfaced as a bare exit 1 and
+// not a P1012. `defineConfig` only stamps `loadedFromFile` (which Prisma sets
+// itself when loading from a file), so a plain default-export object is
+// equivalent and needs no extra dependency. `dotenv` is a prod dependency, so
+// the `dotenv/config` import above is safe.
 
 // Prisma 7 dropped the `prisma` key in package.json and no longer auto-loads
 // .env for CLI commands (migrate/generate/studio). `dotenv/config` above makes
@@ -20,7 +30,7 @@ const databaseUrl =
   process.env.DATABASE_URL ??
   'postgresql://placeholder:placeholder@localhost:5432/placeholder?schema=public';
 
-export default defineConfig({
+export default {
   schema: 'prisma/schema.prisma',
   migrations: {
     path: 'prisma/migrations',
@@ -28,4 +38,4 @@ export default defineConfig({
   datasource: {
     url: databaseUrl,
   },
-});
+};
