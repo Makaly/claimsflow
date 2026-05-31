@@ -608,6 +608,82 @@ export class EmailService {
     await this.sendEmail(email, `Your ClaimsFlow verification code: ${code}`, text, html);
   }
 
+  /**
+   * One-time security code for an action that is NOT registration verification:
+   * a sign-in from a new device (`reason: 'login'`) or confirming a password
+   * change (`reason: 'password change'`). Same six-box code styling as the
+   * verification email, neutral copy.
+   */
+  async sendSecurityCode(dto: {
+    email: string;
+    name: string;
+    code: string;
+    reason: 'login' | 'password change';
+  }): Promise<void> {
+    const { email, name, code, reason } = dto;
+    const heading = reason === 'login' ? 'Confirm your sign-in' : 'Confirm your password change';
+    const subtitle =
+      reason === 'login'
+        ? 'A new device is trying to sign in to your ClaimsFlow account.'
+        : 'Confirm this change to your ClaimsFlow account password.';
+    const digits = code.split('').map(d => `
+      <td style="padding:0 4px">
+        <div style="width:42px;height:54px;background:#18181b;border:1px solid #27272a;border-radius:10px;text-align:center;line-height:54px;font-size:26px;font-weight:800;color:#fafafa;font-family:'Courier New',monospace;letter-spacing:0">${d}</div>
+      </td>`).join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta name="color-scheme" content="dark"/>
+  <title>Your ClaimsFlow security code</title>
+</head>
+<body style="margin:0;padding:0;background:#09090b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#09090b;padding:32px 12px">
+    <tr><td align="center">
+    <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;width:100%;border-radius:16px;overflow:hidden;border:1px solid #27272a">
+      <tr><td style="background:linear-gradient(90deg,#10b981 0%,#06b6d4 50%,#6366f1 100%);height:3px;font-size:0">&nbsp;</td></tr>
+      <tr>
+        <td style="background:#111113;padding:32px 36px 24px">
+          <div style="display:inline-block;background:#1c1c1f;border:1px solid #3f3f46;border-radius:8px;padding:5px 12px;margin-bottom:16px">
+            <span style="color:#71717a;font-size:10px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase">CIC Insurance Group</span>
+          </div>
+          <h1 style="margin:0 0 8px;color:#fafafa;font-size:24px;font-weight:700;letter-spacing:-0.5px">${heading}</h1>
+          <p style="margin:0;color:#71717a;font-size:13px">${subtitle}</p>
+        </td>
+      </tr>
+      <tr>
+        <td style="background:#0f0f11;padding:28px 36px">
+          <p style="margin:0 0 24px;color:#a1a1aa;font-size:14px;line-height:1.7">
+            Hi <strong style="color:#e4e4e7">${name}</strong>, enter the code below in ClaimsFlow to continue.
+          </p>
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto 24px">
+            <tr>${digits}</tr>
+          </table>
+          <p style="margin:0 0 14px;text-align:center;font-size:12px;color:#71717a">
+            This code expires in <strong style="color:#a1a1aa">10 minutes</strong>.
+          </p>
+          <p style="margin:20px 0 0;font-size:12px;color:#52525b;background:#18181b;border:1px solid #27272a;border-radius:8px;padding:12px 16px;line-height:1.6">
+            Didn't request this? You can safely ignore this email — without the code, nobody can ${reason === 'login' ? 'sign in' : 'change your password'}.
+          </p>
+        </td>
+      </tr>
+      <tr>
+        <td style="background:#111113;border-top:1px solid #27272a;padding:20px 36px;text-align:center">
+          <p style="margin:0 0 4px;color:#52525b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px">CIC Insurance Group · Medical Claims Division</p>
+          <p style="margin:0;color:#3f3f46;font-size:10px">P.O. Box 59485-00200, Nairobi &nbsp;·&nbsp; claims@cic.co.ke &nbsp;·&nbsp; © ${new Date().getFullYear()} CIC Insurance Group</p>
+        </td>
+      </tr>
+      <tr><td style="background:linear-gradient(90deg,#6366f1 0%,#06b6d4 50%,#10b981 100%);height:3px;font-size:0">&nbsp;</td></tr>
+    </table>
+    </td></tr>
+  </table>
+</body></html>`;
+
+    const text = `Hi ${name},\n\nYour ClaimsFlow security code is: ${code}\n\nThis code expires in 10 minutes.\n\nIf you didn't request this, ignore this email.\n\nCIC Insurance Group — Medical Claims Division`;
+    await this.sendEmail(email, `Your ClaimsFlow security code: ${code}`, text, html);
+  }
+
   // ─── Admin: New provider awaiting approval ────────────────────────────────
 
   async sendAdminNewProviderAlert(dto: {

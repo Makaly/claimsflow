@@ -1,10 +1,12 @@
 import { Test } from '@nestjs/testing';
-import { UnauthorizedException } from '@nestjs/common';
+import { UnauthorizedException, ConflictException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../notifications/email.service';
+import { EmailOtpService } from './email-otp.service';
+import { EventsGateway } from '../notifications/events.gateway';
 
 type PrismaMock = {
   user: {
@@ -12,13 +14,27 @@ type PrismaMock = {
     create: jest.Mock;
     update: jest.Mock;
   };
+  trustedDevice: {
+    findUnique: jest.Mock;
+    update: jest.Mock;
+    upsert: jest.Mock;
+  };
 };
+
+/** Any accessed method resolves to a no-op jest.fn — for collaborators whose
+ *  exact call surface these tests don't assert on (email, websocket gateway).
+ *  `then` must stay undefined so Nest's `compile()` doesn't mistake the mock for
+ *  a thenable and await it forever (which hangs the module setup). */
+const permissiveMock = () =>
+  new Proxy(
+    {},
+    { get: (_t, prop) => (prop === 'then' ? undefined : jest.fn().mockResolvedValue(undefined)) },
+  );
 
 describe('AuthService', () => {
   let service: AuthService;
   let prisma: PrismaMock;
   let jwt: { sign: jest.Mock };
-  let email: { sendProviderWelcomeEmail: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -27,16 +43,22 @@ describe('AuthService', () => {
         create: jest.fn(),
         update: jest.fn(),
       },
+      trustedDevice: {
+        findUnique: jest.fn(),
+        update: jest.fn(),
+        upsert: jest.fn(),
+      },
     };
     jwt = { sign: jest.fn().mockReturnValue('signed.jwt.token') };
-    email = { sendProviderWelcomeEmail: jest.fn().mockResolvedValue(undefined) };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         AuthService,
         { provide: PrismaService, useValue: prisma },
         { provide: JwtService, useValue: jwt },
-        { provide: EmailService, useValue: email },
+        { provide: EmailService, useValue: permissiveMock() },
+        { provide: EmailOtpService, useValue: permissiveMock() },
+        { provide: EventsGateway, useValue: permissiveMock() },
       ],
     }).compile();
 
@@ -52,6 +74,11 @@ describe('AuthService', () => {
       name: 'Jane',
       role: 'user',
       isActive: true,
+      // Verified + no pending provider approval so login reaches the success
+      // path (the verification/approval gates are exercised elsewhere).
+      emailVerifiedAt: new Date(),
+      providerApprovalStatus: null as string | null,
+      deletedAt: null as Date | null,
       failedLoginAttempts: 0,
       lockedUntil: null as Date | null,
     };
@@ -128,7 +155,7 @@ describe('AuthService', () => {
           password: 'Password!23',
           name: 'New',
         } as any),
-      ).rejects.toBeInstanceOf(UnauthorizedException);
+      ).rejects.toBeInstanceOf(ConflictException);
     });
 
     it('hashes the password before persisting', async () => {

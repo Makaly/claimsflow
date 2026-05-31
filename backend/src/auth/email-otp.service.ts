@@ -33,7 +33,7 @@ export class EmailOtpService {
     // Rate-limit resends: refuse if the latest unconsumed token is younger
     // than the cooldown window.
     const recent = await this.prisma.emailVerificationToken.findFirst({
-      where: { userId, consumedAt: null },
+      where: { userId, purpose: 'email_verification', consumedAt: null },
       orderBy: { createdAt: 'desc' },
     });
     if (recent && recent.createdAt.getTime() > Date.now() - RESEND_COOLDOWN_MS) {
@@ -47,7 +47,7 @@ export class EmailOtpService {
 
     // Invalidate older outstanding tokens so only the new one can succeed.
     await this.prisma.emailVerificationToken.updateMany({
-      where: { userId, consumedAt: null },
+      where: { userId, purpose: 'email_verification', consumedAt: null },
       data: { consumedAt: new Date() },
     });
 
@@ -58,6 +58,7 @@ export class EmailOtpService {
         userId,
         email: user.email,
         codeHash,
+        purpose: 'email_verification',
         expiresAt: new Date(Date.now() + OTP_TTL_MS),
       },
     });
@@ -88,7 +89,7 @@ export class EmailOtpService {
     }
 
     const token = await this.prisma.emailVerificationToken.findFirst({
-      where: { userId, consumedAt: null },
+      where: { userId, purpose: 'email_verification', consumedAt: null },
       orderBy: { createdAt: 'desc' },
     });
     if (!token) {
@@ -135,6 +136,113 @@ export class EmailOtpService {
       }),
     ]);
 
+    return { verified: true };
+  }
+
+  /**
+   * Sends a one-time code for an *action* OTP flow — login 2FA on a new device,
+   * or confirming a password change. Unlike [sendOtp] this neither requires nor
+   * touches `emailVerifiedAt`: it's for already-verified users proving they
+   * still control the inbox. Codes are scoped by [purpose] so the three OTP
+   * flows can't consume each other's tokens.
+   */
+  async sendActionOtp(userId: string, purpose: 'login' | 'password_change') {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const recent = await this.prisma.emailVerificationToken.findFirst({
+      where: { userId, purpose, consumedAt: null },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (recent && recent.createdAt.getTime() > Date.now() - RESEND_COOLDOWN_MS) {
+      const secondsLeft = Math.ceil(
+        (recent.createdAt.getTime() + RESEND_COOLDOWN_MS - Date.now()) / 1000,
+      );
+      throw new BadRequestException(
+        `Please wait ${secondsLeft}s before requesting another code.`,
+      );
+    }
+
+    await this.prisma.emailVerificationToken.updateMany({
+      where: { userId, purpose, consumedAt: null },
+      data: { consumedAt: new Date() },
+    });
+
+    const code = this.generateCode();
+    const codeHash = await bcrypt.hash(code, 10);
+    await this.prisma.emailVerificationToken.create({
+      data: {
+        userId,
+        email: user.email,
+        codeHash,
+        purpose,
+        expiresAt: new Date(Date.now() + OTP_TTL_MS),
+      },
+    });
+
+    this.emailService
+      .sendSecurityCode({
+        email: user.email,
+        name: user.name,
+        code,
+        reason: purpose === 'login' ? 'login' : 'password change',
+      })
+      .catch((err) => this.logger.warn(`Action OTP email send failed: ${err?.message ?? err}`));
+
+    return { sent: true, expiresInSeconds: OTP_TTL_MS / 1000 };
+  }
+
+  /**
+   * Verifies an action OTP ([purpose] = login / password_change). Mirrors
+   * [verifyOtp]'s expiry/attempt/burn logic but is scoped by purpose and never
+   * stamps `emailVerifiedAt`. Throws [BadRequestException] on any failure;
+   * consumes the token on success.
+   */
+  async verifyActionOtp(userId: string, code: string, purpose: 'login' | 'password_change') {
+    if (!/^\d{6}$/.test(code)) {
+      throw new BadRequestException('Code must be 6 digits.');
+    }
+
+    const token = await this.prisma.emailVerificationToken.findFirst({
+      where: { userId, purpose, consumedAt: null },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!token) {
+      throw new BadRequestException('No active code. Request a new one.');
+    }
+    if (token.expiresAt < new Date()) {
+      await this.prisma.emailVerificationToken.update({
+        where: { id: token.id },
+        data: { consumedAt: new Date() },
+      });
+      throw new BadRequestException('Code has expired. Request a new one.');
+    }
+    if (token.attempts >= MAX_ATTEMPTS) {
+      await this.prisma.emailVerificationToken.update({
+        where: { id: token.id },
+        data: { consumedAt: new Date() },
+      });
+      throw new BadRequestException('Too many attempts. Request a new code.');
+    }
+
+    const ok = await bcrypt.compare(code, token.codeHash);
+    if (!ok) {
+      await this.prisma.emailVerificationToken.update({
+        where: { id: token.id },
+        data: { attempts: token.attempts + 1 },
+      });
+      const remaining = MAX_ATTEMPTS - (token.attempts + 1);
+      throw new BadRequestException(
+        remaining > 0
+          ? `Incorrect code. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`
+          : 'Incorrect code. No attempts remaining — request a new code.',
+      );
+    }
+
+    await this.prisma.emailVerificationToken.update({
+      where: { id: token.id },
+      data: { consumedAt: new Date() },
+    });
     return { verified: true };
   }
 
