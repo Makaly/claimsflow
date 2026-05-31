@@ -11,7 +11,7 @@
 ; ============================================================
 
 #define AppName      "ClaimsFlow Scan Agent"
-#define AppVersion   "1.1.0"
+#define AppVersion   "1.3.0"
 #define AppPublisher "CIC Insurance Group PLC"
 #define AppURL       "https://claimsflow-frontend.onrender.com"
 #define AppExeName   "claimsflow-scan-agent.exe"
@@ -36,6 +36,11 @@ Compression              =lzma2/ultra64
 SolidCompression         =yes
 InternalCompressLevel    =ultra64
 ArchitecturesInstallIn64BitMode=x64compatible
+; Re-running this installer over an existing install enters Inno's built-in
+; maintenance mode (Modify / Repair / Remove) automatically via AppId.
+#if FileExists("assets\icon.ico")
+SetupIconFile            =assets\icon.ico
+#endif
 
 ; ── Modern wizard appearance ──────────────────────────────────────────────────
 WizardStyle              =modern
@@ -72,7 +77,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [CustomMessages]
 english.WelcomeLabel1  =Welcome to ClaimsFlow Scan Agent Setup
 english.WelcomeLabel2  =%nThis installer will set up the ClaimsFlow Scan Agent {#AppVersion} on your computer.%n%nThe agent runs as a Windows service on port {#AgentPort} and connects ClaimsFlow to any TWAIN, ISIS, WIA, or eSCL-compatible scanner — including Canon, Kodak Alaris, Fujitsu, Epson, HP, and Xerox devices.%n%nClick Next to continue.
-english.FinishedLabel  =ClaimsFlow Scan Agent {#AppVersion} has been installed and started as a Windows service.%n%nOpen ClaimsFlow in your browser and navigate to Batch Upload → Scan Document — your scanner will appear automatically.%n%nPort: {#AgentPort} · Diagnostics: http://127.0.0.1:{#AgentPort}/diagnostics
+english.FinishedLabel  =ClaimsFlow Scan Agent {#AppVersion} has been installed and started as a Windows service.%n%nA premium setup & driver console is now available at http://127.0.0.1:{#AgentPort}/ — open it to detect scanners and install official vendor drivers.%n%nPort: {#AgentPort} · Diagnostics: http://127.0.0.1:{#AgentPort}/diagnostics
 
 [Tasks]
 Name: "autostart";   Description: "Start the agent automatically with Windows (recommended)"; GroupDescription: "Service options:"; Flags: checked
@@ -90,6 +95,11 @@ Source: "winsw.xml";    DestDir: "{app}"; DestName: "winsw.xml";    Flags: ignor
 ; Driver modules (loaded at runtime from ./drivers/)
 Source: "drivers\*"; DestDir: "{app}\drivers"; Flags: ignoreversion recursesubdirs
 
+; Web console artwork — read at runtime from {app}\assets (swappable)
+Source: "assets\icon.ico";  DestDir: "{app}\assets"; Flags: ignoreversion
+Source: "assets\hero.webp"; DestDir: "{app}\assets"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "assets\logo.png";  DestDir: "{app}\assets"; Flags: ignoreversion skipifsourcedoesntexist
+
 ; License / readme
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
 
@@ -98,7 +108,7 @@ Name: "{app}\logs"
 
 [Icons]
 ; Start Menu
-Name: "{group}\ClaimsFlow Scan Agent";     Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"
+Name: "{group}\ClaimsFlow Scan Agent Console"; Filename: "http://127.0.0.1:{#AgentPort}/"
 Name: "{group}\Diagnostics (browser)";     Filename: "http://127.0.0.1:{#AgentPort}/diagnostics"
 Name: "{group}\Uninstall Scan Agent";      Filename: "{uninstallexe}"
 

@@ -37,9 +37,29 @@ $STEPS = 5
 Write-Host ""
 Write-Host "  ╔══════════════════════════════════════════════════════════╗" -ForegroundColor Blue
 Write-Host "  ║   ClaimsFlow Scan Agent  ·  Windows Installer Build      ║" -ForegroundColor Blue
-Write-Host "  ║   CIC Insurance Group PLC  ·  v1.1.0                     ║" -ForegroundColor Blue
+Write-Host "  ║   CIC Insurance Group PLC  ·  v1.3.0                     ║" -ForegroundColor Blue
 Write-Host "  ╚══════════════════════════════════════════════════════════╝" -ForegroundColor Blue
 Write-Host ""
+
+# ── Optional Authenticode signing ──────────────────────────────────────────────
+# Signs in place when a cert is provided; otherwise logs and continues unsigned.
+#   $env:WINDOWS_CERT_PFX       path to a code-signing .pfx
+#   $env:WINDOWS_CERT_PASSWORD  the .pfx password
+#   $env:TSA_URL                RFC-3161 TSA (default: http://timestamp.sectigo.com)
+function Invoke-Sign($file) {
+    if (-not $env:WINDOWS_CERT_PFX -or -not (Test-Path $env:WINDOWS_CERT_PFX)) {
+        Write-Warn "No WINDOWS_CERT_PFX — '$file' ships UNSIGNED (SmartScreen may warn)."
+        return
+    }
+    $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" -ErrorAction SilentlyContinue |
+        Sort-Object FullName -Descending | Select-Object -First 1
+    if (-not $signtool) { Write-Warn "signtool.exe not found (install the Windows SDK) — skipping signing."; return }
+    $tsa = if ($env:TSA_URL) { $env:TSA_URL } else { "http://timestamp.sectigo.com" }
+    & $signtool.FullName sign /f $env:WINDOWS_CERT_PFX /p $env:WINDOWS_CERT_PASSWORD `
+        /fd sha256 /tr $tsa /td sha256 /d "ClaimsFlow Scan Agent" $file
+    if ($LASTEXITCODE -ne 0) { throw "signtool failed for $file ($LASTEXITCODE)" }
+    Write-Ok "Signed $file"
+}
 
 # ── Step 1: npm install ───────────────────────────────────────────────────────
 Write-Step 1 $STEPS "Installing npm dependencies"
@@ -76,6 +96,9 @@ if (-not (Test-Path "dist\claimsflow-scan-agent.exe")) {
 
 $agentMb = [math]::Round((Get-Item "dist\claimsflow-scan-agent.exe").Length / 1MB, 1)
 Write-Ok "dist\claimsflow-scan-agent.exe  ($agentMb MB)"
+
+# Sign the bundled agent before it goes into the installer
+Invoke-Sign "dist\claimsflow-scan-agent.exe"
 
 # ── Step 4: Download WinSW ────────────────────────────────────────────────────
 Write-Step 4 $STEPS "Ensuring WinSW (Windows service wrapper) is present"
@@ -124,6 +147,10 @@ if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed (exit $LASTEXITC
 
 $setupPath = "ClaimsFlow-Scan-Agent-Setup.exe"
 if (-not (Test-Path $setupPath)) { throw "Installer .exe not produced" }
+
+# Sign the final installer
+Invoke-Sign $setupPath
+
 $setupMb = [math]::Round((Get-Item $setupPath).Length / 1MB, 1)
 
 # ── Summary ───────────────────────────────────────────────────────────────────
@@ -143,11 +170,11 @@ Write-Host "    · Adds Start Menu shortcuts + optional desktop icon" -Foregroun
 Write-Host "    · Opens diagnostics page after install" -ForegroundColor Gray
 Write-Host ""
 Write-Host "  ── Publish to GitHub Releases ─────────────────────────────" -ForegroundColor DarkCyan
-Write-Host "    gh release create scan-agent-v1.1.0 ``" -ForegroundColor Gray
+Write-Host "    gh release create scan-agent-v1.3.0 ``" -ForegroundColor Gray
 Write-Host "      '$setupPath' ``" -ForegroundColor Gray
 Write-Host "      'dist\claimsflow-scan-agent.exe' ``" -ForegroundColor Gray
 Write-Host "      'install.ps1' ``" -ForegroundColor Gray
-Write-Host "      --title 'Scan Agent v1.1.0' ``" -ForegroundColor Gray
+Write-Host "      --title 'Scan Agent v1.3.0' ``" -ForegroundColor Gray
 Write-Host "      --notes 'Adds Canon eSCL, Kodak ISIS, NAPS2 TWAIN support'" -ForegroundColor Gray
 Write-Host ""
 Write-Host "  ── Silent one-liner install for IT teams ──────────────────" -ForegroundColor DarkCyan

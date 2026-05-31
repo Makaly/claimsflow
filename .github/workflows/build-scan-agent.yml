@@ -32,6 +32,11 @@ jobs:
         working-directory: scan-agent
         run: npm ci
 
+      # ── Branded installer assets (BMP + icon.ico, required by installer.nsi) ─
+      - name: Generate installer assets
+        working-directory: scan-agent
+        run: node scripts/generate-installer-assets.js
+
       # ── Bundle agent + Node 20 runtime into a single .exe ───────────────────
       - name: Build Windows executable (pkg)
         working-directory: scan-agent
@@ -48,6 +53,15 @@ jobs:
           }
           $mb = [math]::Round((Get-Item "dist\claimsflow-scan-agent.exe").Length / 1MB, 1)
           Write-Host "Executable: $mb MB"
+
+      # ── Authenticode sign the agent exe (skipped without cert secrets) ───────
+      - name: Sign agent executable
+        working-directory: scan-agent
+        shell: pwsh
+        env:
+          WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: pwsh -File scripts/sign-windows.ps1 -File dist/claimsflow-scan-agent.exe
 
       # ── WinSW service wrapper ────────────────────────────────────────────────
       - name: Download WinSW v3
@@ -74,6 +88,15 @@ jobs:
           if ($LASTEXITCODE -ne 0) { Write-Error "makensis failed ($LASTEXITCODE)"; exit 1 }
           $mb = [math]::Round((Get-Item "ClaimsFlow-Scan-Agent-Setup.exe").Length / 1MB, 1)
           Write-Host "Installer: $mb MB"
+
+      # ── Authenticode sign the installer (skipped without cert secrets) ───────
+      - name: Sign installer
+        working-directory: scan-agent
+        shell: pwsh
+        env:
+          WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: pwsh -File scripts/sign-windows.ps1 -File ClaimsFlow-Scan-Agent-Setup.exe
 
       # ── Upload artifact (always) ─────────────────────────────────────────────
       - name: Upload installer artifact

@@ -86,11 +86,57 @@ Override via env vars:
 
 ## After install
 
+The installer opens the **Scan Agent Console** at **http://127.0.0.1:7420/** — a
+local dashboard that shows live agent status, detected scanners, and a **Driver
+Center** for installing official vendor drivers (see below). From there:
+
 1. Open ClaimsFlow in your browser.
 2. Go to the **Scan Document** tab.
 3. Click **Refresh** — your scanner appears in the list.
 
-The agent listens on `http://127.0.0.1:7420` (localhost only).
+The agent listens on `http://127.0.0.1:7420` (localhost only). Drop an image at
+`…\ClaimsFlow Scan Agent\assets\hero.webp` to brand the console with your own
+artwork — no rebuild needed.
+
+## Driver Center — how scanner drivers are handled
+
+Scanner manufacturers distribute drivers under per-vendor EULAs, and **ISIS** is a
+commercially licensed runtime (OpenText). We do **not** redistribute those locked
+files and never bypass their licensing. Instead the agent reaches scanners through
+standard interfaces that ride on top of whatever driver you install:
+
+| Path | Driver needed? | Coverage |
+|---|---|---|
+| WIA / WIA 2.0 | Built into Windows | Most USB scanners |
+| eSCL / AirScan / WSD | **None** (driverless) | Most modern network MFPs |
+| TWAIN via NAPS2 | NAPS2 (MIT, redistributable) | Canon, Kodak Alaris, Fujitsu, Xerox, Ricoh |
+| SANE | Open backends | Linux / macOS |
+
+The Console's **Driver Center** detects your scanner (USB VID/PID + live device
+list) and either installs the manufacturer's **official** driver via `winget` —
+signed, straight from the vendor — or links you to the official download page when
+no winget package exists. The free, redistributable bridges (NAPS2 + Mopria) can be
+installed during setup (optional component) or from the Console at any time.
+
+API: `GET /drivers/recommend`, `POST /drivers/install?key=<vendor>`, `GET /drivers/catalog`.
+
+## Repair / reinstall
+
+The installation stays serviceable after first install:
+
+- **Apps & features → ClaimsFlow Scan Agent → Modify** re-runs the bundled
+  maintenance installer to repair or reinstall.
+- **Re-running the setup .exe** detects the existing version and offers
+  *Repair / reinstall*, *remove first*, or *cancel*.
+
+## Code signing
+
+CI signs both the agent `.exe` and the installer with Authenticode when a
+code-signing certificate is configured (`WINDOWS_CERT_BASE64` +
+`WINDOWS_CERT_PASSWORD`), timestamped via an RFC-3161 TSA. Without the cert the
+build still succeeds but ships unsigned (Windows SmartScreen may warn). On Linux CI
+this uses `osslsigncode` (`scripts/sign-windows.sh`); on a Windows runner or local
+PowerShell build it uses `signtool` (`scripts/sign-windows.ps1`).
 
 ---
 
