@@ -184,7 +184,7 @@ class Bitmap {
     buf.writeUInt32LE(54, 10);
     buf.writeUInt32LE(40, 14);
     buf.writeInt32LE(w, 18);
-    buf.writeInt32LE(-h, 22);   // negative = top-down
+    buf.writeInt32LE(h, 22);    // positive = bottom-up (universal; NSIS MUI needs this)
     buf.writeUInt16LE(1, 26);
     buf.writeUInt16LE(24, 28);
     buf.writeUInt32LE(0, 30);
@@ -192,7 +192,8 @@ class Bitmap {
     buf.writeInt32LE(3780, 38);
     buf.writeInt32LE(3780, 42);
     let offset = 54;
-    for (let y = 0; y < h; y++) {
+    // Bottom-up: write the last row first.
+    for (let y = h - 1; y >= 0; y--) {
       for (let x = 0; x < w; x++) {
         const i = (y * w + x) * 4;
         buf[offset++] = this.data[i+2]; // B
@@ -452,6 +453,76 @@ function makeSplash() {
   return bm;
 }
 
+// ── 4. App icon (.ico) ─────────────────────────────────────────────────────────
+// Draws the brand tile (gradient rounded square + CF monogram) at a given size.
+function makeIconBitmap(size) {
+  const bm = new Bitmap(size, size);
+  // Diagonal accent gradient fill
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++) {
+      const t = (x + y) / (2 * size);
+      const c = lerpColor(P.accent, P.teal, t);
+      bm.setPixel(x, y, c.r, c.g, c.b);
+    }
+  // Soft top glow + inner darken for depth
+  bm.glow(size * 0.3, size * 0.25, size * 0.6, P.glow, 70);
+  bm.gradV(0, Math.round(size * 0.55), size, size, hex('#0A1628'), hex('#050B1A'));
+  // CF monogram, scaled to icon size
+  const scale = Math.max(1, Math.round(size / 18));
+  const cfW = (5 * 2 + 1) * scale;
+  bm.drawText(Math.round(size / 2 - cfW / 2), Math.round(size / 2 - 3.5 * scale), 'CF', P.white, 255, scale);
+  return bm;
+}
+
+// Build a multi-resolution .ico from BGRA DIB entries (32-bit, opaque).
+function toIco(sizes) {
+  const bitmaps = sizes.map((s) => ({ s, bm: makeIconBitmap(s) }));
+  const images = bitmaps.map(({ s, bm }) => {
+    const header = Buffer.alloc(40);
+    header.writeUInt32LE(40, 0);
+    header.writeInt32LE(s, 4);
+    header.writeInt32LE(s * 2, 8);   // height ×2: XOR bitmap + AND mask
+    header.writeUInt16LE(1, 12);
+    header.writeUInt16LE(32, 14);
+    header.writeUInt32LE(0, 16);     // BI_RGB
+    // XOR bitmap: 32-bit BGRA, bottom-up
+    const xor = Buffer.alloc(s * s * 4);
+    let o = 0;
+    for (let y = s - 1; y >= 0; y--)
+      for (let x = 0; x < s; x++) {
+        const i = (y * s + x) * 4;
+        xor[o++] = bm.data[i + 2];   // B
+        xor[o++] = bm.data[i + 1];   // G
+        xor[o++] = bm.data[i + 0];   // R
+        xor[o++] = 255;              // A (opaque)
+      }
+    // AND mask: 1bpp, rows padded to 4 bytes, all zero (alpha drives transparency)
+    const andRow = Math.ceil(s / 32) * 4;
+    const andMask = Buffer.alloc(andRow * s, 0);
+    return Buffer.concat([header, xor, andMask]);
+  });
+
+  const count = images.length;
+  const dir = Buffer.alloc(6 + 16 * count);
+  dir.writeUInt16LE(0, 0);
+  dir.writeUInt16LE(1, 2);           // type: icon
+  dir.writeUInt16LE(count, 4);
+  let offset = 6 + 16 * count;
+  bitmaps.forEach(({ s }, idx) => {
+    const e = 6 + 16 * idx;
+    dir.writeUInt8(s >= 256 ? 0 : s, e);
+    dir.writeUInt8(s >= 256 ? 0 : s, e + 1);
+    dir.writeUInt8(0, e + 2);
+    dir.writeUInt8(0, e + 3);
+    dir.writeUInt16LE(1, e + 4);     // planes
+    dir.writeUInt16LE(32, e + 6);    // bit count
+    dir.writeUInt32LE(images[idx].length, e + 8);
+    dir.writeUInt32LE(offset, e + 12);
+    offset += images[idx].length;
+  });
+  return Buffer.concat([dir, ...images]);
+}
+
 // ── Write files ───────────────────────────────────────────────────────────────
 function save(bm, name) {
   const bmpPath = path.join(ASSETS, `${name}.bmp`);
@@ -464,4 +535,9 @@ console.log('\nGenerating installer assets…\n');
 save(makeSidebar(), 'wizard-sidebar');
 save(makeHeader(),  'wizard-header');
 save(makeSplash(),  'setup-splash');
+
+const icoPath = path.join(ASSETS, 'icon.ico');
+fs.writeFileSync(icoPath, toIco([256, 48, 32, 16]));
+console.log(`  ✓ icon.ico  (256/48/32/16, ${Math.round(fs.statSync(icoPath).size / 1024)} KB)`);
+
 console.log(`\nAll assets written to: ${ASSETS}\n`);
