@@ -331,13 +331,13 @@ export class OcrService {
           pages.push(data.text);
           fs.unlinkSync(pagePath);
         }
-        fs.rmdirSync(tmpDir);
+        fs.rmSync(tmpDir, { recursive: true, force: true });
       } catch {
         // pdftoppm not available - OCR the whole file directly
         this.logger.warn('pdftoppm not found, OCR-ing PDF directly');
         const { data } = await worker.recognize(pdfPath);
         pages.push(data.text);
-        try { fs.rmdirSync(tmpDir); } catch {}
+        try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
       }
     } finally {
       await worker.terminate();
