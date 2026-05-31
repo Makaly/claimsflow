@@ -115,17 +115,27 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   }
 
   async onModuleInit() {
-    // Apply any pending migrations before accepting connections.
-    // migrate deploy is idempotent — no-op when the schema is already current.
-    // Dockerfile.prod runs scripts/migrate.js first, so this is a safety net
-    // for local dev and any non-Docker start path (e.g. npm run start:dev).
-    try {
-      console.log('[startup] running prisma migrate deploy…');
-      execSync('npx prisma migrate deploy', { stdio: 'inherit' });
-      console.log('[startup] migrations up to date');
-    } catch (err) {
-      console.error('[startup] prisma migrate deploy failed — refusing to start:', err);
-      process.exit(1);
+    // Apply any pending migrations before accepting connections — but ONLY
+    // outside production. In the Render/Docker deploy, scripts/migrate.js
+    // applies migrations in the pre-start boot step (Dockerfile.prod CMD step
+    // 1), so running `npx prisma migrate deploy` AGAIN here is redundant. Worse,
+    // it spawns a second Prisma CLI (which downloads the CLI + schema engine)
+    // alongside the already-resident NestJS process; on Render's 512Mi free
+    // tier the combined footprint is OOM-killed ("used over 512Mi"). Migrations
+    // are a deploy-time concern, not a request-serving one, so in production we
+    // trust the boot step. This stays as a safety net for local dev and any
+    // non-Docker start path (e.g. npm run start:dev).
+    if (process.env.NODE_ENV !== 'production') {
+      try {
+        console.log('[startup] running prisma migrate deploy…');
+        execSync('npx prisma migrate deploy', { stdio: 'inherit' });
+        console.log('[startup] migrations up to date');
+      } catch (err) {
+        console.error('[startup] prisma migrate deploy failed — refusing to start:', err);
+        process.exit(1);
+      }
+    } else {
+      console.log('[startup] skipping in-app migrate (applied by pre-start boot step)');
     }
 
     await this.$connect();
