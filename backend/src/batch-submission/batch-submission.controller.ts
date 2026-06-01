@@ -215,6 +215,30 @@ export class BatchSubmissionController {
     return this.batchSubmissionService.getBatchById(id);
   }
 
+  /**
+   * GET /batch-submissions/:id/drafts
+   * Returns claims created during server-side batch processing in the same
+   * shape the mobile BatchReviewScreen expects. Maps Claim rows → BatchDraftDto.
+   */
+  @Get(':id/drafts')
+  async getBatchDrafts(@Param('id') id: string) {
+    const batch = await this.batchSubmissionService.getBatchById(id);
+    return (batch as any).claims?.map((c: any) => ({
+      draftId: c.id,
+      batchId: id,
+      filename: c.documents?.[0]?.originalName ?? c.claimNumber,
+      patientName: c.patientName ?? c.memberName ?? null,
+      memberNumber: c.memberNumber ?? null,
+      invoiceNumber: c.invoiceNumber ?? null,
+      invoiceDate: c.invoiceDate ?? null,
+      invoiceAmountCents: c.invoiceAmount ? Math.round(c.invoiceAmount * 100) : null,
+      diagnosis: c.diagnosis ?? null,
+      confidence: c.confidence ?? 0,
+      failed: c.status === 'failed',
+      errorMessage: c.rejectionReason ?? null,
+    })) ?? [];
+  }
+
   // ── Draft claims — persist extracted data before publish ──────────────────
 
   /** Bulk upsert draft claims for a session (called after AI extraction). */
