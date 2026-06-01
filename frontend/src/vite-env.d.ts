@@ -7,3 +7,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+/** Injected by Vite `define` — the web build version (see vite.config.ts). */
+declare const __APP_VERSION__: string

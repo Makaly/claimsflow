@@ -30,6 +30,7 @@ export interface ClaimRecord {
   batchId?: string
   batchNumber?: string       // Human-readable: BTH-2026-00001
   uploadedBy?: string        // Email of the user who uploaded
+  sourcePlatform?: string    // Upload channel: android | ios | web | scan_station
   batchType?: 'single' | 'batch'
   aiConfidence?: number
   fraudSignals?: { level: 'critical' | 'warning'; title: string; detail: string; detectedAt: string }[]
@@ -118,6 +119,7 @@ function mapBackendClaim(c: any): ClaimRecord {
     batchId: c.batchId,
     batchNumber: c.batch?.batchNumber || c.batchNumber,
     uploadedBy: c.uploadedBy,
+    sourcePlatform: c.sourcePlatform ?? undefined,
     batchType: (c.batchId || c.batchNumber || c.batch?.batchNumber) ? 'batch' : 'single',
     aiConfidence: c.ocrConfidence,
     fraudSignals: Array.isArray(c.fraudSignals) && c.fraudSignals.length > 0 ? c.fraudSignals : undefined,

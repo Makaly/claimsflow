@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { attachRetryInterceptor } from './retry'
+import { getDeviceInfo } from '@/lib/deviceInfo'
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api',
@@ -19,6 +20,17 @@ api.interceptors.request.use((config) => {
   if (token && !config.headers['Authorization']) {
     config.headers['Authorization'] = `Bearer ${token}`
   }
+  return config
+})
+
+// Tag every request with upload-source headers so the backend records which
+// channel (web), build, and device produced a claim/batch — mirrors the
+// X-Client-Platform / X-App-Version / X-Device-Info headers the mobile app sends.
+api.interceptors.request.use((config) => {
+  config.headers['X-Client-Platform'] = 'web'
+  config.headers['X-App-Version'] = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'unknown'
+  const device = getDeviceInfo()
+  config.headers['X-Device-Info'] = `${device.os}; ${device.userAgent}`
   return config
 })
 

@@ -19,6 +19,7 @@ import {
   BarChart, Bar, Legend, LineChart, Line, ComposedChart,
 } from 'recharts'
 import { formatCurrency, formatDate, getStatusColor } from '@/lib/utils'
+import { platformLabel } from '@/lib/uploadSource'
 import { useClaimsStore } from '@/store/claimsStore'
 import { useAuthStore } from '@/store/authStore'
 import ProviderDashboard from './ProviderDashboard'
@@ -153,13 +154,14 @@ function CICDashboard() {
 
   // ── Batch stats ───────────────────────────────────────────────────────────
   const batchMap = useMemo(() => {
-    const m = new Map<string, { batchNumber: string; uploadedBy: string; date: string; claims: typeof claims; amount: number; providers: Set<string> }>()
+    const m = new Map<string, { batchNumber: string; uploadedBy: string; sourcePlatform?: string; date: string; claims: typeof claims; amount: number; providers: Set<string> }>()
     claims.forEach(c => {
       if (!c.batchId) return
       if (!m.has(c.batchId)) {
         m.set(c.batchId, {
           batchNumber: c.batchNumber || c.batchId,
           uploadedBy:  c.uploadedBy  || '—',
+          sourcePlatform: c.sourcePlatform,
           date:        c.submittedAt,
           claims:      [],
           amount:      0,
@@ -720,7 +722,14 @@ function CICDashboard() {
                         <TableCell>
                           <span className="font-mono font-medium text-sm">{batch.batchNumber}</span>
                         </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{batch.uploadedBy}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          <span>{batch.uploadedBy}</span>
+                          {batch.sourcePlatform && (
+                            <Badge variant="outline" className="ml-1.5 text-[9px] px-1.5 py-0 align-middle">
+                              {platformLabel(batch.sourcePlatform)}
+                            </Badge>
+                          )}
+                        </TableCell>
                         <TableCell className="text-sm text-muted-foreground">{formatDate(batch.date)}</TableCell>
                         <TableCell className="text-right font-semibold">{batch.claims.length}</TableCell>
                         <TableCell className="text-right">{formatCurrency(batch.amount)}</TableCell>

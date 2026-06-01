@@ -55,6 +55,11 @@ audit_report.html
 /claimsflow-install.sh
 claimsflow-install.sh
 
+# claimsflow-mobile is a SEPARATE git repo (remote: Makaly/claimsflow-mobile)
+# checked out inside this working tree. Ignore it so the outer repo can never
+# stage it as a gitlink. It is managed independently from its own .git.
+/claimsflow/
+
 # Python — ml-sidecar
 __pycache__/
 *.py[cod]

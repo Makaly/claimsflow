@@ -4,6 +4,7 @@ import { lazy, Suspense, useEffect } from 'react'
 import { Layout } from '@/components/Layout'
 import { useAuthStore } from '@/store/authStore'
 import { useClaimsStore } from '@/store/claimsStore'
+import Landing from '@/pages/Landing'
 import Login from '@/pages/Login'
 import Register from '@/pages/Register'
 import ProviderRegister from '@/pages/ProviderRegister'
@@ -146,6 +147,10 @@ function AppRoutes() {
 
   return (
     <Routes>
+      {/* Public landing page — only mounted while logged out, so it owns "/" for
+          unauthenticated visitors. When sessionLive, this route is absent and "/"
+          falls through to the protected Dashboard below, unchanged. */}
+      {!sessionLive && <Route path="/" element={<Landing />} />}
       <Route
         path="/login"
         element={sessionLive ? <Navigate to="/" replace /> : <Login />}

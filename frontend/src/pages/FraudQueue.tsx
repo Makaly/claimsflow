@@ -4,7 +4,7 @@ import {
   User, Building2, Calendar, AlertTriangle, Eye, Download,
   Printer, Lock, Hash, Receipt, Stethoscope, UploadCloud, Ban,
   History, MailOpen, Paperclip, Send, RefreshCw, MessageSquare,
-  ClipboardList, ChevronRight,
+  ClipboardList, ChevronRight, Smartphone,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -22,6 +22,7 @@ import { Pagination } from '@/components/Pagination'
 import InlineDocumentPreview from '@/components/InlineDocumentPreview'
 import LineItemsTable from '@/components/LineItemsTable'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { platformLabel } from '@/lib/uploadSource'
 import api from '@/services/api'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/store/authStore'
@@ -56,6 +57,7 @@ interface FraudClaim {
   rejectionReason?: string
   fraudSignals?: FraudSignal[]
   uploadedBy?: string
+  sourcePlatform?: string
   documents?: Array<{ id: string; originalName: string; mimetype: string }>
 }
 
@@ -1179,6 +1181,7 @@ export default function FraudQueue() {
                         { icon: Hash,        label: 'Invoice #',      val: confirmedDetail.invoiceNumber || '—', mono: true },
                         { icon: Calendar,    label: 'Rejected',       val: formatDate(confirmedDetail.rejectedAt || confirmedDetail.submittedAt) },
                         { icon: UploadCloud, label: 'Uploaded By',    val: confirmedDetail.uploadedBy || '—' },
+                        { icon: Smartphone,  label: 'Uploaded Via',   val: platformLabel(confirmedDetail.sourcePlatform) },
                       ].map(({ icon: Icon, label, val, mono, bold }) => (
                         <div key={label} className="rounded-lg bg-muted/40 px-3 py-2.5">
                           <p className="flex items-center gap-1 text-[10px] text-muted-foreground mb-0.5"><Icon className="h-3 w-3" />{label}</p>

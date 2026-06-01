@@ -1,8 +1,18 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import { readFileSync } from 'fs'
+
+// Read the package version once at config time so the web client can tag its
+// uploads with the build version (X-App-Version header). See src/services/api.ts.
+const pkgVersion = JSON.parse(
+  readFileSync(path.resolve(__dirname, './package.json'), 'utf-8'),
+).version as string
 
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(pkgVersion),
+  },
   plugins: [react()],
   resolve: {
     alias: {

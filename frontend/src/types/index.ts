@@ -76,6 +76,11 @@ export interface Claim {
   submittedAt: string
   createdAt: string
   updatedAt: string
+  // Upload-source metadata — which channel/build/device produced the claim.
+  uploadedBy?: string
+  sourcePlatform?: string
+  appVersion?: string
+  deviceInfo?: string
 }
 
 export interface ClaimApproval {
@@ -102,6 +107,11 @@ export interface BatchSubmission {
   failedClaims: number
   createdAt: string
   completedAt?: string
+  uploadedBy?: string
+  // Upload-source metadata — which channel/build/device produced the batch.
+  sourcePlatform?: string
+  appVersion?: string
+  deviceInfo?: string
 }
 
 export interface Document {

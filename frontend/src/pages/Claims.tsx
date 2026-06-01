@@ -13,8 +13,9 @@ import {
   Package, Users, Hash, Calendar, DollarSign, AlertTriangle, Send,
   BarChart3, TrendingUp, CheckCircle2, Clock, XCircle as XCircleIcon,
   FileSpreadsheet, FileDown, Printer, GripVertical, Settings2, RotateCcw,
-  ScanLine, Tag, Pencil, History, Check, Undo2,
+  ScanLine, Tag, Pencil, History, Check, Undo2, Smartphone,
 } from 'lucide-react'
+import { platformLabel } from '@/lib/uploadSource'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -137,6 +138,7 @@ interface BatchGroup {
   batchId: string
   batchNumber: string
   uploadedBy: string
+  sourcePlatform?: string
   submittedAt: string
   claims: ClaimRecord[]
   providers: string[]
@@ -159,6 +161,7 @@ function buildBatchGroups(claims: ClaimRecord[]): BatchGroup[] {
       batchId: key,
       batchNumber: first.batchNumber || key,
       uploadedBy: first.uploadedBy || 'Unknown',
+      sourcePlatform: first.sourcePlatform,
       submittedAt: first.submittedAt,
       claims: batchClaims.sort((a, b) => (a.provider?.name || '').localeCompare(b.provider?.name || '')),
       providers,
@@ -813,6 +816,7 @@ export default function Claims() {
   const [providerFilter, setProviderFilter] = useState('all')
   const [priorityFilter, setPriorityFilter] = useState('all')
   const [sourceFilter, setSourceFilter] = useState('all')
+  const [platformFilter, setPlatformFilter] = useState('all')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [showFilters, setShowFilters] = useState(false)
@@ -1175,11 +1179,12 @@ export default function Claims() {
       (sourceFilter === 'ai' && c.aiExtracted) ||
       (sourceFilter === 'bulk' && (c.batchType === 'batch' || c.batchId)) ||
       (sourceFilter === 'manual' && c.batchType !== 'batch' && !c.batchId && !c.aiExtracted)
+    const matchesPlatform = platformFilter === 'all' || c.sourcePlatform === platformFilter
     // Date range filter
     const dt = new Date(c.submittedAt)
     const matchesDateFrom = !dateFrom || dt >= new Date(dateFrom)
     const matchesDateTo = !dateTo || dt <= new Date(dateTo + 'T23:59:59')
-    return matchesSearch && matchesStatus && matchesProvider && matchesPriority && matchesSource && matchesDateFrom && matchesDateTo
+    return matchesSearch && matchesStatus && matchesProvider && matchesPriority && matchesSource && matchesPlatform && matchesDateFrom && matchesDateTo
   })
 
   const searchMatchesClaim = (c: ClaimRecord) => {
@@ -1196,12 +1201,12 @@ export default function Claims() {
   }
   const singleClaims = claims.filter(c => (c.batchType === 'single' || (!c.batchId && !c.batchType)) && searchMatchesClaim(c))
   const batchGroups = buildBatchGroups(claims.filter(searchMatchesClaim))
-  const activeFilterCount = [statusFilter, providerFilter, priorityFilter, sourceFilter].filter(f => f !== 'all').length
+  const activeFilterCount = [statusFilter, providerFilter, priorityFilter, sourceFilter, platformFilter].filter(f => f !== 'all').length
     + (dateFrom ? 1 : 0) + (dateTo ? 1 : 0)
 
   const clearFilters = () => {
     setStatusFilter('all'); setProviderFilter('all')
-    setPriorityFilter('all'); setSourceFilter('all'); setSearch('')
+    setPriorityFilter('all'); setSourceFilter('all'); setPlatformFilter('all'); setSearch('')
     setDateFrom(''); setDateTo('')
   }
 
@@ -1484,6 +1489,19 @@ export default function Claims() {
                 <SelectItem value="manual">Manual Entry</SelectItem>
                 <SelectItem value="ai">AI Extracted</SelectItem>
                 <SelectItem value="bulk">Bulk Upload</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Platform</Label>
+            <Select value={platformFilter} onValueChange={setPlatformFilter}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Channels</SelectItem>
+                <SelectItem value="web">{platformLabel('web')}</SelectItem>
+                <SelectItem value="android">{platformLabel('android')}</SelectItem>
+                <SelectItem value="ios">{platformLabel('ios')}</SelectItem>
+                <SelectItem value="scan_station">{platformLabel('scan_station')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -1852,6 +1870,11 @@ export default function Claims() {
                     <div>
                       <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">Uploaded By</p>
                       <p className="text-sm truncate">{batch.uploadedBy}</p>
+                      {batch.sourcePlatform && (
+                        <Badge variant="outline" className="mt-0.5 text-[9px] px-1.5 py-0 gap-0.5">
+                          <Smartphone className="h-2.5 w-2.5" /> {platformLabel(batch.sourcePlatform)}
+                        </Badge>
+                      )}
                     </div>
                     <div>
                       <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">Date</p>
