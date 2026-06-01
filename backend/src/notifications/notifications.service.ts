@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { SmsService } from './sms.service';
+import { EventsGateway } from './events.gateway';
 
 interface SendEmailDto {
   recipient: string;
@@ -16,13 +17,171 @@ interface SendSmsDto {
   message: string;
 }
 
+/** Category understood by the mobile inbox tabs. */
+export type NotifyCategory = 'claim' | 'appeal' | 'payment' | 'system';
+
+interface NotifyInput {
+  recipientId: string;
+  category: NotifyCategory;
+  title: string;
+  body: string;
+  claimId?: string;
+  providerId?: string;
+  /** Mobile route hint, e.g. "claims/<id>". */
+  deepLink?: string;
+}
+
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(
     private prisma: PrismaService,
     private smsService: SmsService,
+    private readonly events: EventsGateway,
     @InjectQueue('notifications') private notificationsQueue: Queue,
   ) {}
+
+  /**
+   * Create an in-app notification for one user and push it live over the
+   * WebSocket so the inbox + bell badge update immediately. Never throws — a
+   * notification failure must not break the workflow action that triggered it.
+   * Email/SMS continue to be sent separately by the workflow services.
+   */
+  async notify(input: NotifyInput): Promise<void> {
+    try {
+      const row = await this.prisma.notification.create({
+        data: {
+          type: input.category,
+          channel: 'in_app',
+          recipientId: input.recipientId,
+          subject: input.title,
+          message: input.body,
+          claimId: input.claimId ?? null,
+          providerId: input.providerId ?? null,
+          status: 'unread',
+          templateData: input.deepLink ? { deepLink: input.deepLink } : undefined,
+        },
+      });
+      // Live fan-out (best-effort). The mobile decodes a `notification` event.
+      this.events.emitToUser(input.recipientId, 'notification', {
+        id: row.id,
+        category: input.category,
+        title: input.title,
+        body: input.body,
+        createdAt: row.createdAt.toISOString(),
+        read: false,
+        deepLink: input.deepLink ?? null,
+      });
+    } catch (e) {
+      this.logger.warn(`notify() failed for user ${input.recipientId}: ${(e as Error)?.message}`);
+    }
+  }
+
+  /** Fan a notification out to every active user holding a given role. */
+  async notifyRole(role: string, input: Omit<NotifyInput, 'recipientId'>): Promise<void> {
+    const users = await this.prisma.user.findMany({
+      where: { role, isActive: true },
+      select: { id: true },
+    }).catch(() => [] as { id: string }[]);
+    await Promise.all(users.map((u) => this.notify({ ...input, recipientId: u.id })));
+  }
+
+  /** Fan a notification out to every active user belonging to a provider. */
+  async notifyProvider(providerId: string | null | undefined, input: Omit<NotifyInput, 'recipientId'>): Promise<void> {
+    if (!providerId) return;
+    const users = await this.prisma.user.findMany({
+      where: { providerId, isActive: true, role: { in: ['provider_admin', 'provider_user'] } },
+      select: { id: true },
+    }).catch(() => [] as { id: string }[]);
+    await Promise.all(users.map((u) => this.notify({ ...input, recipientId: u.id, providerId })));
+  }
+
+  /** Inbox list for the signed-in user, newest first, with unread count. */
+  async listForUser(userId: string, cursor?: string, limit = 25) {
+    const take = Math.min(Math.max(limit, 1), 100);
+    const where = { recipientId: userId };
+    const rows = await this.prisma.notification.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: take + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    });
+    const hasMore = rows.length > take;
+    const page = hasMore ? rows.slice(0, take) : rows;
+    const unreadCount = await this.prisma.notification.count({
+      where: { recipientId: userId, status: { not: 'read' } },
+    });
+    return {
+      items: page.map((n) => ({
+        id: n.id,
+        category: n.type,
+        title: n.subject ?? '',
+        body: n.message,
+        createdAt: n.createdAt.toISOString(),
+        read: n.status === 'read',
+        deepLink: (n.templateData as any)?.deepLink ?? null,
+      })),
+      nextCursor: hasMore ? page[page.length - 1].id : null,
+      unreadCount,
+    };
+  }
+
+  async markRead(userId: string, id: string) {
+    await this.prisma.notification.updateMany({
+      where: { id, recipientId: userId },
+      data: { status: 'read', readAt: new Date() },
+    });
+    return { ok: true };
+  }
+
+  async markAllRead(userId: string) {
+    await this.prisma.notification.updateMany({
+      where: { recipientId: userId, status: { not: 'read' } },
+      data: { status: 'read', readAt: new Date() },
+    });
+    return { ok: true };
+  }
+
+  // ── Preferences (quiet hours persist; per-channel toggles are a follow-up
+  //    once NotificationPreference gains email/sms/push columns) ─────────────
+  private minToHHMM(min?: number | null): string | null {
+    if (min === null || min === undefined) return null;
+    const h = Math.floor(min / 60) % 24;
+    return `${String(h).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+  }
+  private hhmmToMin(s?: string | null): number | null {
+    if (!s) return null;
+    const [h, m] = s.split(':').map((x) => parseInt(x, 10));
+    if (Number.isNaN(h) || Number.isNaN(m)) return null;
+    return (h % 24) * 60 + (m % 60);
+  }
+
+  async getPreferences(userId: string) {
+    const pref = await this.prisma.notificationPreference.findUnique({ where: { userId } });
+    return {
+      email: true,
+      sms: false,
+      inApp: true,
+      push: true,
+      quietHoursStart: this.minToHHMM(pref?.quietStart),
+      quietHoursEnd: this.minToHHMM(pref?.quietEnd),
+    };
+  }
+
+  async updatePreferences(
+    userId: string,
+    body: { quietHoursStart?: string | null; quietHoursEnd?: string | null },
+  ) {
+    const quietStart = this.hhmmToMin(body.quietHoursStart);
+    const quietEnd = this.hhmmToMin(body.quietHoursEnd);
+    await this.prisma.notificationPreference.upsert({
+      where: { userId },
+      create: { userId, quietStart, quietEnd },
+      update: { quietStart, quietEnd },
+    });
+    return this.getPreferences(userId);
+  }
 
   async sendEmail(emailDto: SendEmailDto) {
     const notification = await this.prisma.notification.create({

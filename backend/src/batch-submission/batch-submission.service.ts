@@ -7,6 +7,7 @@ import { PdfWatermarkService } from '../common/services/pdf-watermark.service';
 import { OcrService } from '../ocr/ocr.service';
 import { StorageService } from '../common/services/storage.service';
 import { EmailService } from '../notifications/email.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import { AUTO_DETECT_PROVIDER_NAME } from '../common/constants/auto-detect-provider';
@@ -22,6 +23,7 @@ export class BatchSubmissionService {
     private ocrService: OcrService,
     private emailService: EmailService,
     private storage: StorageService,
+    private notifications: NotificationsService,
     @InjectQueue('batch-processing') private batchQueue: Queue,
   ) {}
 
@@ -92,6 +94,13 @@ export class BatchSubmissionService {
     // Notify all maker-checker users of new batch — non-blocking
     const count = files.length;
     const providerName = batch.provider?.name ?? 'Unknown provider';
+    // In-app notification to every maker-checker (the email below still sends).
+    this.notifications.notifyRole('maker_checker', {
+      category: 'claim',
+      title: `New batch ${batch.batchNumber}`,
+      body: `${count} invoice${count !== 1 ? 's' : ''} from ${providerName} awaiting verification.`,
+      deepLink: 'workflow/maker',
+    }).catch(() => {});
     this.prisma.user
       .findMany({ where: { role: 'maker_checker', isActive: true }, select: { email: true } })
       .then((makers) =>

@@ -134,6 +134,13 @@ export class MakerCheckerService {
 
     // ─── Notifications: fire-and-forget so the API response is not held up by SMTP ──
     const officerIds = await this.findClaimsOfficers();
+    this.notificationsService.notifyRole('claims_officer', {
+      category: 'claim',
+      title: `Claim ${claim.claimNumber} ready for approval`,
+      body: 'Passed maker-checker verification — awaiting your final decision.',
+      claimId: claim.id,
+      deepLink: `claims/${claim.id}`,
+    }).catch(() => {});
     const makerNotes = comments?.trim() ?? '';
     void this.emailUsersHtml(officerIds, {
       subject: `Invoice ready for final approval: ${claim.claimNumber}`,
@@ -350,6 +357,13 @@ export class MakerCheckerService {
 
     const checkerNotes = comments?.trim() ?? '';
     const officerIds = await this.findClaimsOfficers();
+    this.notificationsService.notifyRole('claims_officer', {
+      category: 'claim',
+      title: `Claim ${claim.claimNumber} ready for approval`,
+      body: 'Passed maker-checker verification — awaiting your final decision.',
+      claimId: claim.id,
+      deepLink: `claims/${claim.id}`,
+    }).catch(() => {});
     await this.emailUsersHtml(officerIds, {
       subject: `Invoice ready for final approval: ${claim.claimNumber}`,
       badgeText: 'Action Required', badgeStyle: 'blue',
@@ -395,6 +409,14 @@ export class MakerCheckerService {
     if (claim.workflowStage !== 'claims_officer_review') {
       throw new BadRequestException('Claim is not in claims officer review stage');
     }
+
+    this.notificationsService.notifyProvider(claim.providerId, {
+      category: 'claim',
+      title: `Claim ${claim.claimNumber} approved`,
+      body: 'Your claim was approved and is now processing for payment.',
+      claimId: claim.id,
+      deepLink: `claims/${claim.id}`,
+    }).catch(() => {});
 
     await this.prisma.claimApproval.create({
       data: {
@@ -517,6 +539,14 @@ export class MakerCheckerService {
     if (claim.workflowStage !== 'claims_officer_review') {
       throw new BadRequestException('Claim is not in claims officer review stage');
     }
+
+    this.notificationsService.notifyProvider(claim.providerId, {
+      category: 'claim',
+      title: `Claim ${claim.claimNumber} rejected`,
+      body: reason?.trim() ? `Reason: ${reason.trim()}` : 'Your claim was rejected.',
+      claimId: claim.id,
+      deepLink: `claims/${claim.id}`,
+    }).catch(() => {});
 
     await this.prisma.claimApproval.create({
       data: {
@@ -791,6 +821,14 @@ export class MakerCheckerService {
     if (claim.workflowStage !== 'claims_officer_review') {
       throw new BadRequestException('Claim is not in claims officer review stage');
     }
+
+    this.notificationsService.notifyRole('fraud_officer', {
+      category: 'claim',
+      title: `Fraud escalation: ${claim.claimNumber}`,
+      body: reason?.trim() ? `Reason: ${reason.trim()}` : 'A claim was escalated for fraud review.',
+      claimId: claim.id,
+      deepLink: `fraud/${claim.id}`,
+    }).catch(() => {});
 
     const existingSignals = (claim.fraudSignals as any[]) || [];
     const signal = {

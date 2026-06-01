@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Put, Body, Param, Query, Request, UseGuards } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { EmailService, BatchConfirmationDto } from './email.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -24,25 +24,46 @@ export class NotificationsController {
     return this.notificationsService.sendEmail(emailDto);
   }
 
+  /** The signed-in user's own inbox: { items, nextCursor, unreadCount }. */
   @Get()
   findAll(
+    @Request() req: any,
+    @Query('cursor') cursor?: string,
     @Query('limit') limit?: string,
-    @Query('offset') offset?: string,
   ) {
-    return this.notificationsService.findAll(
+    return this.notificationsService.listForUser(
+      req.user.userId,
+      cursor,
       limit ? parseInt(limit, 10) : undefined,
-      offset ? parseInt(offset, 10) : undefined,
     );
+  }
+
+  @Patch(':id/read')
+  markRead(@Request() req: any, @Param('id') id: string) {
+    return this.notificationsService.markRead(req.user.userId, id);
+  }
+
+  @Post('read-all')
+  markAllRead(@Request() req: any) {
+    return this.notificationsService.markAllRead(req.user.userId);
+  }
+
+  @Get('preferences')
+  getPreferences(@Request() req: any) {
+    return this.notificationsService.getPreferences(req.user.userId);
+  }
+
+  @Put('preferences')
+  updatePreferences(
+    @Request() req: any,
+    @Body() body: { quietHoursStart?: string | null; quietHoursEnd?: string | null },
+  ) {
+    return this.notificationsService.updatePreferences(req.user.userId, body);
   }
 
   @Get('statistics')
   getStatistics() {
     return this.notificationsService.getStatistics();
-  }
-
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.notificationsService.findOne(id);
   }
 
   /**
