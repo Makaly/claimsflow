@@ -58,6 +58,7 @@ export class BatchSubmissionController {
     @Request() req,
     @Query('providerId') providerId?: string,
     @Query('jobSetupId') jobSetupId?: string,
+    @Query('model') model?: string,
     @Headers('x-client-platform') sourcePlatform?: string,
     @Headers('x-app-version') appVersion?: string,
     @Headers('x-device-info') deviceInfo?: string,
@@ -91,7 +92,7 @@ export class BatchSubmissionController {
       undefined,
       req.user?.branchId ?? null,
       jobSetupId || null,
-      { sourcePlatform, appVersion, deviceInfo },
+      { sourcePlatform, appVersion, deviceInfo, extractionModel: model },
     );
   }
 

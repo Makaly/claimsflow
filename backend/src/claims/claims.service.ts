@@ -564,7 +564,10 @@ export class ClaimsService {
       throw new NotFoundException(`Claim with ID ${id} not found`);
     }
 
-    return claim;
+    // Expose a flat id list alongside the embedded `documents` objects. The web
+    // app reads `documents[]`; the mobile app reads `documentIds[]`. Keeping
+    // both makes the response satisfy both clients without a breaking change.
+    return { ...claim, documentIds: claim.documents.map((d) => d.id) };
   }
 
   async findByBarcode(barcode: string) {
@@ -697,9 +700,28 @@ export class ClaimsService {
     }
 
     try {
+      // Sanitise the partial DTO into Claim columns: the DTO carries
+      // CreateClaimDto-shaped fields (e.g. `amount`, string dates, provider name)
+      // that don't map 1:1 onto the Prisma model, so spreading raw would error or
+      // silently miss the amount. Map them the same way create() does.
+      const {
+        amount, providerName: _pn, branchName: _bn, recipientEmail: _re,
+        barcode: _bc, claimNumber: _cn, invoiceDate, dateOfService,
+        ...rest
+      } = updateClaimDto as any;
+      const data: any = { ...rest };
+      if (amount !== undefined && amount !== null) data.invoiceAmount = amount;
+      if (invoiceDate) {
+        const d = new Date(invoiceDate);
+        if (!isNaN(d.getTime())) data.invoiceDate = d;
+      }
+      if (dateOfService) {
+        const d = new Date(dateOfService);
+        if (!isNaN(d.getTime())) data.dateOfService = d;
+      }
       const updated = await this.prisma.claim.update({
         where: { id },
-        data: updateClaimDto,
+        data,
         include: { provider: true },
       });
 

@@ -419,6 +419,9 @@ model BatchSubmission {
   sourcePlatform   String?   // android | ios | web | scan_station
   appVersion       String?   // client app version/build, e.g. "1.4.0 (45)"
   deviceInfo       String?   // device model + OS, or browser UA for web
+  // Chosen vision model id for extraction (e.g. "gemini:gemini-2.5-pro"); null
+  // falls back to the server default. See VisionRouterService model ids.
+  extractionModel  String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   completedAt      DateTime?

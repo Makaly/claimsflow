@@ -38,8 +38,8 @@ export class OcrProcessor extends WorkerHost {
   }
 
   private async handleTextExtraction(job: Job) {
-    const { documentId, filePath, mimetype } = job.data;
-    this.logger.log(`Processing OCR for document: ${documentId}`);
+    const { documentId, filePath, mimetype, model } = job.data;
+    this.logger.log(`Processing OCR for document: ${documentId}${model ? ` (model: ${model})` : ''}`);
 
     try {
       await this.prisma.document.update({
@@ -76,7 +76,8 @@ export class OcrProcessor extends WorkerHost {
       }
 
       // ── Step 2: Tesseract/Ollama — fills any gaps the classifier missed ────
-      const { invoices, pageCount } = await this.ocrService.extractAndParseInvoice(filePath, mimetype);
+      // Route through the batch's chosen vision model when one was supplied.
+      const { invoices, pageCount } = await this.ocrService.extractAndParseInvoice(filePath, mimetype, model);
       const primary = invoices[0];
 
       // ── Step 3: Merge — classifier claimFieldMap takes priority ────────────

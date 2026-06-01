@@ -35,7 +35,7 @@ export class BatchSubmissionService {
     stationId?: string,
     branchId?: string | null,
     jobSetupId?: string | null,
-    source?: { sourcePlatform?: string; appVersion?: string; deviceInfo?: string },
+    source?: { sourcePlatform?: string; appVersion?: string; deviceInfo?: string; extractionModel?: string },
   ) {
     // Generate batch number
     const batchCount = await this.prisma.batchSubmission.count({
@@ -69,6 +69,7 @@ export class BatchSubmissionService {
         ...(source?.sourcePlatform ? { sourcePlatform: source.sourcePlatform } : (stationId ? { sourcePlatform: 'scan_station' } : {})),
         ...(source?.appVersion ? { appVersion: source.appVersion } : {}),
         ...(source?.deviceInfo ? { deviceInfo: source.deviceInfo } : {}),
+        ...(source?.extractionModel ? { extractionModel: source.extractionModel } : {}),
       },
       include: {
         provider: true,
@@ -287,8 +288,9 @@ export class BatchSubmissionService {
         fs.unlinkSync(file.path);
       }
 
-      // Enqueue OCR — this populates claim fields and triggers fraud detection
-      await this.ocrService.processDocument(doc.id, processedPath, file.mimetype);
+      // Enqueue OCR — this populates claim fields and triggers fraud detection.
+      // The batch's chosen vision model (if any) routes the extraction.
+      await this.ocrService.processDocument(doc.id, processedPath, file.mimetype, batch.extractionModel ?? undefined);
 
       return claim;
     } catch (error) {

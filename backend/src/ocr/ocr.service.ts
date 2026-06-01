@@ -95,8 +95,8 @@ export class OcrService {
     private readonly prisma: PrismaService,
   ) {}
 
-  async processDocument(documentId: string, filePath: string, mimetype: string) {
-    this.ocrQueue.add('extract-text', { documentId, filePath, mimetype }, {
+  async processDocument(documentId: string, filePath: string, mimetype: string, model?: string) {
+    this.ocrQueue.add('extract-text', { documentId, filePath, mimetype, model }, {
       attempts: 2,
       backoff: { type: 'fixed', delay: 5_000 },
     }).catch(() => {});
