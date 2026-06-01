@@ -177,6 +177,10 @@ export class ClaimsService {
       ...(batchNumber ? { batchNumber } : {}),
       ...(actor?.userId ? { createdBy: actor.userId } : {}),
       ...(uploaderIdentity ? { uploadedBy: uploaderIdentity } : {}),
+      // Upload-source metadata (web single-claim create sets these from headers).
+      ...(actor?.sourcePlatform ? { sourcePlatform: actor.sourcePlatform } : {}),
+      ...(actor?.appVersion ? { appVersion: actor.appVersion } : {}),
+      ...(actor?.deviceInfo ? { deviceInfo: actor.deviceInfo } : {}),
     };
 
     if (invoiceDate) {

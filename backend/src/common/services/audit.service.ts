@@ -10,6 +10,10 @@ export interface AuditActor {
   branchId?: string | null;
   ipAddress?: string | null;
   userAgent?: string | null;
+  // Upload-source metadata from client request headers (X-Client-Platform etc.).
+  sourcePlatform?: string | null;
+  appVersion?: string | null;
+  deviceInfo?: string | null;
 }
 
 export interface AuditEntry {

@@ -415,6 +415,10 @@ model BatchSubmission {
   uploadedBy       String?
   ipAddress        String?
   userAgent        String?
+  // Upload-source metadata — which client channel produced the batch.
+  sourcePlatform   String?   // android | ios | web | scan_station
+  appVersion       String?   // client app version/build, e.g. "1.4.0 (45)"
+  deviceInfo       String?   // device model + OS, or browser UA for web
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   completedAt      DateTime?
@@ -432,6 +436,7 @@ model BatchSubmission {
   @@index([createdAt])
   @@index([tenantId])
   @@index([jobSetupId])
+  @@index([sourcePlatform])
   @@map("batch_submissions")
 }
 
@@ -482,6 +487,11 @@ model Claim {
   updatedAt               DateTime             @updatedAt
   createdBy               String?
   uploadedBy              String?
+  // Upload-source metadata — propagated from the batch (mobile) or set from
+  // request headers (web single-claim create). See BatchSubmission.
+  sourcePlatform          String?
+  appVersion              String?
+  deviceInfo              String?
   notes                   String?
   internalNotes           String?
   fraudSignals            Json?                @default("[]")
@@ -536,6 +546,7 @@ model Claim {
   @@index([slaBreached])
   @@index([fraudVerdict])
   @@index([tenantId])
+  @@index([sourcePlatform])
   // v2-T4.2 composite hot-path indexes
   @@index([status, assignedTo, createdAt(sort: Desc)], map: "claims_status_assigned_created_idx")
   @@index([providerId, createdAt(sort: Desc)], map: "claims_provider_created_idx")

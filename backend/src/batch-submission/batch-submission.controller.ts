@@ -11,6 +11,7 @@ import {
   UseInterceptors,
   UploadedFiles,
   Request,
+  Headers,
   BadRequestException,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
@@ -57,6 +58,9 @@ export class BatchSubmissionController {
     @Request() req,
     @Query('providerId') providerId?: string,
     @Query('jobSetupId') jobSetupId?: string,
+    @Headers('x-client-platform') sourcePlatform?: string,
+    @Headers('x-app-version') appVersion?: string,
+    @Headers('x-device-info') deviceInfo?: string,
   ) {
     if (!files || files.length === 0) {
       throw new BadRequestException('No files uploaded');
@@ -81,6 +85,7 @@ export class BatchSubmissionController {
       undefined,
       req.user?.branchId ?? null,
       jobSetupId || null,
+      { sourcePlatform, appVersion, deviceInfo },
     );
   }
 

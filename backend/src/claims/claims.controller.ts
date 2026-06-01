@@ -363,6 +363,10 @@ export class ClaimsController {
       branchId: req.user?.branchId ?? null,
       ipAddress,
       userAgent: req.headers?.['user-agent'] ?? null,
+      // Upload-source metadata set globally by the mobile/web clients.
+      sourcePlatform: req.headers?.['x-client-platform'] ?? null,
+      appVersion: req.headers?.['x-app-version'] ?? null,
+      deviceInfo: req.headers?.['x-device-info'] ?? null,
     };
   }
 }

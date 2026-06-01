@@ -34,6 +34,7 @@ export class BatchSubmissionService {
     stationId?: string,
     branchId?: string | null,
     jobSetupId?: string | null,
+    source?: { sourcePlatform?: string; appVersion?: string; deviceInfo?: string },
   ) {
     // Generate batch number
     const batchCount = await this.prisma.batchSubmission.count({
@@ -62,6 +63,11 @@ export class BatchSubmissionService {
         uploadedBy,
         ipAddress,
         ...(stationId ? { userAgent: stationId } : {}),
+        // Upload-source metadata (mobile sends X-Client-Platform etc.); scan
+        // station falls back to its submissionMethod as the platform tag.
+        ...(source?.sourcePlatform ? { sourcePlatform: source.sourcePlatform } : (stationId ? { sourcePlatform: 'scan_station' } : {})),
+        ...(source?.appVersion ? { appVersion: source.appVersion } : {}),
+        ...(source?.deviceInfo ? { deviceInfo: source.deviceInfo } : {}),
       },
       include: {
         provider: true,
@@ -210,6 +216,10 @@ export class BatchSubmissionService {
           workflowStage: 'initial_review',
           submittedAt: new Date(),
           createdBy: batch.uploadedBy,
+          // Inherit upload-source metadata from the batch.
+          ...(batch.sourcePlatform ? { sourcePlatform: batch.sourcePlatform } : {}),
+          ...(batch.appVersion ? { appVersion: batch.appVersion } : {}),
+          ...(batch.deviceInfo ? { deviceInfo: batch.deviceInfo } : {}),
         },
       });
 
@@ -257,6 +267,9 @@ export class BatchSubmissionService {
           workflowStage: 'initial_review',
           submittedAt: new Date(),
           createdBy: batch.uploadedBy,
+          ...(batch.sourcePlatform ? { sourcePlatform: batch.sourcePlatform } : {}),
+          ...(batch.appVersion ? { appVersion: batch.appVersion } : {}),
+          ...(batch.deviceInfo ? { deviceInfo: batch.deviceInfo } : {}),
           rejectionReason: `Processing failed: ${errMsg}`,
         },
       }).catch(() => { /* ignore if claim creation itself fails */ });
