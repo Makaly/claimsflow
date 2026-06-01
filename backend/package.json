@@ -29,6 +29,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.0",
+    "@aws-sdk/client-s3": "^3.1057.0",
+    "@aws-sdk/lib-storage": "^3.1057.0",
     "@google/generative-ai": "^0.24.1",
     "@nestjs/bullmq": "^11.0.4",
     "@nestjs/common": "^11.1.24",

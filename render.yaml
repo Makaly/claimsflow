@@ -90,7 +90,25 @@ services:
       - key: MAX_FILE_SIZE
         value: 10485760
       - key: UPLOAD_DIR
-        value: /tmp/uploads   # ephemeral — use object storage for persistence
+        value: /tmp/uploads   # ephemeral local temp — durable copy goes to object storage
+
+      # Object storage (S3 / Cloudflare R2 / Backblaze B2) — makes uploaded
+      # documents survive restarts (Render's local disk is wiped on deploy).
+      # Set STORAGE_BACKEND=s3 and the credentials in the Render dashboard to
+      # enable; unset/"local" ⇒ documents stay on ephemeral local disk. See
+      # backend/src/common/services/storage.service.ts.
+      - key: STORAGE_BACKEND
+        value: local          # set to "s3" in the dashboard to enable object storage
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_REGION
+        sync: false           # "auto" for R2, e.g. "us-east-1" for AWS
+      - key: S3_ENDPOINT
+        sync: false           # set for R2/B2 (custom endpoint); omit for AWS S3
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
 
       # AI / OCR — non-secret config (set keys via Render dashboard)
       - key: ANTHROPIC_MODEL

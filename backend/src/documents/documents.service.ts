@@ -6,6 +6,7 @@ import { ImagePreprocessorService, PreprocessOptions, PreprocessResult } from '.
 import { tenantScope } from '../common/tenant-scope';
 import { PdfOperationsService } from '../common/services/pdf-operations.service';
 import { EdmsIntegrationService } from '../common/services/edms-integration.service';
+import { StorageService } from '../common/services/storage.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as pdfParse from 'pdf-parse';
@@ -25,6 +26,7 @@ export class DocumentsService {
     private edmsService: EdmsIntegrationService,
     private searchablePdfService: SearchablePdfService,
     private imagePreprocessorService: ImagePreprocessorService,
+    private storage: StorageService,
   ) {}
 
   /**
@@ -40,12 +42,13 @@ export class DocumentsService {
     opts: PreprocessOptions = {},
   ): Promise<PreprocessResult> {
     const document = await this.findOne(id, user);
-    if (!fs.existsSync(document.path)) {
+    if (!(await this.storage.exists(document.path))) {
       throw new NotFoundException('Source file not found on disk');
     }
+    const sourcePath = await this.storage.toLocalFile(document.path);
     const result = await this.imagePreprocessorService.preprocess(
       document.id,
-      document.path,
+      sourcePath,
       document.mimetype,
       { ...opts, force: true },
     );
@@ -107,13 +110,15 @@ export class DocumentsService {
     opts: { regenerate?: boolean } = {},
   ) {
     const document = await this.findOne(id, user);
-    if (!fs.existsSync(document.path)) {
+    if (!(await this.storage.exists(document.path))) {
       throw new NotFoundException('Source file not found on disk');
     }
+    // Resolve to a local file (downloads a temp copy when stored in object storage).
+    const sourcePath = await this.storage.toLocalFile(document.path);
 
     const outPath = await this.searchablePdfService.generateFromFile(
       document.id,
-      document.path,
+      sourcePath,
       document.mimetype,
       { force: opts.regenerate === true },
     );
@@ -146,7 +151,21 @@ export class DocumentsService {
       },
     });
 
+    // OCR reads the local temp file in this session (enqueue before any upload).
     await this.ocrService.processDocument(document.id, file.path, file.mimetype);
+
+    // Persist the durable copy to object storage (when configured) so it survives
+    // restarts; store the `s3://…` ref on the document. No-op in local mode.
+    if (this.storage.isEnabled) {
+      try {
+        const ref = await this.storage.put(`documents/${document.id}/${file.filename}`, file.path, file.mimetype);
+        if (ref !== file.path) {
+          await this.prisma.document.update({ where: { id: document.id }, data: { path: ref } });
+        }
+      } catch (e) {
+        this.logger.warn(`Object-storage upload failed for document ${document.id}: ${(e as Error)?.message}`);
+      }
+    }
 
     // Async batch file dump — non-blocking, failures are logged but don't affect response
     if (claimId) {
@@ -277,12 +296,13 @@ export class DocumentsService {
   async dumpHeldClaimDocuments(claimId: string, branchName?: string): Promise<void> {
     const docs = await this.prisma.document.findMany({ where: { claimId } });
     for (const doc of docs) {
-      if (!fs.existsSync(doc.path)) {
-        this.logger.warn(`Cannot dump ${doc.id}: file missing on disk at ${doc.path}`);
+      if (!(await this.storage.exists(doc.path))) {
+        this.logger.warn(`Cannot dump ${doc.id}: file missing at ${doc.path}`);
         continue;
       }
+      const localPath = await this.storage.toLocalFile(doc.path);
       const reconstructed = {
-        path: doc.path,
+        path: localPath,
         originalname: doc.originalName,
         mimetype: doc.mimetype,
         filename: doc.filename,
@@ -389,7 +409,18 @@ export class DocumentsService {
       }),
       this.prisma.document.count({ where }),
     ]);
-    return { documents, total };
+    // Expose camelCase aliases alongside the raw Prisma column names. The web
+    // app reads `filename`/`mimetype`/`size`/`createdAt`; the mobile app reads
+    // `fileName`/`mimeType`/`sizeBytes`/`uploadedAt`. Emitting both keeps the
+    // response backward-compatible for the web client.
+    const shaped = documents.map((d) => ({
+      ...d,
+      fileName: d.originalName ?? d.filename,
+      mimeType: d.mimetype,
+      sizeBytes: Number(d.size),
+      uploadedAt: d.createdAt,
+    }));
+    return { documents: shaped, total };
   }
 
   async findOne(
@@ -422,9 +453,9 @@ export class DocumentsService {
     user?: { role?: string | null; providerId?: string | null; branchId?: string | null },
   ) {
     const document = await this.findOne(id, user);
-    if (!fs.existsSync(document.path)) throw new NotFoundException('File not found on disk');
+    if (!(await this.storage.exists(document.path))) throw new NotFoundException('File not found on disk');
     return {
-      stream: fs.createReadStream(document.path),
+      stream: await this.storage.getStream(document.path),
       mimetype: document.mimetype,
       filename: document.originalName,
     };
@@ -432,7 +463,7 @@ export class DocumentsService {
 
   async remove(id: string) {
     const document = await this.findOne(id);
-    if (fs.existsSync(document.path)) fs.unlinkSync(document.path);
+    await this.storage.delete(document.path);
     await this.prisma.document.delete({ where: { id } });
     return { message: 'Document deleted successfully' };
   }
@@ -459,7 +490,11 @@ export class DocumentsService {
     if (documentIds.length < 2) throw new BadRequestException('At least 2 documents required for merge');
 
     const docs = await Promise.all(documentIds.map((id) => this.findOne(id)));
-    const pdfPaths = docs.map((d) => d.path).filter((p) => fs.existsSync(p));
+    // Resolve each source to a local file (downloads from object storage when needed).
+    const pdfPaths: string[] = [];
+    for (const d of docs) {
+      if (await this.storage.exists(d.path)) pdfPaths.push(await this.storage.toLocalFile(d.path));
+    }
 
     if (pdfPaths.length === 0) throw new BadRequestException('No accessible PDF files found');
 
@@ -520,7 +555,8 @@ export class DocumentsService {
     requestedBy: string,
   ) {
     const doc = await this.findOne(documentId);
-    if (!fs.existsSync(doc.path)) throw new NotFoundException('File not found on disk');
+    if (!(await this.storage.exists(doc.path))) throw new NotFoundException('File not found on disk');
+    const sourcePath = await this.storage.toLocalFile(doc.path);
 
     const uploadDir = path.join(process.cwd(), 'uploads', 'documents');
     fs.mkdirSync(uploadDir, { recursive: true });
@@ -532,7 +568,7 @@ export class DocumentsService {
       const outputName = `${range.name || `split_part_${i + 1}`}.pdf`;
       const outputPath = path.join(uploadDir, `${Date.now()}_${i}_${outputName}`);
 
-      await this.pdfOperationsService.splitPdf(doc.path, [{
+      await this.pdfOperationsService.splitPdf(sourcePath, [{
         start: range.start,
         end: range.end,
         outputPath,
@@ -580,7 +616,7 @@ export class DocumentsService {
 
   async analyzeDocumentPages(documentId: string, _userId: string) {
     const doc = await this.findOne(documentId);
-    if (!fs.existsSync(doc.path)) throw new NotFoundException('File not found on disk');
+    if (!(await this.storage.exists(doc.path))) throw new NotFoundException('File not found on disk');
     if (doc.mimetype !== 'application/pdf') {
       // For images return a single-segment result
       return {
@@ -601,7 +637,7 @@ export class DocumentsService {
     const client = new Anthropic({ apiKey });
     const model = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
 
-    const b64 = fs.readFileSync(doc.path).toString('base64');
+    const b64 = fs.readFileSync(await this.storage.toLocalFile(doc.path)).toString('base64');
 
     const PAGE_ANALYSIS_TOOL: Anthropic.Tool = {
       name: 'categorize_document_pages',
@@ -697,8 +733,8 @@ Return ALL segments so that together they cover every page with no gaps or overl
       try {
         const doc = await this.prisma.document.findUnique({ where: { id: docId } });
         if (doc) {
-          // Delete file from disk
-          if (fs.existsSync(doc.path)) fs.unlinkSync(doc.path);
+          // Delete file from storage (object storage or local disk)
+          await this.storage.delete(doc.path);
           // Soft-delete: mark as purged rather than hard delete to preserve audit trail
           await this.prisma.document.update({
             where: { id: docId },

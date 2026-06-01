@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
+import { StorageService } from './storage.service';
 import axios, { AxiosInstance } from 'axios';
 import * as fs from 'fs';
 import * as FormData from 'form-data';
@@ -23,6 +24,7 @@ export class EdmsIntegrationService {
   constructor(
     private prisma: PrismaService,
     private configService: ConfigService,
+    private storage: StorageService,
   ) {
     const baseUrl = this.configService.get<string>('EDMS_BASE_URL');
     const apiKey = this.configService.get<string>('EDMS_API_KEY');
@@ -78,8 +80,9 @@ export class EdmsIntegrationService {
     try {
       const form = new FormData();
 
-      if (fs.existsSync(document.path)) {
-        form.append('file', fs.createReadStream(document.path), {
+      if (await this.storage.exists(document.path)) {
+        const localPath = await this.storage.toLocalFile(document.path);
+        form.append('file', fs.createReadStream(localPath), {
           filename: document.originalName,
           contentType: document.mimetype,
         });

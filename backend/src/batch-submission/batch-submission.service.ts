@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { BarcodeService } from '../common/services/barcode.service';
 import { PdfWatermarkService } from '../common/services/pdf-watermark.service';
 import { OcrService } from '../ocr/ocr.service';
+import { StorageService } from '../common/services/storage.service';
 import { EmailService } from '../notifications/email.service';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -20,6 +21,7 @@ export class BatchSubmissionService {
     private pdfWatermarkService: PdfWatermarkService,
     private ocrService: OcrService,
     private emailService: EmailService,
+    private storage: StorageService,
     @InjectQueue('batch-processing') private batchQueue: Queue,
   ) {}
 
@@ -289,8 +291,24 @@ export class BatchSubmissionService {
       }
 
       // Enqueue OCR — this populates claim fields and triggers fraud detection.
-      // The batch's chosen vision model (if any) routes the extraction.
+      // The batch's chosen vision model (if any) routes the extraction. OCR reads
+      // the local processedPath in this session, before any storage upload.
       await this.ocrService.processDocument(doc.id, processedPath, file.mimetype, batch.extractionModel ?? undefined);
+
+      // Persist the durable copy to object storage (when configured) so the
+      // watermarked PDF survives container restarts; store the s3:// ref. The
+      // local file is left in place for the in-session OCR job above. No-op locally.
+      if (this.storage.isEnabled) {
+        try {
+          const ref = await this.storage.put(`claims/${batch.batchNumber}/${path.basename(processedPath)}`, processedPath, file.mimetype);
+          if (ref !== processedPath) {
+            await this.prisma.document.update({ where: { id: doc.id }, data: { path: ref } });
+          }
+        } catch (e) {
+          // Non-fatal — the document still serves from the local copy this session.
+          console.warn(`Object-storage upload failed for document ${doc.id}: ${(e as Error)?.message}`);
+        }
+      }
 
       return claim;
     } catch (error) {
