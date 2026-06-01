@@ -165,13 +165,13 @@ export class BatchSubmissionService {
       throw new NotFoundException('Batch not found');
     }
 
-    try {
-      // Generate barcode
-      const barcode = await this.barcodeService.generateClaimBarcode(
-        batch.batchNumber,
-        folioNumber,
-      );
+    // Generate barcode first — needed even for the failed-claim record.
+    const barcode = await this.barcodeService.generateClaimBarcode(
+      batch.batchNumber,
+      folioNumber,
+    ).catch(() => `CIC-${batch.batchNumber}-${folioNumber}-ERR`);
 
+    try {
       // Generate barcode image
       const barcodeImage = await this.barcodeService.generateBarcodeImage(barcode);
 
@@ -195,14 +195,11 @@ export class BatchSubmissionService {
       // Extract metadata
       const metadata = await this.pdfWatermarkService.extractMetadata(processedPath);
 
-      // Generate unique claim number
-      const claimNumber = barcode;
-
       // Create claim record — inherit branchId from the batch so every claim
       // produced by a branch-bound upload is scoped to that branch.
       const claim = await this.prisma.claim.create({
         data: {
-          claimNumber,
+          claimNumber: barcode,
           batchNumber: batch.batchNumber,
           folioNumber,
           barcode,
@@ -244,7 +241,26 @@ export class BatchSubmissionService {
 
       return claim;
     } catch (error) {
-      throw new Error(`Failed to process claim file: ${error.message}`);
+      // Create a failed claim stub so the review screen can surface the error
+      // reason instead of showing an empty list.
+      const errMsg = error instanceof Error ? error.message : String(error);
+      await this.prisma.claim.create({
+        data: {
+          claimNumber: barcode,
+          batchNumber: batch.batchNumber,
+          folioNumber,
+          barcode,
+          providerId: batch.providerId,
+          ...(batch.branchId ? { branchId: batch.branchId } : {}),
+          batchId: batch.id,
+          status: 'failed',
+          workflowStage: 'initial_review',
+          submittedAt: new Date(),
+          createdBy: batch.uploadedBy,
+          rejectionReason: `Processing failed: ${errMsg}`,
+        },
+      }).catch(() => { /* ignore if claim creation itself fails */ });
+      throw new Error(`Failed to process claim file: ${errMsg}`);
     }
   }
 
