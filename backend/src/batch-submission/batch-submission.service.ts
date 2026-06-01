@@ -8,6 +8,7 @@ import { OcrService } from '../ocr/ocr.service';
 import { EmailService } from '../notifications/email.service';
 import * as fs from 'fs';
 import * as path from 'path';
+import { AUTO_DETECT_PROVIDER_NAME } from '../common/constants/auto-detect-provider';
 
 @Injectable()
 export class BatchSubmissionService {
@@ -116,6 +117,46 @@ export class BatchSubmissionService {
       .catch(() => {});
 
     return batch;
+  }
+
+  /**
+   * Find-or-create the [AUTO_DETECT_PROVIDER_NAME] placeholder so a staff batch
+   * upload can proceed without picking a provider; the OCR pipeline reassigns
+   * each claim to its detected provider afterwards.
+   */
+  async resolveAutoDetectProviderId(): Promise<string> {
+    const found = await this.prisma.provider.findFirst({
+      where: { name: AUTO_DETECT_PROVIDER_NAME },
+      select: { id: true },
+    });
+    if (found) return found.id;
+    try {
+      const created = await this.prisma.provider.create({
+        data: {
+          name: AUTO_DETECT_PROVIDER_NAME,
+          type: 'hospital',
+          licenseNumber: 'AUTODETECT-PLACEHOLDER',
+          contactPerson: 'Pending',
+          email: 'autodetect-pending@provider.local',
+          phone: '000',
+          physicalAddress: 'Pending',
+          status: 'pending',
+          approvalStatus: 'pending_approval',
+          isActive: false,
+          canSubmitClaims: false,
+        },
+        select: { id: true },
+      });
+      return created.id;
+    } catch {
+      // Lost a create race — the row now exists; re-read it.
+      const retry = await this.prisma.provider.findFirst({
+        where: { name: AUTO_DETECT_PROVIDER_NAME },
+        select: { id: true },
+      });
+      if (retry) return retry.id;
+      throw new Error('Could not resolve the auto-detect placeholder provider');
+    }
   }
 
   /**

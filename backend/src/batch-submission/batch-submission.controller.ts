@@ -70,10 +70,16 @@ export class BatchSubmissionController {
     // uploads); CIC staff may supply providerId explicitly.
     const role = req.user?.role;
     const isProviderRole = role === 'provider_admin' || role === 'provider_user';
-    const finalProviderId = isProviderRole ? req.user?.providerId : (providerId || req.user?.providerId);
+    let finalProviderId = isProviderRole ? req.user?.providerId : (providerId || req.user?.providerId);
 
     if (!finalProviderId) {
-      throw new BadRequestException('Provider ID required');
+      if (isProviderRole) {
+        // A provider account must always resolve to its own provider.
+        throw new BadRequestException('Provider ID required');
+      }
+      // Staff "auto-detect": no provider picked — assign the placeholder so the
+      // upload proceeds; OCR reassigns each claim to its detected provider.
+      finalProviderId = await this.batchSubmissionService.resolveAutoDetectProviderId();
     }
 
     return this.batchSubmissionService.createBatchSubmission(
