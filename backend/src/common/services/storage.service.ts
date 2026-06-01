@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { S3Client, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import { Readable } from 'stream';
 import * as fs from 'fs';
@@ -120,6 +120,34 @@ export class StorageService {
       (out.Body as Readable).pipe(ws).on('finish', () => resolve()).on('error', reject);
     });
     return tmp;
+  }
+
+  /**
+   * Health probe: when object storage is on, does a tiny write→read→delete
+   * round-trip against the bucket to prove the credentials/endpoint work.
+   */
+  async healthCheck(): Promise<{
+    enabled: boolean;
+    backend: 'local' | 's3';
+    bucket?: string;
+    endpoint?: string;
+    ok: boolean;
+    error?: string;
+  }> {
+    if (!this.client) {
+      return { enabled: false, backend: 'local', ok: true };
+    }
+    const base = { enabled: true, backend: 's3' as const, bucket: this.bucket, endpoint: process.env.S3_ENDPOINT || undefined };
+    try {
+      const key = `health/_check_${Date.now()}.txt`;
+      await this.client.send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: 'ok', ContentType: 'text/plain' }));
+      const got = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+      const body = (await (got.Body as any).transformToString?.()) ?? '';
+      await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+      return { ...base, ok: body.trim() === 'ok' };
+    } catch (e) {
+      return { ...base, ok: false, error: (e as Error)?.message };
+    }
   }
 
   /** Best-effort delete of the referenced object/file. */

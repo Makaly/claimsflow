@@ -2,6 +2,7 @@ import { Controller, Get, HttpCode, HttpStatus, Logger, Res } from '@nestjs/comm
 import { SkipThrottle } from '@nestjs/throttler';
 import { AppService } from './app.service';
 import { PrismaService } from './prisma/prisma.service';
+import { StorageService } from './common/services/storage.service';
 import Redis from 'ioredis';
 import { getRedisConnection } from './config/redis.config';
 
@@ -13,6 +14,7 @@ export class AppController {
   constructor(
     private readonly appService: AppService,
     private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
   ) {}
 
   @Get()
@@ -33,6 +35,16 @@ export class AppController {
       status: 'ok',
       timestamp: new Date().toISOString(),
     };
+  }
+
+  // Document storage health — reports whether object storage is enabled and,
+  // when it is, proves a write→read→delete round-trip against the bucket. Use
+  // it after setting the S3/R2 env vars to confirm persistence is live.
+  @SkipThrottle({ global: true, auth: true })
+  @Get('health/storage')
+  async getStorageHealth(@Res() res: any) {
+    const result = await this.storage.healthCheck();
+    res.status(result.ok ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE).json(result);
   }
 
   // Readiness probe — exercises Prisma + Redis with a 500ms budget per
