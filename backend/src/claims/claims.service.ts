@@ -959,7 +959,17 @@ export class ClaimsService {
         },
       },
     });
-    if (officers.length === 0) return null;
+    if (officers.length === 0) {
+      // No maker/claims-officer to route to. In the provider-first flow the
+      // claim is already fully indexed at upload, so drop it straight into the
+      // shared maker_checker_review pool (unassigned) rather than stranding it
+      // at initial_review — otherwise it never surfaces in any checker queue.
+      await this.prisma.claim.update({
+        where: { id: claimId },
+        data: { workflowStage: 'maker_checker_review' },
+      });
+      return null;
+    }
 
     officers.sort((a, b) => a._count.claimsAssigned - b._count.claimsAssigned);
     const chosen = officers[0];

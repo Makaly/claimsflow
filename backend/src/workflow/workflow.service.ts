@@ -34,7 +34,11 @@ export class WorkflowService {
       if (role === 'admin' || role === 'claims_officer') {
         if (assignedTo) where.assignedTo = assignedTo;
       } else if (role === 'maker_checker') {
-        where.assignedTo = userId;
+        // Per this method's contract: claims assigned to this checker PLUS
+        // unclaimed ones in the pool. Without the `assignedTo: null` arm a
+        // freshly-published claim that landed in maker_checker_review unassigned
+        // is invisible, so the queue looks empty even though work is waiting.
+        where.OR = [{ assignedTo: userId }, { assignedTo: null }];
       } else if (role === 'fraud_officer') {
         // Fraud officers only work the fraud_review stage.
         if (stage !== 'fraud_review') return { claims: [], total: 0 };
