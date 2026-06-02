@@ -11,7 +11,7 @@ import { BarcodeService } from '../common/services/barcode.service';
 import { PdfWatermarkService } from '../common/services/pdf-watermark.service';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as pdfParse from 'pdf-parse';
+import pdfParse from 'pdf-parse';
 import Anthropic from '@anthropic-ai/sdk';
 
 // Root folder for the structured file dump — configurable via UPLOAD_DUMP_DIR env var
