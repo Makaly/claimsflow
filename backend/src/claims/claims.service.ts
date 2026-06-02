@@ -434,7 +434,13 @@ export class ClaimsService {
     // Apply explicit filters (further restrict the role-based filter).
     // IMPORTANT: a provider_* caller must never be able to widen scope to another
     // provider via ?providerId=, so we silently ignore the param for those roles.
-    if (params.status) where.status = params.status;
+    if (params.status) {
+      // Accept a comma-separated set so a client tab can map to a status *group*
+      // (e.g. the provider "In review" bucket = submitted,under_review,resubmitted).
+      // A single value keeps the original exact-match behaviour.
+      const statuses = params.status.split(',').map((s) => s.trim()).filter(Boolean);
+      where.status = statuses.length > 1 ? { in: statuses } : statuses[0];
+    }
     if (params.providerId && !isProviderRole) where.providerId = params.providerId;
     if (params.batchId) where.batchId = params.batchId;
     if (params.assignedTo) where.assignedTo = params.assignedTo;
@@ -953,7 +959,17 @@ export class ClaimsService {
         },
       },
     });
-    if (officers.length === 0) return null;
+    if (officers.length === 0) {
+      // No maker/claims-officer to route to. In the provider-first flow the
+      // claim is already fully indexed at upload, so drop it straight into the
+      // shared maker_checker_review pool (unassigned) rather than stranding it
+      // at initial_review — otherwise it never surfaces in any checker queue.
+      await this.prisma.claim.update({
+        where: { id: claimId },
+        data: { workflowStage: 'maker_checker_review' },
+      });
+      return null;
+    }
 
     officers.sort((a, b) => a._count.claimsAssigned - b._count.claimsAssigned);
     const chosen = officers[0];
