@@ -12,6 +12,7 @@ import {
   Query,
   Request,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -28,6 +29,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ProviderApprovedGuard } from '../auth/guards/provider-approved.guard';
 import { EmailService } from '../notifications/email.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 // Allowed MIME signatures (magic bytes) for uploaded files
 const MAGIC_BYTES: Record<string, Buffer[]> = {
@@ -50,9 +52,12 @@ function verifyMagicBytes(filePath: string, ext: string): boolean {
 @Controller('claims')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ClaimsController {
+  private readonly logger = new Logger(ClaimsController.name);
+
   constructor(
     private readonly claimsService: ClaimsService,
     private readonly emailService: EmailService,
+    private readonly notificationsService: NotificationsService,
     private readonly anomalyScoringService: AnomalyScoringService,
     private readonly lineItemFraudService: LineItemFraudService,
   ) {}
@@ -120,7 +125,28 @@ export class ClaimsController {
             },
           ],
         })
-        .catch(() => {}); // non-blocking — email failure must not fail the claim save
+        .catch((e) =>
+          // non-blocking — email failure must not fail the claim save, but log
+          // it so a misconfigured SMTP host is diagnosable instead of silent.
+          this.logger.warn(`Batch confirmation email failed: ${(e as Error)?.message}`),
+        );
+
+      // Also raise an in-app notification + FCM push to the uploader's devices
+      // so the batch confirmation reaches the status bar even when email is
+      // unconfigured. `recipientEmail` is only set on the first claim of a
+      // batch, so this fires once per publish. notify() is self-contained and
+      // never throws.
+      if (req?.user?.userId) {
+        const patient = createClaimDto.patientName || 'Your claim';
+        this.notificationsService.notify({
+          recipientId: req.user.userId,
+          category: 'claim',
+          title: 'Batch submitted',
+          body: `${patient} and your other claims were submitted and are under review.`,
+          claimId: claim.id,
+          deepLink: 'claims',
+        });
+      }
     }
 
     return claim;

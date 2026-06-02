@@ -434,7 +434,13 @@ export class ClaimsService {
     // Apply explicit filters (further restrict the role-based filter).
     // IMPORTANT: a provider_* caller must never be able to widen scope to another
     // provider via ?providerId=, so we silently ignore the param for those roles.
-    if (params.status) where.status = params.status;
+    if (params.status) {
+      // Accept a comma-separated set so a client tab can map to a status *group*
+      // (e.g. the provider "In review" bucket = submitted,under_review,resubmitted).
+      // A single value keeps the original exact-match behaviour.
+      const statuses = params.status.split(',').map((s) => s.trim()).filter(Boolean);
+      where.status = statuses.length > 1 ? { in: statuses } : statuses[0];
+    }
     if (params.providerId && !isProviderRole) where.providerId = params.providerId;
     if (params.batchId) where.batchId = params.batchId;
     if (params.assignedTo) where.assignedTo = params.assignedTo;
