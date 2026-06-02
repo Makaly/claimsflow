@@ -166,6 +166,26 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Build & Tooling
 
+- **Frontend toolchain upgraded: Vite 8, @vitejs/plugin-react 6, Zustand 5,
+  Tailwind CSS 4** (`frontend/package.json`, `frontend/vite.config.ts`,
+  `frontend/src/index.css`, `frontend/postcss.config.js`,
+  `frontend/src/store/claimsStore.ts`) — a single tested migration replacing four
+  open Dependabot PRs (#53, #52, #51, #50).
+  - **Vite 6 → 8 / plugin-react 5 → 6:** no config API changes; production build
+    time dropped from ~24s to ~3s.
+  - **Zustand 4 → 5:** `set()` now returns strictly `void`; `deleteClaim` /
+    `deleteClaims` rewritten from `.then(set(...))` chains to `async/await`.
+  - **Tailwind 3 → 4:** adopt the Vite-first pipeline (`@tailwindcss/vite`),
+    replace the `@tailwind` directives with `@import "tailwindcss"` + a `@config`
+    bridge to the existing `tailwind.config.js`; PostCSS now runs autoprefixer
+    only.
+  - **Config cleanup:** removed committed build artifacts `vite.config.js` and
+    `vite.config.d.ts`. Vite resolved the stale compiled `.js` ahead of
+    `vite.config.ts`, so it was the config actually used — silently missing the
+    `__APP_VERSION__` define and unable to load the Tailwind plugin.
+    `vite.config.ts` is now the single source of truth. Added
+    `@testing-library/dom` as an explicit dev dependency.
+
 - **OpenTelemetry packages aligned to a single release train**
   (`backend/package.json`, `backend/package-lock.json`) — `@opentelemetry/
   resources` and `@opentelemetry/sdk-metrics` were declared `^1.30.1` while the
