@@ -166,6 +166,20 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Build & Tooling
 
+- **OpenTelemetry migrated to the SDK v2 train** (`backend/package.json`,
+  `backend/src/telemetry/telemetry.ts`) — all `@opentelemetry/*` packages moved
+  to the aligned v2 train (`sdk-node`/exporters `0.55 → 0.218`,
+  `resources`/`sdk-metrics` `1.28.0 → ^2.7.1`, `auto-instrumentations-node`
+  `0.54 → 0.76`), completing the grouped Dependabot bump #72 that failed CI on
+  the 1.x/2.x mix. The exact `1.28.0` pins from the earlier "single release
+  train" fix are removed. `telemetry.ts` migration: the removed `Resource`
+  class is replaced with `resourceFromAttributes()`, and the
+  `SemanticResourceAttributes` enum with the individual `ATTR_*` constants
+  (`ATTR_SERVICE_NAME`; the unstable `deployment.environment.name` key is
+  inlined since its `/incubating` subpath export doesn't resolve under the
+  backend's `commonjs`/`node` module resolution). Verified by booting the v2
+  `NodeSDK` + `MeterProvider` against an OTLP endpoint at runtime. (PR #78)
+
 - **React upgraded 18 → 19** (`frontend/package.json`,
   `frontend/src/pages/DocumentClassifierEditor.tsx`, `PreAuth.tsx`,
   `LookupSources.tsx`) — `react`/`react-dom` 18.3 → 19.2 plus types, replacing
