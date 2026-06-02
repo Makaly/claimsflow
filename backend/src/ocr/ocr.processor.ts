@@ -11,6 +11,7 @@ import { ClaimTypeConfigService } from '../claims/claim-type-config.service';
 import { computeFraudSignals, DuplicateClaimRef, CrossProviderMatch } from '../claims/fraud-signals';
 import { AUTO_DETECT_PROVIDER_NAME } from '../common/constants/auto-detect-provider';
 import { ProviderResolverService } from '../common/services/provider-resolver.service';
+import { InvoiceFanoutService } from './invoice-fanout.service';
 
 // concurrency: 2 — OCR is CPU-bound via Tesseract; more than 2 saturates the process
 @Processor({ name: 'ocr' }, { concurrency: 2 })
@@ -26,6 +27,7 @@ export class OcrProcessor extends WorkerHost {
     private lineItemFraudService: LineItemFraudService,
     private claimTypeConfigService: ClaimTypeConfigService,
     private providerResolver: ProviderResolverService,
+    private invoiceFanout: InvoiceFanoutService,
   ) {
     super();
   }
@@ -40,7 +42,7 @@ export class OcrProcessor extends WorkerHost {
   }
 
   private async handleTextExtraction(job: Job) {
-    const { documentId, filePath, mimetype, model } = job.data;
+    const { documentId, filePath, mimetype, model, fanoutChild } = job.data;
     this.logger.log(`Processing OCR for document: ${documentId}${model ? ` (model: ${model})` : ''}`);
 
     try {
@@ -410,6 +412,19 @@ export class OcrProcessor extends WorkerHost {
           `confidence: ${mergedConfidence !== null ? (mergedConfidence * 100).toFixed(0) + '%' : 'n/a'}, ` +
           `status: ${finalStatus}`
         );
+
+        // ── Multi-invoice fan-out ──────────────────────────────────────────
+        // When OCR detected more than one invoice on this document, spin off a
+        // sibling claim (split + barcoded + re-OCR'd) per EXTRA invoice. The
+        // primary invoice stays on this claim untouched. Flag-gated, skipped for
+        // fan-out children (no recursion), best-effort — never blocks indexing.
+        if (!fanoutChild && InvoiceFanoutService.isEnabled() && invoices.length > 1) {
+          await this.invoiceFanout
+            .fanOut({ parentClaimId: claimId, sourcePdfPath: filePath, mimetype, invoices, model })
+            .catch((e: any) =>
+              this.logger.warn(`Invoice fan-out failed for claim ${claimId}: ${e?.message ?? e}`),
+            );
+        }
       }
 
       return {

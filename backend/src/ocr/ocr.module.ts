@@ -14,6 +14,7 @@ import { AnomalyScoringService } from '../claims/anomaly-scoring.service';
 import { ProviderFraudThresholdsService } from '../claims/provider-fraud-thresholds.service';
 import { LineItemFraudService } from '../claims/line-item-fraud.service';
 import { ClaimTypeConfigService } from '../claims/claim-type-config.service';
+import { InvoiceFanoutService } from './invoice-fanout.service';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { ClaimTypeConfigService } from '../claims/claim-type-config.service';
     ProviderFraudThresholdsService,
     LineItemFraudService,
     ClaimTypeConfigService,
+    InvoiceFanoutService,
   ],
   exports: [OcrService, OllamaOcrService, VisionRouterService, ImagePreprocessService],
 })
