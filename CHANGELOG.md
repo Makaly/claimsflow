@@ -166,6 +166,32 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **Provider shown as "Unknown" on OCR batch uploads**
+  (`backend/src/ocr/ocr.processor.ts`, `backend/src/common/services/
+  provider-resolver.service.ts`, `backend/src/common/common.module.ts`) — the
+  auto-detect path matched extracted provider names using a direct query with an
+  `isActive: true` filter and no alias lookup, so known hospitals like "PANDYA
+  MEMORIAL HOSPITAL" were silently left on the "Auto-Detect (Pending)"
+  placeholder when the filter excluded their pending/inactive record, or when the
+  name had never been seen. The resolver logic is now shared with `ClaimsService`
+  via a new `ProviderResolverService` (alias table → fuzzy contains, no active
+  filter → auto-create pending record), so any invoice header either resolves to
+  an existing provider or creates a reviewable pending one instead of "Unknown".
+
+- **"By Batch" view displaying "Unknown" for correctly-linked claim providers**
+  (`backend/src/batch-submission/batch-submission.service.ts`) — `getBatchById`
+  loaded the batch's `provider` but not each claim's `provider` relation, so
+  the frontend always fell back to "Unknown" regardless of the actual
+  `providerId` on the claim. Added `provider: true` to the claims `include`.
+
+- **Upload directory creation on container boot**
+  (`backend/src/documents/documents.controller.ts`) — multer failed on the first
+  document upload in a fresh container because the upload directory did not exist.
+  The destination is now resolved from the `UPLOAD_DIR` env var (set to
+  `/tmp/uploads` on Render) with a `./uploads` local-dev fallback, and
+  `fs.mkdirSync({ recursive: true })` is called at module load so the path
+  exists before any request arrives.
+
 - **Bulk claim deletion silently dropping claims under rate limiting**
   (`frontend/src/store/claimsStore.ts`) — deleting a large selection issued
   requests back-to-back and could trip the backend's global rate limiter
