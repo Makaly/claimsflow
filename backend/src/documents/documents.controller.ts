@@ -4,12 +4,19 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { extname, join } from 'path';
+import * as fs from 'fs';
 import { Response } from 'express';
 import { DocumentsService } from './documents.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+
+// Resolve upload directory from env (Render sets UPLOAD_DIR=/tmp/uploads) with
+// a fallback for local dev. Create it eagerly so multer never fails on a fresh
+// container boot where the directory doesn't exist yet.
+const DOCUMENTS_UPLOAD_DIR = join(process.env.UPLOAD_DIR || './uploads', 'documents');
+fs.mkdirSync(DOCUMENTS_UPLOAD_DIR, { recursive: true });
 
 @Controller('documents')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -24,7 +31,7 @@ export class DocumentsController {
   @UseInterceptors(
     FileInterceptor('file', {
       storage: diskStorage({
-        destination: './uploads/documents',
+        destination: DOCUMENTS_UPLOAD_DIR,
         filename: (req, file, cb) => {
           const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
           cb(null, `${uniqueSuffix}${extname(file.originalname)}`);
