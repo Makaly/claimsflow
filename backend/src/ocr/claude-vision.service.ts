@@ -306,22 +306,8 @@ export class ClaudeVisionService {
   private async _unused_buildPageContextHints(pdfPath: string): Promise<string> {
     try {
       const dataBuffer = fs.readFileSync(pdfPath);
-      const pdfParse = await import('pdf-parse');
-      const pageTexts: string[] = [];
-
-      await pdfParse.default(dataBuffer, {
-        pagerender: async (pageData: any) => {
-          try {
-            const content = await pageData.getTextContent({ normalizeWhitespace: true });
-            const text = (content.items as any[]).map((it: any) => it.str).join(' ');
-            pageTexts.push(text);
-            return text;
-          } catch {
-            pageTexts.push('');
-            return '';
-          }
-        },
-      });
+      const { extractPdfText } = await import('./pdf-text.util');
+      const pageTexts = (await extractPdfText(dataBuffer)).pages;
 
       if (pageTexts.length === 0) return '';
 

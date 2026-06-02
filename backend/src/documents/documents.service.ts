@@ -11,7 +11,7 @@ import { BarcodeService } from '../common/services/barcode.service';
 import { PdfWatermarkService } from '../common/services/pdf-watermark.service';
 import * as fs from 'fs';
 import * as path from 'path';
-import pdfParse from 'pdf-parse';
+import { getPdfPageCount } from '../ocr/pdf-text.util';
 import Anthropic from '@anthropic-ai/sdk';
 
 // Root folder for the structured file dump — configurable via UPLOAD_DUMP_DIR env var
@@ -271,8 +271,7 @@ export class DocumentsService {
     if (file.mimetype === 'application/pdf') {
       try {
         const buf = fs.readFileSync(file.path);
-        const parsed = await pdfParse(buf);
-        pageCount = parsed.numpages || 1;
+        pageCount = (await getPdfPageCount(buf)) || 1;
       } catch {
         pageCount = 1;
       }

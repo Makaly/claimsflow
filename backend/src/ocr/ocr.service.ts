@@ -213,21 +213,11 @@ export class OcrService {
     let pdfPageCount = 0;
 
     try {
-      const pdfParse = await import('pdf-parse');
-      await pdfParse.default(dataBuffer, {
-        pagerender: async (pageData: any) => {
-          try {
-            const content = await pageData.getTextContent({ normalizeWhitespace: true });
-            const text = (content.items as any[]).map((it: any) => it.str).join(' ');
-            perPageTexts.push(text);
-            return text;
-          } catch {
-            perPageTexts.push('');
-            return '';
-          }
-        },
-      });
-      pdfPageCount = perPageTexts.length;
+      // pdf-parse v2 returns per-page text directly (no pagerender callback).
+      const { extractPdfText } = await import('./pdf-text.util');
+      const parsed = await extractPdfText(dataBuffer);
+      perPageTexts = parsed.pages;
+      pdfPageCount = parsed.pageCount || perPageTexts.length;
     } catch {
       this.logger.warn('pdf-parse failed — falling back to full Tesseract');
     }
@@ -1049,9 +1039,8 @@ export class OcrService {
   private async getPdfPageCount(filePath: string, mimetype: string): Promise<number> {
     if (mimetype !== 'application/pdf' && !filePath.endsWith('.pdf')) return 1;
     try {
-      const pdfParse = await import('pdf-parse');
-      const data = await (pdfParse.default || pdfParse)(fs.readFileSync(filePath));
-      return data.numpages || 1;
+      const { getPdfPageCount } = await import('./pdf-text.util');
+      return (await getPdfPageCount(fs.readFileSync(filePath))) || 1;
     } catch {
       return 1;
     }

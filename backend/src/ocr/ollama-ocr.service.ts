@@ -280,9 +280,9 @@ Return ONLY valid JSON with no extra text:
    */
   private async extractFromTextLayer(filePath: string): Promise<Partial<ParsedInvoice>> {
     try {
-      const pdfParse = await import('pdf-parse');
+      const { extractPdfText } = await import('./pdf-text.util');
       const buffer = fs.readFileSync(filePath);
-      const { text } = await pdfParse.default(buffer);
+      const { text } = await extractPdfText(buffer);
       if (!text || text.trim().length < 50) return {};
 
       const first = (patterns: RegExp[]): string => {
