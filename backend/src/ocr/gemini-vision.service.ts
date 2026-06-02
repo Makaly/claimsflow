@@ -111,19 +111,9 @@ async function _buildPageContextHints(pdfPath: string): Promise<string> {
     if (pageTexts.length === 0) {
       try {
         const dataBuffer = fs.readFileSync(pdfPath);
-        const pdfParse = await import('pdf-parse');
-        const syncTexts: string[] = [];
-        await pdfParse.default(dataBuffer, {
-          pagerender: (pageData: any) => {
-            const render = pageData.getTextContent({ normalizeWhitespace: true });
-            return render.then((content: any) => {
-              const text = (content.items as any[]).map((it: any) => it.str).join(' ');
-              syncTexts.push(text);
-              return text;
-            }).catch(() => { syncTexts.push(''); return ''; });
-          },
-        });
-        pageTexts.push(...syncTexts);
+        const { extractPdfText } = await import('./pdf-text.util');
+        const parsed = await extractPdfText(dataBuffer);
+        pageTexts.push(...parsed.pages);
       } catch { /* give up — return empty */ }
     }
 

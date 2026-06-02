@@ -650,10 +650,10 @@ export class ProvidersService {
     let pageCount: number | null = null;
     if (data.mimeType === 'application/pdf') {
       try {
-        const pdfParse = await import('pdf-parse');
+        const { getPdfPageCount } = await import('../ocr/pdf-text.util');
         const buf = readFileSync(data.filePath);
-        const parsed = await (pdfParse.default || (pdfParse as any))(buf);
-        if (parsed?.numpages && parsed.numpages > 0) pageCount = parsed.numpages;
+        const n = await getPdfPageCount(buf);
+        if (n > 0) pageCount = n;
       } catch {
         pageCount = null;
       }
@@ -1021,10 +1021,10 @@ export class ProvidersService {
     let pageCount: number | null = null;
     if (file.mimetype === 'application/pdf') {
       try {
-        const pdfParse = await import('pdf-parse');
+        const { getPdfPageCount } = await import('../ocr/pdf-text.util');
         const buf = readFileSync(file.path);
-        const parsed = await (pdfParse.default || (pdfParse as any))(buf);
-        if (parsed?.numpages && parsed.numpages > 0) pageCount = parsed.numpages;
+        const n = await getPdfPageCount(buf);
+        if (n > 0) pageCount = n;
       } catch {
         pageCount = null;
       }
