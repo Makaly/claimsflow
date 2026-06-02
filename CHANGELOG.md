@@ -9,6 +9,28 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **Landing page redesign — Enterprise Gateway with light/dark theming**
+  (`frontend/src/pages/Landing.tsx`, `frontend/src/pages/landing/`,
+  `frontend/index.html`, `frontend/tailwind.config.js`) — the public marketing
+  page was rebuilt around a trust-oriented, role-first layout and a proper
+  design system. A new type system (Figtree headings + Noto Sans body) and a
+  scoped `brand`/`cta` Tailwind palette replace the previous dark-only,
+  system-font page; the app-wide semantic tokens are untouched. The hero leads
+  with an "I am a… (Provider / Member / Insurer)" path-selection that routes
+  visitors to the right entry point, followed by proof stats, solutions-by-role,
+  a capabilities bento, the mobile-app section, a security/compliance trust
+  band, and a focused CTA. Full light + dark support via a nav theme toggle
+  wired to the existing `useThemeStore`. Documented in
+  [`docs/frontend/landing-page.md`](docs/frontend/landing-page.md).
+
+- **Reusable scroll-reveal animation primitives**
+  (`frontend/src/components/Reveal.tsx`, `frontend/src/hooks/useReveal.ts`,
+  `frontend/src/index.css`, `frontend/tailwind.config.js`) — an
+  `IntersectionObserver`-based `Reveal` wrapper and `useReveal` hook, plus
+  Tailwind keyframes (`fade-up`, `float`, `gradient-x`, `pulse-glow`,
+  `grow-bar`). A global `prefers-reduced-motion` rule neutralises all
+  decorative motion and reveals content immediately.
+
 - **Provider onboarding lifecycle — per-document review & resubmission**
   (`backend/src/providers`, `frontend/src/components/OnboardingPacketReview.tsx`,
   `ProviderApprovalGate.tsx`, `ProviderOnboarding.tsx`, `pages/Providers.tsx`) —
@@ -143,6 +165,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   instead of surfacing a confusing CORS or network error to the user.
 
 ### Fixed
+
+- **Bulk claim deletion silently dropping claims under rate limiting**
+  (`frontend/src/store/claimsStore.ts`) — deleting a large selection issued
+  requests back-to-back and could trip the backend's global rate limiter
+  (120 req/min), leaving claims that were never deleted server-side. Each delete
+  now retries on HTTP `429` with exponential backoff (0.5s/1s/2s/4s, max 4
+  attempts) and successive deletes are spaced by 120ms for selections larger
+  than 5. `404` responses (stale `localStorage` cache after a DB rebuild) and
+  non-UUID seed ids are treated as already-deleted.
 
 - **Vite dev server HMR and chart chunking** (`frontend/vite.config.js`) —
   dropped the hard-coded HMR port so the websocket follows whatever port Vite

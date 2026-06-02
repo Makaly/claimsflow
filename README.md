@@ -241,6 +241,7 @@ npm run depcruise       # dependency-cruiser layering rules
 | API (Swagger UI)  | http://localhost:4000/api/docs (live, while backend up)  |
 | API (Redoc)       | `./scripts/build-redoc.sh` → `site/api/index.html`       |
 | Architecture / SRD | [docs/architecture/](docs/architecture/)                 |
+| Frontend / landing | [docs/frontend/landing-page.md](docs/frontend/landing-page.md) |
 | GDPR / compliance  | [docs/gdpr/](docs/gdpr/)                                 |
 | Changelog         | [CHANGELOG.md](CHANGELOG.md)                             |
 | Security policy   | [SECURITY.md](SECURITY.md)                               |

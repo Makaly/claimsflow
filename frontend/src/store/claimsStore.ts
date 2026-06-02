@@ -147,15 +147,35 @@ interface ClaimsState {
 // server latency and avoids accidental burst pressure on the DB.
 async function deleteOnServer(ids: string[]): Promise<Set<string>> {
   const deleted = new Set<string>()
+  const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
   for (const id of ids) {
+    // Seed/demo claims use short non-UUID ids that never existed server-side —
+    // treat them as already gone so they're cleared from the local cache.
     if (!/^[0-9a-f-]{10,}$/i.test(id)) { deleted.add(id); continue }
-    try {
-      await api.delete(`/claims/${id}`)
-      deleted.add(id)
-    } catch (err: any) {
-      if (err?.response?.status === 404) deleted.add(id)
-      else console.warn(`Failed to delete claim ${id}:`, err?.response?.status ?? err)
+    // Retry on 429 (rate limit) with backoff so a bulk delete doesn't silently
+    // drop claims when it trips the backend throttler (120 req/min global).
+    let attempts = 0
+    while (true) {
+      try {
+        await api.delete(`/claims/${id}`)
+        deleted.add(id)
+        break
+      } catch (err: any) {
+        const status = err?.response?.status
+        // A 404 means the claim is already gone server-side (e.g. a stale
+        // localStorage cache after a DB rebuild) — count it as deleted.
+        if (status === 404) { deleted.add(id); break }
+        if (status === 429 && attempts < 4) {
+          attempts++
+          await sleep(500 * 2 ** (attempts - 1)) // 0.5s, 1s, 2s, 4s
+          continue
+        }
+        console.warn(`Failed to delete claim ${id}:`, status ?? err)
+        break
+      }
     }
+    // Space successive deletes so a large selection stays under the rate limit.
+    if (ids.length > 5) await sleep(120)
   }
   return deleted
 }
