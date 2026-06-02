@@ -52,3 +52,7 @@ coverage/
 playwright-report/
 test-results/
 
+
+# Compiled output of vite.config.ts — must never be committed (shadows the .ts)
+vite.config.js
+vite.config.d.ts
