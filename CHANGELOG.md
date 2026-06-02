@@ -164,6 +164,32 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   the page loaded, `agentAvailable` is cleared and the cloud path is used
   instead of surfacing a confusing CORS or network error to the user.
 
+### Build & Tooling
+
+- **OpenTelemetry packages aligned to a single release train**
+  (`backend/package.json`, `backend/package-lock.json`) — `@opentelemetry/
+  resources` and `@opentelemetry/sdk-metrics` were declared `^1.30.1` while the
+  `0.55.x` experimental packages pinned `resources@1.28.0`. A fresh CI install
+  hoisted mismatched copies, producing `TS2741 'getRawAttributes' missing`.
+  Both packages are now pinned to `1.28.0` to match the experimental train.
+  (PR #61)
+
+- **Security tooling: gitleaks-action bumped from v2 to v3** (`.github/
+  workflows/ci.yml`) — picks up upstream fixes for false-positive suppression
+  and improved token detection patterns. (PR #64)
+
+- **ML sidecar dependencies updated** (`ml-sidecar/requirements.txt`):
+  numpy ≥2.4.6, scikit-learn ≥1.8.0, uvicorn ≥0.48.0, pillow ≥12.2.0.
+  (PRs #68, #65, #41)
+
+- **OCR: deprecated `rmdirSync` replaced with `rmSync`**
+  (`backend/src/ocr/ocr.service.ts`) — Node ≥16 deprecates `rmdirSync` with
+  `{recursive:true}` in favour of `rmSync`. (PR #61)
+
+- **Seed: all seeded users marked as email-verified**
+  (`backend/prisma/seed.ts`) — seeded dev accounts now bypass the OTP
+  verification flow so local and staging logins work without an inbox. (PR #61)
+
 ### Fixed
 
 - **Provider shown as "Unknown" on OCR batch uploads**
