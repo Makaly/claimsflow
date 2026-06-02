@@ -7,6 +7,8 @@ import { tenantScope } from '../common/tenant-scope';
 import { PdfOperationsService } from '../common/services/pdf-operations.service';
 import { EdmsIntegrationService } from '../common/services/edms-integration.service';
 import { StorageService } from '../common/services/storage.service';
+import { BarcodeService } from '../common/services/barcode.service';
+import { PdfWatermarkService } from '../common/services/pdf-watermark.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as pdfParse from 'pdf-parse';
@@ -27,6 +29,8 @@ export class DocumentsService {
     private searchablePdfService: SearchablePdfService,
     private imagePreprocessorService: ImagePreprocessorService,
     private storage: StorageService,
+    private barcodeService: BarcodeService,
+    private pdfWatermarkService: PdfWatermarkService,
   ) {}
 
   /**
@@ -150,6 +154,43 @@ export class DocumentsService {
         claimId: claimId || null,
       },
     });
+
+    // Imprint the claim barcode on the PDF (web-parity) so the in-app viewer, the
+    // object-storage copy and the EDMS dump below all carry it. Stamped in place
+    // before OCR/storage/dump read the file. Best-effort — never blocks the upload.
+    if (claimId && file.mimetype === 'application/pdf') {
+      try {
+        const claim = await this.prisma.claim.findUnique({
+          where: { id: claimId },
+          select: { barcode: true, claimNumber: true, batchNumber: true },
+        });
+        const barcodeText = claim?.barcode || claim?.claimNumber;
+        if (barcodeText) {
+          const barcodeImage = await this.barcodeService.generateBarcodeImage(barcodeText);
+          await this.pdfWatermarkService.addWatermarkAndBarcode(
+            file.path,
+            claim?.batchNumber || claim?.claimNumber || 'SINGLE',
+            barcodeText,
+            barcodeImage,
+            file.path, // stamp in place so every downstream copy carries it
+          );
+          let pageCount: number | undefined;
+          try {
+            pageCount = await this.pdfWatermarkService.getPageCount(file.path);
+          } catch {
+            /* page count is best-effort metadata */
+          }
+          await this.prisma.document.update({
+            where: { id: document.id },
+            data: { hasWatermark: true, ...(pageCount ? { pageCount } : {}) },
+          });
+        }
+      } catch (e) {
+        this.logger.warn(
+          `Barcode imprint failed for document ${document.id}: ${(e as Error)?.message}`,
+        );
+      }
+    }
 
     // OCR reads the local temp file in this session (enqueue before any upload).
     await this.ocrService.processDocument(document.id, file.path, file.mimetype);
