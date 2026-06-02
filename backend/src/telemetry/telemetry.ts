@@ -1,11 +1,17 @@
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { Resource } from '@opentelemetry/resources';
-import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
+import { resourceFromAttributes } from '@opentelemetry/resources';
+import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 import { metrics } from '@opentelemetry/api';
 import { MeterProvider, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
+
+// `deployment.environment.name` is an *unstable* semantic convention, exported
+// only from '@opentelemetry/semantic-conventions/incubating'. That subpath
+// export isn't resolvable under the backend's commonjs/node module resolution,
+// so the key is inlined here rather than bumping moduleResolution repo-wide.
+const ATTR_DEPLOYMENT_ENVIRONMENT_NAME = 'deployment.environment.name';
 
 // Bootstrap must be called before NestFactory.create so instrumentation patches
 // are applied before any require() for http/pg/redis fires.
@@ -19,9 +25,12 @@ export function bootstrapTelemetry() {
     return;
   }
 
-  const resource = new Resource({
-    [SemanticResourceAttributes.SERVICE_NAME]: serviceName,
-    [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: process.env.NODE_ENV ?? 'production',
+  // OTel SDK 2.x removed the `Resource` class — build resources from attributes.
+  // `deployment.environment` is an unstable semantic convention, so its key
+  // (ATTR_DEPLOYMENT_ENVIRONMENT_NAME) comes from the /incubating entry point.
+  const resource = resourceFromAttributes({
+    [ATTR_SERVICE_NAME]: serviceName,
+    [ATTR_DEPLOYMENT_ENVIRONMENT_NAME]: process.env.NODE_ENV ?? 'production',
   });
 
   const traceExporter = new OTLPTraceExporter({ url: `${endpoint}/v1/traces` });
