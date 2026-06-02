@@ -34,11 +34,12 @@ export class WorkflowService {
       if (role === 'admin' || role === 'claims_officer') {
         if (assignedTo) where.assignedTo = assignedTo;
       } else if (role === 'maker_checker') {
-        // Per this method's contract: claims assigned to this checker PLUS
-        // unclaimed ones in the pool. Without the `assignedTo: null` arm a
-        // freshly-published claim that landed in maker_checker_review unassigned
-        // is invisible, so the queue looks empty even though work is waiting.
-        where.OR = [{ assignedTo: userId }, { assignedTo: null }];
+        // Shared verification queue: a checker sees EVERY claim awaiting
+        // verification in this stage — assigned or not — for parity with the web
+        // checker view (frontend CheckerQueue hits the same endpoint). Filtering
+        // to assignedTo=self made the mobile queue look empty even when claims
+        // were waiting. An explicit ?assignedTo= still narrows it on demand.
+        if (assignedTo) where.assignedTo = assignedTo;
       } else if (role === 'fraud_officer') {
         // Fraud officers only work the fraud_review stage.
         if (stage !== 'fraud_review') return { claims: [], total: 0 };
