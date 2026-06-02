@@ -120,7 +120,7 @@ export default function LookupSources() {
                         type="file"
                         accept=".xlsx,.xls,.csv"
                         hidden
-                        ref={(el) => (fileInputs.current[s.id] = el)}
+                        ref={(el) => { fileInputs.current[s.id] = el }}
                         onChange={(e) => {
                           const f = e.target.files?.[0]
                           if (f) upload.mutate({ id: s.id, file: f })

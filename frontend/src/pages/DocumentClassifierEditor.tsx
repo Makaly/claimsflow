@@ -3,7 +3,7 @@
  * Left panel: PDF/image viewer with zoom + drawing overlay.
  * Right panel: Zone list with add-zone form (incl. search phrase saved to DB).
  */
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, type JSX } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import * as pdfjsLib from 'pdfjs-dist'
 import { Button } from '@/components/ui/button'
