@@ -166,6 +166,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Build & Tooling
 
+- **React upgraded 18 → 19** (`frontend/package.json`,
+  `frontend/src/pages/DocumentClassifierEditor.tsx`, `PreAuth.tsx`,
+  `LookupSources.tsx`) — `react`/`react-dom` 18.3 → 19.2 plus types, replacing
+  the mislabelled Dependabot "react group" PR #76. Migration: React 19 removed
+  the global `JSX` namespace (now imported via `import { type JSX } from
+  'react'`), and ref callbacks must return `void` (the file-input ref callback
+  in `LookupSources.tsx` was rewritten with a block body). Verified against the
+  Radix UI primitives at runtime. (PR #77)
+
 - **Frontend toolchain upgraded: Vite 8, @vitejs/plugin-react 6, Zustand 5,
   Tailwind CSS 4** (`frontend/package.json`, `frontend/vite.config.ts`,
   `frontend/src/index.css`, `frontend/postcss.config.js`,
