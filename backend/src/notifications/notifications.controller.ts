@@ -14,7 +14,7 @@ export class NotificationsController {
   @Post('batch-confirmation')
   @UseGuards()
   async sendBatchConfirmation(@Body() dto: BatchConfirmationDto) {
-    try{await this.emailService.sendBatchConfirmation(dto);}catch{}
+    try{try { await this.emailService.sendBatchConfirmation(dto); } catch {}}catch{}
     return { success: true };
   }
 
