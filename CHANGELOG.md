@@ -166,6 +166,20 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Build & Tooling
 
+- **pdf-parse upgraded 1 → 2** (`backend/package.json`,
+  `backend/src/ocr/pdf-text.util.ts`, `ocr.service.ts`, `gemini-vision.service.ts`,
+  `claude-vision.service.ts`, `ollama-ocr.service.ts`,
+  `backend/src/documents/documents.service.ts`,
+  `backend/src/providers/providers.service.ts`) — pdf-parse v2 replaced the
+  callable default export and its `pagerender` callback with a `PDFParse` class
+  whose `getText()` returns per-page text directly. A new shared helper
+  (`pdf-text.util.ts`) centralises the v2 lifecycle behind `extractPdfText()`
+  (→ `{ text, pages[], pageCount }`) and `getPdfPageCount()` (via the lighter
+  `getInfo()`), and all 7 call sites across the OCR pipeline, document upload,
+  and provider onboarding were migrated to it. Empty-string-for-blank-pages
+  behaviour is preserved so the Tesseract back-fill path is unaffected.
+  Verified with the 48 OCR unit tests plus a runtime extraction check. (PR #79)
+
 - **OpenTelemetry migrated to the SDK v2 train** (`backend/package.json`,
   `backend/src/telemetry/telemetry.ts`) — all `@opentelemetry/*` packages moved
   to the aligned v2 train (`sdk-node`/exporters `0.55 → 0.218`,
