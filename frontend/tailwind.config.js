@@ -7,7 +7,41 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        // Marketing/landing type system (see index.html <link>). Applied via
+        // `font-heading` / `font-body` on the landing surface only — the rest of
+        // the app keeps the default sans stack.
+        heading: ['Figtree', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        body: ['"Noto Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+      },
       colors: {
+        // "Trust & Authority" landing palette (ui-ux-pro-max recommendation).
+        // Scoped brand tokens — does NOT touch the app-wide semantic tokens.
+        brand: {
+          50: '#eff6ff',
+          100: '#dbeafe',
+          200: '#bfdbfe',
+          300: '#93c5fd',
+          400: '#60a5fa',
+          500: '#3b82f6',
+          600: '#2563eb',
+          700: '#1d4ed8',
+          800: '#1e40af',
+          900: '#1e3a8a',
+          950: '#172554',
+        },
+        cta: {
+          50: '#fff7ed',
+          100: '#ffedd5',
+          200: '#fed7aa',
+          300: '#fdba74',
+          400: '#fb923c',
+          500: '#f97316',
+          600: '#ea580c',
+          700: '#c2410c',
+          800: '#9a3412',
+          900: '#7c2d12',
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -76,11 +110,50 @@ export default {
           "92%":  { opacity: "1" },
           "100%": { top: "100%", opacity: "0" },
         },
+        "fade-up": {
+          from: { opacity: "0", transform: "translateY(24px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+        "fade-in": {
+          from: { opacity: "0" },
+          to: { opacity: "1" },
+        },
+        float: {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-14px)" },
+        },
+        "float-slow": {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-22px)" },
+        },
+        "gradient-x": {
+          "0%, 100%": { backgroundPosition: "0% 50%" },
+          "50%": { backgroundPosition: "100% 50%" },
+        },
+        shimmer: {
+          "100%": { transform: "translateX(100%)" },
+        },
+        "pulse-glow": {
+          "0%, 100%": { opacity: "0.35" },
+          "50%": { opacity: "0.6" },
+        },
+        "grow-bar": {
+          from: { transform: "scaleY(0)" },
+          to: { transform: "scaleY(1)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         scan: "scan 2s ease-in-out infinite",
+        "fade-up": "fade-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) both",
+        "fade-in": "fade-in 0.8s ease-out both",
+        float: "float 6s ease-in-out infinite",
+        "float-slow": "float-slow 9s ease-in-out infinite",
+        "gradient-x": "gradient-x 6s ease infinite",
+        shimmer: "shimmer 2.5s ease-in-out infinite",
+        "pulse-glow": "pulse-glow 7s ease-in-out infinite",
+        "grow-bar": "grow-bar 0.9s cubic-bezier(0.16, 1, 0.3, 1) both",
       },
     },
   },
