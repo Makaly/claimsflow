@@ -8,6 +8,7 @@ import { NotificationsProcessor } from './notifications.processor';
 import { EmailService } from './email.service';
 import { SmsService } from './sms.service';
 import { EventsGateway } from './events.gateway';
+import { FcmService } from './fcm.service';
 
 @Module({
   imports: [
@@ -21,7 +22,7 @@ import { EventsGateway } from './events.gateway';
     }),
   ],
   controllers: [NotificationsController],
-  providers: [NotificationsService, NotificationsProcessor, EmailService, SmsService, EventsGateway],
+  providers: [NotificationsService, NotificationsProcessor, EmailService, SmsService, EventsGateway, FcmService],
   exports: [NotificationsService, EmailService, EventsGateway],
 })
 export class NotificationsModule {}

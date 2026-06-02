@@ -4,6 +4,7 @@ import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { SmsService } from './sms.service';
 import { EventsGateway } from './events.gateway';
+import { FcmService } from './fcm.service';
 
 interface SendEmailDto {
   recipient: string;
@@ -39,6 +40,7 @@ export class NotificationsService {
     private prisma: PrismaService,
     private smsService: SmsService,
     private readonly events: EventsGateway,
+    private readonly fcm: FcmService,
     @InjectQueue('notifications') private notificationsQueue: Queue,
   ) {}
 
@@ -73,6 +75,18 @@ export class NotificationsService {
         read: false,
         deepLink: input.deepLink ?? null,
       });
+      // FCM push to all registered device tokens for this user (best-effort).
+      this.prisma.deviceToken.findMany({ where: { userId: input.recipientId }, select: { token: true } })
+        .then((tokens) => {
+          if (tokens.length) {
+            this.fcm.sendToTokens(tokens.map((t) => t.token), input.title, input.body, {
+              category: input.category ?? 'system',
+              ...(input.deepLink ? { deepLink: input.deepLink } : {}),
+              ...(input.claimId ? { claimId: input.claimId } : {}),
+            });
+          }
+        })
+        .catch(() => { /* non-fatal */ });
     } catch (e) {
       this.logger.warn(`notify() failed for user ${input.recipientId}: ${(e as Error)?.message}`);
     }
@@ -318,6 +332,14 @@ export class NotificationsService {
   async send2FACode(phoneNumber: string, code: string) {
     const message = `CIC Claims: Your verification code is ${code}. Valid for 5 minutes. Do not share this code.`;
     return this.sendSms({ phoneNumber, message });
+  }
+
+  async registerDeviceToken(userId: string, token: string, platform: string): Promise<void> {
+    await this.prisma.deviceToken.upsert({
+      where: { token },
+      create: { userId, token, platform },
+      update: { userId, platform },
+    });
   }
 
   async findAll(limit: number = 50, offset: number = 0) {
