@@ -10,6 +10,7 @@ import { LineItemFraudService } from '../claims/line-item-fraud.service';
 import { ClaimTypeConfigService } from '../claims/claim-type-config.service';
 import { computeFraudSignals, DuplicateClaimRef, CrossProviderMatch } from '../claims/fraud-signals';
 import { AUTO_DETECT_PROVIDER_NAME } from '../common/constants/auto-detect-provider';
+import { ProviderResolverService } from '../common/services/provider-resolver.service';
 
 // concurrency: 2 — OCR is CPU-bound via Tesseract; more than 2 saturates the process
 @Processor({ name: 'ocr' }, { concurrency: 2 })
@@ -24,6 +25,7 @@ export class OcrProcessor extends WorkerHost {
     private anomalyScoringService: AnomalyScoringService,
     private lineItemFraudService: LineItemFraudService,
     private claimTypeConfigService: ClaimTypeConfigService,
+    private providerResolver: ProviderResolverService,
   ) {
     super();
   }
@@ -196,6 +198,13 @@ export class OcrProcessor extends WorkerHost {
         // (placeholder), resolve the real provider from the detected invoice
         // name and reassign this claim. Only fires while on the placeholder so a
         // staff- or provider-chosen provider is never overridden.
+        //
+        // Uses ProviderResolverService (alias → fuzzy → auto-create) instead of
+        // a direct DB query so:
+        //   - previously-seen name variants resolve via the alias table
+        //   - the isActive filter is NOT applied (pending providers are valid)
+        //   - unrecognised names create a pending record rather than silently
+        //     falling back to "Unknown"
         let detectedProviderId: string | undefined;
         if (mergedProviderName) {
           const current = await this.prisma.claim.findUnique({
@@ -203,13 +212,10 @@ export class OcrProcessor extends WorkerHost {
             select: { providerId: true, provider: { select: { name: true } } },
           }).catch(() => null);
           if (current?.provider?.name === AUTO_DETECT_PROVIDER_NAME) {
-            const match = await this.prisma.provider.findFirst({
-              where: { name: { contains: mergedProviderName, mode: 'insensitive' }, isActive: true },
-              select: { id: true },
-            }).catch(() => null);
-            if (match && match.id !== current.providerId) {
-              detectedProviderId = match.id;
-              this.logger.log(`Auto-detected provider "${mergedProviderName}" → ${match.id} for claim ${claimId}`);
+            const resolvedId = await this.providerResolver.resolve(mergedProviderName).catch(() => null);
+            if (resolvedId && resolvedId !== current.providerId) {
+              detectedProviderId = resolvedId;
+              this.logger.log(`Auto-detected provider "${mergedProviderName}" → ${resolvedId} for claim ${claimId}`);
             }
           }
         }

@@ -6,6 +6,7 @@ import { CreateClaimDto } from './dto/create-claim.dto';
 import { UpdateClaimDto } from './dto/update-claim.dto';
 import { computeFraudSignals, providerMismatchSignal, DuplicateClaimRef, CrossProviderMatch } from './fraud-signals';
 import { AuditService, AuditActor } from '../common/services/audit.service';
+import { ProviderResolverService } from '../common/services/provider-resolver.service';
 import { DocumentsService } from '../documents/documents.service';
 import { EmailService } from '../notifications/email.service';
 import { EligibilityService } from './eligibility.service';
@@ -27,61 +28,17 @@ export class ClaimsService {
     private claimLabelsService: ClaimLabelsService,
     private mlScoringService: MlScoringService,
     private claimTypeConfigService: ClaimTypeConfigService,
+    private providerResolver: ProviderResolverService,
   ) {}
 
   /** Normalise a provider name for alias matching: lowercase, strip punctuation, collapse spaces. */
+  // Delegated to ProviderResolverService (shared with OcrProcessor).
   private normaliseProviderName(name: string): string {
-    return name.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+    return this.providerResolver.normalise(name);
   }
 
-  /**
-   * Resolve a provider by name using alias table first, then fuzzy contains match.
-   * When a new name is seen, register it as an alias for the resolved provider.
-   */
   private async resolveProviderByName(name: string): Promise<string> {
-    const normalised = this.normaliseProviderName(name);
-
-    // 1. Exact alias hit
-    const aliasHit = await this.prisma.providerAlias.findUnique({ where: { alias: normalised } });
-    if (aliasHit) return aliasHit.providerId;
-
-    // 2. Fuzzy name match
-    const provider = await this.prisma.provider.findFirst({
-      where: { name: { contains: name, mode: 'insensitive' } },
-    });
-
-    if (provider) {
-      // Register this variant so future lookups resolve instantly
-      await this.prisma.providerAlias.upsert({
-        where: { alias: normalised },
-        create: { alias: normalised, providerId: provider.id },
-        update: {},
-      }).catch(() => {}); // ignore race-condition duplicates
-      return provider.id;
-    }
-
-    // 3. Auto-create unknown provider
-    const created = await this.prisma.provider.create({
-      data: {
-        name,
-        type: 'hospital',
-        licenseNumber: `AUTO-${Date.now()}`,
-        contactPerson: 'Pending',
-        email: `pending-${Date.now()}@provider.local`,
-        phone: '000',
-        physicalAddress: 'Pending',
-        status: 'pending',
-        approvalStatus: 'pending_approval',
-        isActive: false,
-        canSubmitClaims: false,
-      },
-    });
-    await this.prisma.providerAlias.upsert({
-      where: { alias: normalised },
-      create: { alias: normalised, providerId: created.id },
-      update: {},
-    }).catch(() => {});
-    return created.id;
+    return this.providerResolver.resolve(name);
   }
 
   /**

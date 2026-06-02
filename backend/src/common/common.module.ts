@@ -7,6 +7,7 @@ import { EdmsIntegrationService } from './services/edms-integration.service';
 import { EoxegenIntegrationService } from './services/eoxegen-integration.service';
 import { AuditService } from './services/audit.service';
 import { StorageService } from './services/storage.service';
+import { ProviderResolverService } from './services/provider-resolver.service';
 
 @Global()
 @Module({
@@ -19,6 +20,7 @@ import { StorageService } from './services/storage.service';
     EoxegenIntegrationService,
     AuditService,
     StorageService,
+    ProviderResolverService,
   ],
   exports: [
     BarcodeService,
@@ -29,6 +31,7 @@ import { StorageService } from './services/storage.service';
     EoxegenIntegrationService,
     AuditService,
     StorageService,
+    ProviderResolverService,
   ],
 })
 export class CommonModule {}

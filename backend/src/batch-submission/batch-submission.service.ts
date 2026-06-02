@@ -387,6 +387,7 @@ export class BatchSubmissionService {
         claims: {
           include: {
             documents: true,
+            provider: true,
           },
         },
       },
