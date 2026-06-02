@@ -206,13 +206,15 @@ export const useClaimsStore = create<ClaimsState>()(
         claims: state.claims.map((c) => c.id === id ? { ...c, ...updates } : c),
       })),
 
-      deleteClaim: (id) => deleteOnServer([id]).then(deleted =>
+      deleteClaim: async (id) => {
+        const deleted = await deleteOnServer([id])
         set((state) => ({ claims: state.claims.filter((c) => !deleted.has(c.id)) }))
-      ),
+      },
 
-      deleteClaims: (ids) => deleteOnServer(ids).then(deleted =>
+      deleteClaims: async (ids) => {
+        const deleted = await deleteOnServer(ids)
         set((state) => ({ claims: state.claims.filter((c) => !deleted.has(c.id)) }))
-      ),
+      },
 
       fetchFromServer: async () => {
         try {
