@@ -1,23 +1,27 @@
 import { useState, useEffect } from 'react'
 import {
-  UserCog, Eye, CheckCircle, XCircle, RotateCcw,
-  Search, AlertTriangle, Send, Plus, Trash2, Loader2,
-  FileText, DollarSign, Clock, MessageSquare, Mail, AlertOctagon,
+  UserCog, Search, Loader2, FileText, DollarSign, Clock,
+  CheckCircle, XCircle, RotateCcw, Send, AlertOctagon,
+  MessageSquare, Mail, AlertTriangle, Plus, Trash2, X,
+  ChevronRight, Building2, User, Calendar, Hash,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
-import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Pagination } from '@/components/Pagination'
+import InlineDocumentPreview from '@/components/InlineDocumentPreview'
+import BulkActionsBar from '@/components/BulkActionsBar'
+import { Checkbox } from '@/components/ui/checkbox'
 import { formatCurrency, formatDate, getPriorityColor } from '@/lib/utils'
+import api from '@/services/api'
 
 function claimNumSubseq(claimNumber: string, query: string): boolean {
   const hay = claimNumber.toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -32,13 +36,8 @@ function claimNumSubseq(claimNumber: string, query: string): boolean {
   }
   return true
 }
-import { Pagination } from '@/components/Pagination'
-import InlineDocumentPreview from '@/components/InlineDocumentPreview'
-import BulkActionsBar from '@/components/BulkActionsBar'
-import { Checkbox } from '@/components/ui/checkbox'
-import api from '@/services/api'
 
-type ActionType = 'approve' | 'reject' | 'return_maker' | 'return_provider' | 'view' | 'escalate_fraud' | null
+type ActionType = 'approve' | 'reject' | 'return_maker' | 'return_provider' | 'escalate_fraud' | null
 
 interface CheckerClaim {
   id: string
@@ -56,49 +55,73 @@ interface CheckerClaim {
 }
 
 const MISSING_DOC_OPTIONS = [
-  'Discharge Summary', 'Lab Results', 'X-Ray/Scan Report', 'Doctor\'s Report',
+  'Discharge Summary', 'Lab Results', 'X-Ray/Scan Report', "Doctor's Report",
   'Pre-Authorization Letter', 'Original Invoice', 'Prescription', 'Referral Letter',
   'Member ID Card Copy', 'Inpatient Records', 'Outpatient Records', 'Post-Op Report',
 ]
 
-const DEMO_CLAIMS: CheckerClaim[] = [
-  {
-    id: 'c1', claimNumber: 'CLM-2026-00138', memberName: 'David Kipkoech',
-    memberNumber: 'MBR-003821', provider: { name: 'Gertrude Hospital' },
-    invoiceAmount: 34000, priority: 'normal',
-    makerApprovedBy: 'Jane Mwangi', makerApprovedAt: '2026-04-09T10:00:00Z',
-    makerComments: 'All documents verified. Invoice matches OCR extraction.',
-    documents: [{ name: 'invoice.pdf' }, { name: 'lab_results.pdf' }, { name: 'discharge.pdf' }],
-    submittedAt: '2026-04-08T09:00:00Z',
+const ACTION_CONFIG = {
+  approve: {
+    label: 'Approve → Claims Officer',
+    icon: CheckCircle,
+    color: 'emerald',
+    btnClass: 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600',
+    activeClass: 'ring-2 ring-emerald-500 bg-emerald-600 text-white',
+    idleClass: 'border border-emerald-600/40 text-emerald-400 hover:bg-emerald-600/10',
+    notesLabel: 'Verification notes',
+    notesPlaceholder: 'Add QA notes — confirmed amounts, merged documents, checks performed…',
+    notesHint: 'Routes the invoice to the Claims Officer queue. Notes are saved to the audit trail.',
+    required: false,
   },
-  {
-    id: 'c2', claimNumber: 'CLM-2026-00134', memberName: 'Alice Nyambura',
-    memberNumber: 'MBR-007412', provider: { name: 'Nairobi Hospital' },
-    invoiceAmount: 120000, priority: 'high',
-    makerApprovedBy: 'Peter Omondi', makerApprovedAt: '2026-04-08T15:00:00Z',
-    makerComments: 'High value claim. All supporting documents present.',
-    documents: [{ name: 'invoice.pdf' }, { name: 'pre_auth.pdf' }],
-    submittedAt: '2026-04-07T14:00:00Z',
+  return_maker: {
+    label: 'Return for Revision',
+    icon: RotateCcw,
+    color: 'sky',
+    btnClass: 'bg-sky-600 hover:bg-sky-700 text-white border-sky-600',
+    activeClass: 'ring-2 ring-sky-500 bg-sky-600 text-white',
+    idleClass: 'border border-sky-600/40 text-sky-400 hover:bg-sky-600/10',
+    notesLabel: 'Revision reason',
+    notesPlaceholder: 'Explain what needs to be re-checked or corrected…',
+    notesHint: 'Invoice stays in the queue. The assignee is notified.',
+    required: true,
   },
-  {
-    id: 'c3', claimNumber: 'CLM-2026-00131', memberName: 'Joseph Otieno',
-    memberNumber: 'MBR-009283', provider: { name: 'Avenue Hospital' },
-    invoiceAmount: 56000, priority: 'normal',
-    makerApprovedBy: 'Sarah Wambui', makerApprovedAt: '2026-04-08T11:00:00Z',
-    makerComments: 'Standard claim. Lab results and invoice verified.',
-    documents: [{ name: 'invoice.pdf' }, { name: 'lab.pdf' }],
-    submittedAt: '2026-04-07T10:00:00Z',
+  return_provider: {
+    label: 'Return to Provider',
+    icon: Send,
+    color: 'amber',
+    btnClass: 'bg-amber-600 hover:bg-amber-700 text-white border-amber-600',
+    activeClass: 'ring-2 ring-amber-500 bg-amber-600 text-white',
+    idleClass: 'border border-amber-600/40 text-amber-400 hover:bg-amber-600/10',
+    notesLabel: 'Message to provider',
+    notesPlaceholder: 'Explain clearly what must be corrected or supplied before resubmission…',
+    notesHint: 'This message is emailed directly to the provider. The invoice returns to initial review.',
+    required: true,
   },
-  {
-    id: 'c4', claimNumber: 'CLM-2026-00128', memberName: 'Faith Wangari',
-    memberNumber: 'MBR-004567', provider: { name: 'MP Shah Hospital' },
-    invoiceAmount: 210000, priority: 'urgent',
-    makerApprovedBy: 'James Kimani', makerApprovedAt: '2026-04-07T16:00:00Z',
-    makerComments: 'Surgery claim. Pre-authorization confirmed. Urgent processing needed.',
-    documents: [{ name: 'invoice.pdf' }, { name: 'op_report.pdf' }],
-    submittedAt: '2026-04-06T15:00:00Z',
+  reject: {
+    label: 'Reject Claim',
+    icon: XCircle,
+    color: 'red',
+    btnClass: 'bg-red-600 hover:bg-red-700 text-white border-red-600',
+    activeClass: 'ring-2 ring-red-500 bg-red-600 text-white',
+    idleClass: 'border border-red-600/40 text-red-400 hover:bg-red-600/10',
+    notesLabel: 'Rejection reason',
+    notesPlaceholder: 'Provide a clear, factual rejection reason. The provider will see this…',
+    notesHint: 'The provider and you will receive an email. This decision is permanently recorded.',
+    required: true,
   },
-]
+  escalate_fraud: {
+    label: 'Escalate to Fraud',
+    icon: AlertOctagon,
+    color: 'rose',
+    btnClass: 'bg-rose-800 hover:bg-rose-900 text-white border-rose-800',
+    activeClass: 'ring-2 ring-rose-700 bg-rose-800 text-white',
+    idleClass: 'border border-rose-700/40 text-rose-400 hover:bg-rose-800/10',
+    notesLabel: 'Escalation reason',
+    notesPlaceholder: 'Describe the fraud indicators that prompted this escalation…',
+    notesHint: 'The fraud team will be notified immediately. The invoice is placed on hold.',
+    required: true,
+  },
+} as const
 
 export default function CheckerQueue() {
   const [claims, setClaims] = useState<CheckerClaim[]>([])
@@ -106,6 +129,7 @@ export default function CheckerQueue() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
+  const [open, setOpen] = useState(false)
   const [selectedClaim, setSelectedClaim] = useState<CheckerClaim | null>(null)
   const [actionType, setActionType] = useState<ActionType>(null)
   const [comments, setComments] = useState('')
@@ -118,29 +142,22 @@ export default function CheckerQueue() {
   useEffect(() => {
     const load = async () => {
       try {
-        // Sweep any unassigned claims into an owner before loading — the queue
-        // now shows each maker-checker only their own assigned claims.
-        await api.post('/workflow/reroute-orphans').catch(() => {})
         const { data } = await api.get('/workflow/claims/maker_checker_review')
         const list: any[] = Array.isArray(data) ? data : Array.isArray(data?.claims) ? data.claims : []
-
-        // For each claim, load its approval history and pull the most recent maker decision
-        // so the checker sees the real maker comments from DB (not the hardcoded demo text).
         const enriched = await Promise.all(list.map(async (c: any) => {
           let makerApprovedBy: string | undefined
           let makerApprovedAt: string | undefined
           let makerComments: string | undefined
           try {
             const { data: approvals } = await api.get(`/workflow/approval-history/${c.id}`)
-            const approvalsArr: any[] = Array.isArray(approvals) ? approvals : []
-            const lastMaker = [...approvalsArr].reverse().find(a => a.level === 'maker' && a.decision === 'approved')
-            if (lastMaker) {
-              makerApprovedBy = lastMaker.approver?.name || lastMaker.approver?.email
-              makerApprovedAt = lastMaker.createdAt
-              makerComments = lastMaker.comments || undefined
+            const arr: any[] = Array.isArray(approvals) ? approvals : []
+            const last = [...arr].reverse().find(a => a.level === 'maker' && a.decision === 'approved')
+            if (last) {
+              makerApprovedBy = last.approver?.name || last.approver?.email
+              makerApprovedAt = last.createdAt
+              makerComments = last.comments || undefined
             }
-          } catch { /* tolerate missing history */ }
-
+          } catch { /* tolerate */ }
           return {
             id: c.id,
             claimNumber: c.claimNumber,
@@ -163,7 +180,7 @@ export default function CheckerQueue() {
         }))
         setClaims(enriched)
       } catch {
-        setClaims([])
+        // keep existing data on transient errors
       } finally {
         setLoading(false)
       }
@@ -171,36 +188,34 @@ export default function CheckerQueue() {
     load()
   }, [])
 
-  const filtered = claims.filter(c => {
-    if (!search) return true
-    const q = search.toLowerCase()
-    return claimNumSubseq(c.claimNumber, search) ||
-      c.memberName.toLowerCase().includes(q) ||
-      (c.provider?.name || '').toLowerCase().includes(q)
-  })
-
-  const openAction = (claim: CheckerClaim, type: ActionType) => {
+  const openClaim = (claim: CheckerClaim) => {
     setSelectedClaim(claim)
-    setActionType(type)
+    setActionType(null)
     setComments('')
     setMissingDocs([])
     setCustomDoc('')
     setActionError(null)
+    setOpen(true)
   }
 
-  const closeAction = () => {
-    setActionType(null)
+  const closeClaim = () => {
+    setOpen(false)
     setSelectedClaim(null)
+    setActionType(null)
     setComments('')
     setMissingDocs([])
     setActionError(null)
   }
 
-  const toggleMissingDoc = (doc: string) => {
-    setMissingDocs(prev =>
-      prev.includes(doc) ? prev.filter(d => d !== doc) : [...prev, doc]
-    )
+  const selectAction = (type: ActionType) => {
+    setActionType(prev => prev === type ? null : type)
+    setComments('')
+    setMissingDocs([])
+    setActionError(null)
   }
+
+  const toggleMissingDoc = (doc: string) =>
+    setMissingDocs(prev => prev.includes(doc) ? prev.filter(d => d !== doc) : [...prev, doc])
 
   const addCustomDoc = () => {
     if (customDoc.trim() && !missingDocs.includes(customDoc.trim())) {
@@ -210,39 +225,46 @@ export default function CheckerQueue() {
   }
 
   const handleSubmit = async () => {
-    if (!selectedClaim || !actionType || actionType === 'view') return
+    if (!selectedClaim || !actionType) return
     setSubmitting(true)
     setActionError(null)
     try {
       const endpoints: Record<string, string> = {
-        approve: '/workflow/checker/approve',
-        reject: '/workflow/checker/reject',
-        return_maker: '/workflow/checker/return',
+        approve:         '/workflow/checker/approve',
+        reject:          '/workflow/checker/reject',
+        return_maker:    '/workflow/checker/return',
         return_provider: '/workflow/checker/return-to-provider',
-        escalate_fraud: `/claims/${selectedClaim.id}/fraud/escalate`,
+        escalate_fraud:  `/claims/${selectedClaim.id}/fraud/escalate`,
       }
       const bodies: Record<string, object> = {
-        approve: { claimId: selectedClaim.id, comments },
-        reject: { claimId: selectedClaim.id, reason: comments },
-        return_maker: { claimId: selectedClaim.id, reason: comments },
+        approve:         { claimId: selectedClaim.id, comments },
+        reject:          { claimId: selectedClaim.id, reason: comments },
+        return_maker:    { claimId: selectedClaim.id, reason: comments },
         return_provider: { claimId: selectedClaim.id, reason: comments, missingDocuments: missingDocs },
-        escalate_fraud: { reason: comments },
+        escalate_fraud:  { reason: comments },
       }
       await api.post(endpoints[actionType], bodies[actionType])
       setClaims(prev => prev.filter(c => c.id !== selectedClaim.id))
-      setSubmitting(false)
-      closeAction()
+      closeClaim()
     } catch (err: any) {
-      const errData = err?.response?.data
-      const msg = errData?.message || errData?.error || err?.message || 'Network error — please try again'
+      const d = err?.response?.data
       setActionError(
         err?.response?.status === 403
-          ? `You are not authorised to action this claim. ${msg}`
-          : msg,
+          ? `Not authorised: ${d?.message || err?.message}`
+          : d?.message || d?.error || err?.message || 'Network error — please try again',
       )
+    } finally {
       setSubmitting(false)
     }
   }
+
+  const filtered = claims.filter(c => {
+    if (!search) return true
+    const q = search.toLowerCase()
+    return claimNumSubseq(c.claimNumber, search) ||
+      c.memberName.toLowerCase().includes(q) ||
+      (c.provider?.name || '').toLowerCase().includes(q)
+  })
 
   const stats = {
     total: claims.length,
@@ -251,376 +273,409 @@ export default function CheckerQueue() {
     totalValue: claims.reduce((s, c) => s + c.invoiceAmount, 0),
   }
 
-  const actionTitle = {
-    approve: 'Approve → Claims Officer',
-    reject: 'Reject Claim',
-    return_maker: 'Return for Revision',
-    return_provider: 'Return to Provider',
-    escalate_fraud: 'Escalate to Fraud Team',
-    view: 'Claim Details',
-  }
+  const cfg = actionType ? ACTION_CONFIG[actionType] : null
+
+  const canSubmit = actionType && (
+    !ACTION_CONFIG[actionType].required || comments.trim().length > 0
+  ) && !submitting
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Maker-Checker Queue</h1>
-          <p className="text-muted-foreground">Verify captured data, merge documents, and QA invoices before claims officer approval</p>
+          <p className="text-muted-foreground text-sm mt-0.5">
+            Verify and QA invoices before forwarding to the claims officer
+          </p>
         </div>
-        <Badge variant="outline" className="text-lg px-4 py-2">
-          <UserCog className="mr-2 h-4 w-4" /> {stats.total} Pending
+        <Badge variant="outline" className="text-base px-4 py-2 gap-2">
+          <UserCog className="h-4 w-4" /> {stats.total} Pending
         </Badge>
       </div>
 
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card><CardContent className="p-4 flex items-center gap-3">
-          <FileText className="h-8 w-8 text-blue-500 opacity-75" />
-          <div><p className="text-sm text-muted-foreground">Pending Review</p><p className="text-2xl font-bold">{stats.total}</p></div>
-        </CardContent></Card>
-        <Card><CardContent className="p-4 flex items-center gap-3">
-          <DollarSign className="h-8 w-8 text-amber-500 opacity-75" />
-          <div><p className="text-sm text-muted-foreground">High Value (&gt;100K)</p><p className="text-2xl font-bold text-amber-600">{stats.highValue}</p></div>
-        </CardContent></Card>
-        <Card><CardContent className="p-4 flex items-center gap-3">
-          <Clock className="h-8 w-8 text-red-500 opacity-75" />
-          <div><p className="text-sm text-muted-foreground">Urgent</p><p className="text-2xl font-bold text-red-600">{stats.urgent}</p></div>
-        </CardContent></Card>
-        <Card><CardContent className="p-4 flex items-center gap-3">
-          <DollarSign className="h-8 w-8 text-emerald-500 opacity-75" />
-          <div><p className="text-sm text-muted-foreground">Total Value</p><p className="text-lg font-bold">{formatCurrency(stats.totalValue)}</p></div>
-        </CardContent></Card>
+        {[
+          { icon: FileText,   color: 'text-blue-500',    label: 'Pending Review',     value: stats.total,                      sub: null },
+          { icon: DollarSign, color: 'text-amber-500',   label: 'High Value (>100K)', value: stats.highValue,                  sub: null },
+          { icon: Clock,      color: 'text-red-500',     label: 'Urgent',             value: stats.urgent,                     sub: null },
+          { icon: DollarSign, color: 'text-emerald-500', label: 'Total Value',        value: formatCurrency(stats.totalValue), sub: null },
+        ].map(({ icon: Icon, color, label, value }) => (
+          <Card key={label}>
+            <CardContent className="p-4 flex items-center gap-3">
+              <Icon className={`h-8 w-8 opacity-70 ${color}`} />
+              <div>
+                <p className="text-sm text-muted-foreground">{label}</p>
+                <p className="text-2xl font-bold">{value}</p>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
+      {/* Queue table */}
       <Card>
-        <CardHeader>
-          <div className="relative max-w-sm">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search claims, members, providers…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="pl-9"
-            />
+        <CardContent className="p-4">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search claims, members, providers…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
           </div>
-        </CardHeader>
-        <CardContent>
+
+          {bulkSelected.size > 0 && (
+            <div className="mb-3">
+              <BulkActionsBar
+                selectedIds={Array.from(bulkSelected)}
+                onClear={() => setBulkSelected(new Set())}
+                onDone={() => { setBulkSelected(new Set()); window.location.reload() }}
+                queueType="maker_checker"
+              />
+            </div>
+          )}
+
           {loading ? (
-            <div className="flex items-center justify-center h-32 gap-2 text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+            <div className="flex items-center justify-center h-40 gap-2 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" /> Loading queue…
             </div>
           ) : (
             <>
-            {bulkSelected.size > 0 && (
-              <div className="mb-3">
-                <BulkActionsBar
-                  selectedIds={Array.from(bulkSelected)}
-                  onClear={() => setBulkSelected(new Set())}
-                  onDone={() => { setBulkSelected(new Set()); window.location.reload() }}
-                  queueType="maker_checker"
-                />
-              </div>
-            )}
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-8">
-                    <Checkbox
-                      checked={filtered.length > 0 && filtered.every(c => bulkSelected.has(c.id))}
-                      onCheckedChange={checked => {
-                        if (checked) setBulkSelected(new Set(filtered.map(c => c.id)))
-                        else setBulkSelected(new Set())
-                      }}
-                    />
-                  </TableHead>
-                  <TableHead>Claim #</TableHead>
-                  <TableHead>Member</TableHead>
-                  <TableHead>Provider</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead>Priority</TableHead>
-                  <TableHead>Reviewed By</TableHead>
-                  <TableHead>Notes</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.length === 0 ? (
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
-                      No claims in maker-checker queue
-                    </TableCell>
-                  </TableRow>
-                ) : filtered.slice((page - 1) * pageSize, page * pageSize).map(claim => (
-                  <TableRow key={claim.id} className={bulkSelected.has(claim.id) ? 'bg-blue-50/50' : ''}>
-                    <TableCell onClick={e => e.stopPropagation()}>
+                    <TableHead className="w-8">
                       <Checkbox
-                        checked={bulkSelected.has(claim.id)}
+                        checked={filtered.length > 0 && filtered.every(c => bulkSelected.has(c.id))}
                         onCheckedChange={checked => {
-                          setBulkSelected(prev => { const n = new Set(prev); if (checked) n.add(claim.id); else n.delete(claim.id); return n })
+                          if (checked) setBulkSelected(new Set(filtered.map(c => c.id)))
+                          else setBulkSelected(new Set())
                         }}
                       />
-                    </TableCell>
-                    <TableCell className="font-medium font-mono text-xs">{claim.claimNumber}</TableCell>
-                    <TableCell>
-                      <p className="font-medium">{claim.memberName}</p>
-                      {claim.memberNumber && <p className="text-[10px] text-muted-foreground">{claim.memberNumber}</p>}
-                    </TableCell>
-                    <TableCell>{claim.provider?.name}</TableCell>
-                    <TableCell className="text-right font-medium">
-                      {formatCurrency(claim.invoiceAmount)}
-                      {claim.invoiceAmount > 100000 && (
-                        <p className="text-[10px] text-amber-600 text-right">High value</p>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={getPriorityColor(claim.priority)} variant="secondary">{claim.priority}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      {claim.makerApprovedBy && (
-                        <div className="text-xs">
-                          <p className="font-medium">{claim.makerApprovedBy}</p>
-                          {claim.makerApprovedAt && (
-                            <p className="text-muted-foreground">{formatDate(claim.makerApprovedAt)}</p>
-                          )}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <p className="max-w-[160px] truncate text-xs text-muted-foreground" title={claim.makerComments}>
-                        {claim.makerComments || '—'}
-                      </p>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button size="icon" variant="ghost" className="h-7 w-7" title="View"
-                          onClick={() => openAction(claim, 'view')}>
-                          <Eye className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button size="icon" variant="ghost" className="h-7 w-7 text-emerald-600" title="Approve → Claims Officer"
-                          onClick={() => openAction(claim, 'approve')}>
-                          <CheckCircle className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button size="icon" variant="ghost" className="h-7 w-7 text-blue-500" title="Return for Revision"
-                          onClick={() => openAction(claim, 'return_maker')}>
-                          <RotateCcw className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button size="icon" variant="ghost" className="h-7 w-7 text-amber-600" title="Return to Provider"
-                          onClick={() => openAction(claim, 'return_provider')}>
-                          <Send className="h-3.5 w-3.5 rotate-180" />
-                        </Button>
-                        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" title="Reject"
-                          onClick={() => openAction(claim, 'reject')}>
-                          <XCircle className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button size="icon" variant="ghost" className="h-7 w-7 text-red-500" title="Escalate to Fraud team"
-                          onClick={() => openAction(claim, 'escalate_fraud')}>
-                          <AlertOctagon className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
+                    </TableHead>
+                    <TableHead>Claim #</TableHead>
+                    <TableHead>Member</TableHead>
+                    <TableHead>Provider</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead>Priority</TableHead>
+                    <TableHead>Submitted</TableHead>
+                    <TableHead className="w-6" />
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <Pagination
-              page={page}
-              pageSize={pageSize}
-              total={filtered.length}
-              onPageChange={setPage}
-              onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
-            />
+                </TableHeader>
+                <TableBody>
+                  {filtered.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-16 text-muted-foreground">
+                        <FileText className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                        No claims in the queue
+                      </TableCell>
+                    </TableRow>
+                  ) : filtered.slice((page - 1) * pageSize, page * pageSize).map(claim => (
+                    <TableRow
+                      key={claim.id}
+                      className={`cursor-pointer transition-colors ${bulkSelected.has(claim.id) ? 'bg-blue-50/10' : 'hover:bg-muted/40'}`}
+                      onClick={() => openClaim(claim)}
+                    >
+                      <TableCell onClick={e => e.stopPropagation()}>
+                        <Checkbox
+                          checked={bulkSelected.has(claim.id)}
+                          onCheckedChange={checked => {
+                            setBulkSelected(prev => {
+                              const n = new Set(prev)
+                              if (checked) n.add(claim.id)
+                              else n.delete(claim.id)
+                              return n
+                            })
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell className="font-mono text-xs font-semibold text-primary">
+                        {claim.claimNumber}
+                      </TableCell>
+                      <TableCell>
+                        <p className="font-medium leading-tight">{claim.memberName}</p>
+                        {claim.memberNumber && (
+                          <p className="text-[10px] text-muted-foreground mt-0.5">{claim.memberNumber}</p>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm">{claim.provider?.name || '—'}</TableCell>
+                      <TableCell className="text-right">
+                        <p className="font-semibold tabular-nums">{formatCurrency(claim.invoiceAmount)}</p>
+                        {claim.invoiceAmount > 100000 && (
+                          <p className="text-[10px] text-amber-500 text-right">High value</p>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={getPriorityColor(claim.priority)} variant="secondary">
+                          {claim.priority}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {formatDate(claim.submittedAt)}
+                      </TableCell>
+                      <TableCell>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                total={filtered.length}
+                onPageChange={setPage}
+                onPageSizeChange={size => { setPageSize(size); setPage(1) }}
+              />
             </>
           )}
         </CardContent>
       </Card>
 
-      {/* ── Action / View Dialog — side-by-side document + form ── */}
-      <Dialog open={!!actionType} onOpenChange={() => closeAction()}>
-        <DialogContent className="max-w-[min(1400px,95vw)] w-[min(1400px,95vw)] h-[92vh] p-0 gap-0 overflow-hidden flex flex-col">
-          <DialogHeader className="px-5 pt-4 pb-3 border-b shrink-0">
-            <DialogTitle>
-              {actionType ? actionTitle[actionType] : ''}
-            </DialogTitle>
-            <DialogDescription>
-              {selectedClaim?.claimNumber} — {selectedClaim?.memberName}
-              {' '}({formatCurrency(selectedClaim?.invoiceAmount || 0)}) · {selectedClaim?.provider?.name}
-            </DialogDescription>
-          </DialogHeader>
+      {/* ── Claim Review Panel ── */}
+      <Dialog open={open} onOpenChange={() => closeClaim()}>
+        <DialogContent className="max-w-[min(1400px,96vw)] w-[min(1400px,96vw)] h-[94vh] p-0 gap-0 overflow-hidden flex flex-col">
 
           {selectedClaim && (
-            <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1.35fr_1fr] gap-0 overflow-hidden">
-              {/* ── LEFT: Document preview ── */}
-              <div className="min-h-0 p-4 border-r bg-muted/20">
-                <InlineDocumentPreview
-                  documents={selectedClaim.documents || []}
-                  emptyHint="No document uploads available for this claim."
-                  className="h-full"
-                />
+            <>
+              {/* Panel header */}
+              <div className="flex items-start justify-between px-6 py-4 border-b bg-card shrink-0">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-lg font-bold tracking-tight text-primary">
+                      {selectedClaim.claimNumber}
+                    </span>
+                    <Badge className={getPriorityColor(selectedClaim.priority)} variant="secondary">
+                      {selectedClaim.priority}
+                    </Badge>
+                    {selectedClaim.invoiceAmount > 100000 && (
+                      <Badge variant="outline" className="text-amber-500 border-amber-500/40 text-[10px]">
+                        High value
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-muted-foreground text-sm">
+                    {selectedClaim.memberName}
+                    {selectedClaim.memberNumber ? ` · ${selectedClaim.memberNumber}` : ''}
+                    {' '}·{' '}
+                    {selectedClaim.provider?.name}
+                    {' '}·{' '}
+                    <span className="font-semibold text-foreground">
+                      {formatCurrency(selectedClaim.invoiceAmount)}
+                    </span>
+                  </p>
+                </div>
+                <button
+                  onClick={closeClaim}
+                  className="rounded-md p-1.5 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
 
-              {/* ── RIGHT: Form / details ── */}
-              <div className="min-h-0 overflow-y-auto p-5 space-y-4 text-sm">
-                {/* Claim summary */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div><Label className="text-muted-foreground text-xs">Claim #</Label><p className="font-mono font-medium">{selectedClaim.claimNumber}</p></div>
-                  <div><Label className="text-muted-foreground text-xs">Amount</Label><p className="font-bold text-base">{formatCurrency(selectedClaim.invoiceAmount)}</p></div>
-                  <div><Label className="text-muted-foreground text-xs">Member</Label><p>{selectedClaim.memberName}</p></div>
-                  <div><Label className="text-muted-foreground text-xs">Provider</Label><p>{selectedClaim.provider?.name}</p></div>
-                  <div><Label className="text-muted-foreground text-xs">Priority</Label><Badge className={getPriorityColor(selectedClaim.priority)} variant="secondary">{selectedClaim.priority}</Badge></div>
-                  <div><Label className="text-muted-foreground text-xs">Submitted</Label><p>{formatDate(selectedClaim.submittedAt)}</p></div>
+              {/* Panel body */}
+              <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] overflow-hidden">
+
+                {/* LEFT — Document viewer */}
+                <div className="min-h-0 border-r bg-muted/10 p-4">
+                  <InlineDocumentPreview
+                    documents={selectedClaim.documents || []}
+                    emptyHint="No document uploads available for this claim."
+                    className="h-full"
+                  />
                 </div>
 
-                {/* Maker context */}
-                {selectedClaim.makerComments && (
-                  <div className="rounded-lg bg-muted/50 p-3">
-                    <p className="text-xs font-medium text-muted-foreground">Prior Notes — {selectedClaim.makerApprovedBy}</p>
-                    <p className="mt-1 text-sm">{selectedClaim.makerComments}</p>
-                  </div>
-                )}
+                {/* RIGHT — Details + actions */}
+                <div className="min-h-0 overflow-y-auto flex flex-col">
 
-                {actionType !== 'view' && (
-                  <>
-                    {/* Return to Provider — missing docs selector */}
-                    {actionType === 'return_provider' && (
-                      <>
-                        <Separator />
-                        <div className="space-y-2">
-                          <Label className="text-sm font-medium">Missing / Required Documents</Label>
-                          <p className="text-xs text-muted-foreground">Select documents the provider must supply before resubmitting</p>
-                          <div className="grid grid-cols-2 gap-1.5 max-h-44 overflow-y-auto pr-1">
-                            {MISSING_DOC_OPTIONS.map(doc => (
-                              <button
-                                key={doc}
-                                onClick={() => toggleMissingDoc(doc)}
-                                className={`text-left text-xs rounded border px-2 py-1.5 transition-colors ${
-                                  missingDocs.includes(doc)
-                                    ? 'bg-amber-100 border-amber-400 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700'
-                                    : 'hover:bg-muted/50'
-                                }`}
-                              >
-                                {missingDocs.includes(doc) ? '✓ ' : ''}{doc}
-                              </button>
-                            ))}
+                  {/* Claim metadata */}
+                  <div className="p-5 space-y-4 flex-1">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                      {[
+                        { icon: Hash,      label: 'Claim #',    value: selectedClaim.claimNumber, mono: true },
+                        { icon: DollarSign, label: 'Amount',    value: formatCurrency(selectedClaim.invoiceAmount), bold: true },
+                        { icon: User,      label: 'Member',     value: selectedClaim.memberName },
+                        { icon: Building2, label: 'Provider',   value: selectedClaim.provider?.name || '—' },
+                        { icon: Calendar,  label: 'Submitted',  value: formatDate(selectedClaim.submittedAt) },
+                        { icon: FileText,  label: 'Documents',  value: `${selectedClaim.documents?.length ?? 0} attached` },
+                      ].map(({ icon: Icon, label, value, mono, bold }) => (
+                        <div key={label} className="flex items-start gap-2">
+                          <Icon className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                          <div>
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-wider leading-tight">{label}</p>
+                            <p className={`leading-snug ${mono ? 'font-mono text-xs' : ''} ${bold ? 'font-bold text-base' : ''}`}>
+                              {value}
+                            </p>
                           </div>
-                          <div className="flex gap-2">
-                            <Input
-                              placeholder="Other document…"
-                              value={customDoc}
-                              onChange={e => setCustomDoc(e.target.value)}
-                              onKeyDown={e => e.key === 'Enter' && addCustomDoc()}
-                              className="h-8 text-xs flex-1"
-                            />
-                            <Button size="sm" variant="outline" onClick={addCustomDoc} disabled={!customDoc.trim()}>
-                              <Plus className="h-3 w-3" />
-                            </Button>
-                          </div>
-                          {missingDocs.length > 0 && (
-                            <div className="flex flex-wrap gap-1">
-                              {missingDocs.map(d => (
-                                <Badge key={d} variant="secondary" className="gap-1 text-[10px]">
-                                  {d}
-                                  <button onClick={() => setMissingDocs(prev => prev.filter(x => x !== d))}>
-                                    <Trash2 className="h-2.5 w-2.5" />
-                                  </button>
-                                </Badge>
-                              ))}
-                            </div>
-                          )}
                         </div>
-                      </>
+                      ))}
+                    </div>
+
+                    {/* Maker notes */}
+                    {selectedClaim.makerComments && (
+                      <div className="rounded-lg border border-border/60 bg-muted/30 p-3 space-y-1">
+                        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                          Prior notes{selectedClaim.makerApprovedBy ? ` — ${selectedClaim.makerApprovedBy}` : ''}
+                          {selectedClaim.makerApprovedAt && ` · ${formatDate(selectedClaim.makerApprovedAt)}`}
+                        </p>
+                        <p className="text-sm leading-relaxed">{selectedClaim.makerComments}</p>
+                      </div>
                     )}
 
-                    {/* Comments / reason */}
-                    <Separator />
-                    <div className="space-y-2 rounded-lg border bg-muted/30 p-4">
-                      <div className="flex items-center justify-between">
-                        <Label className="flex items-center gap-2 text-sm font-semibold">
-                          <MessageSquare className={`h-3.5 w-3.5 ${
-                            actionType === 'approve' ? 'text-emerald-600'
-                            : actionType === 'return_provider' ? 'text-amber-600'
-                            : actionType === 'return_maker' ? 'text-sky-600'
-                            : 'text-red-600'
-                          }`} />
-                          {actionType === 'approve' ? 'Maker-Checker Notes'
-                            : actionType === 'return_provider' ? 'Message to Provider'
-                            : actionType === 'return_maker' ? 'Revision Reason'
-                            : 'Rejection Reason'}
-                          {actionType === 'approve'
-                            ? <Badge variant="outline" className="ml-1 text-[10px] font-normal">optional</Badge>
-                            : <Badge variant="destructive" className="ml-1 text-[10px] font-normal">required</Badge>}
-                        </Label>
-                        <span className={`text-xs tabular-nums ${comments.length > 1800 ? 'text-amber-600' : 'text-muted-foreground'}`}>
-                          {comments.length}/2000
-                        </span>
-                      </div>
-                      <Textarea
-                        placeholder={
-                          actionType === 'approve' ? 'Add verification notes — e.g. confirmed amounts, merged documents, QA checks performed…'
-                          : actionType === 'return_provider' ? 'Explain clearly what must be corrected or supplied before resubmission…'
-                          : actionType === 'return_maker' ? 'Explain what needs to be re-checked or corrected before re-submission to the claims officer…'
-                          : 'Provide a clear, factual rejection reason. The provider will see this.'
-                        }
-                        value={comments}
-                        onChange={e => setComments(e.target.value.slice(0, 2000))}
-                        rows={5}
-                        className="resize-none bg-background"
-                      />
-                      <p className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
-                        <Mail className="h-3 w-3 mt-0.5 shrink-0" />
-                        {actionType === 'approve' ? 'Approval routes the invoice to the Claims Officer queue. Notes are saved to the audit trail and emailed to the claims officer.'
-                          : actionType === 'return_provider' ? 'This message is emailed to the provider/branch. The invoice returns to initial review.'
-                          : actionType === 'return_maker' ? 'The invoice stays in the maker-checker queue. Your revision reason is recorded and the assignee is notified.'
-                          : 'The provider and you will all receive an email. This decision is permanently recorded.'}
-                      </p>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
+                    {/* Action form — appears when an action is selected */}
+                    {actionType && cfg && (
+                      <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                        <Separator />
 
-          <DialogFooter className="px-5 py-3 border-t shrink-0 flex-col sm:flex-row sm:items-center gap-2">
-            {actionError && (
-              <div className="flex-1 text-xs rounded border border-red-300 bg-red-50 dark:bg-red-950/30 dark:border-red-800 text-red-700 dark:text-red-300 px-3 py-2 flex items-start gap-2">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                <span>{actionError}</span>
+                        {/* Return to provider — missing docs */}
+                        {actionType === 'return_provider' && (
+                          <div className="space-y-2">
+                            <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                              Missing / Required Documents
+                            </Label>
+                            <div className="grid grid-cols-2 gap-1.5 max-h-40 overflow-y-auto pr-1">
+                              {MISSING_DOC_OPTIONS.map(doc => (
+                                <button
+                                  key={doc}
+                                  onClick={() => toggleMissingDoc(doc)}
+                                  className={`text-left text-xs rounded-md border px-2.5 py-1.5 transition-all ${
+                                    missingDocs.includes(doc)
+                                      ? 'bg-amber-500/20 border-amber-500/60 text-amber-300'
+                                      : 'border-border/50 hover:bg-muted/50 text-muted-foreground hover:text-foreground'
+                                  }`}
+                                >
+                                  {missingDocs.includes(doc) ? '✓ ' : ''}{doc}
+                                </button>
+                              ))}
+                            </div>
+                            <div className="flex gap-2">
+                              <Input
+                                placeholder="Other document…"
+                                value={customDoc}
+                                onChange={e => setCustomDoc(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && addCustomDoc()}
+                                className="h-8 text-xs flex-1"
+                              />
+                              <Button size="sm" variant="outline" onClick={addCustomDoc} disabled={!customDoc.trim()}>
+                                <Plus className="h-3 w-3" />
+                              </Button>
+                            </div>
+                            {missingDocs.length > 0 && (
+                              <div className="flex flex-wrap gap-1">
+                                {missingDocs.map(d => (
+                                  <Badge key={d} variant="secondary" className="gap-1 text-[10px] pr-1">
+                                    {d}
+                                    <button onClick={() => setMissingDocs(prev => prev.filter(x => x !== d))}>
+                                      <Trash2 className="h-2.5 w-2.5" />
+                                    </button>
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Comments / reason */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <Label className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                              <MessageSquare className="h-3.5 w-3.5" />
+                              {cfg.notesLabel}
+                              {!cfg.required && (
+                                <span className="ml-1 text-[9px] font-normal normal-case border border-border rounded px-1 py-0.5">optional</span>
+                              )}
+                            </Label>
+                            <span className={`text-[10px] tabular-nums ${comments.length > 1800 ? 'text-amber-400' : 'text-muted-foreground'}`}>
+                              {comments.length}/2000
+                            </span>
+                          </div>
+                          <Textarea
+                            placeholder={cfg.notesPlaceholder}
+                            value={comments}
+                            onChange={e => setComments(e.target.value.slice(0, 2000))}
+                            rows={4}
+                            className="resize-none text-sm"
+                          />
+                          <p className="flex items-start gap-1.5 text-[10px] text-muted-foreground">
+                            <Mail className="h-3 w-3 mt-0.5 shrink-0" />
+                            {cfg.notesHint}
+                          </p>
+                        </div>
+
+                        {/* Error */}
+                        {actionError && (
+                          <div className="flex items-start gap-2 rounded-md border border-red-500/30 bg-red-500/10 text-red-400 px-3 py-2 text-xs">
+                            <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                            {actionError}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Action bar — always visible at bottom */}
+                  <div className="shrink-0 border-t bg-card p-4 space-y-3">
+                    {/* Action picker */}
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {(Object.keys(ACTION_CONFIG) as ActionType[]).filter(Boolean).map(type => {
+                        const { label, icon: Icon, activeClass, idleClass } = ACTION_CONFIG[type as keyof typeof ACTION_CONFIG]
+                        const isActive = actionType === type
+                        return (
+                          <button
+                            key={type}
+                            onClick={() => selectAction(type)}
+                            className={`flex flex-col items-center gap-1 rounded-lg px-1 py-2.5 text-center transition-all text-[10px] leading-tight font-medium ${isActive ? activeClass : idleClass}`}
+                          >
+                            <Icon className="h-4 w-4 shrink-0" />
+                            <span>{label.replace(' → Claims Officer', '').replace(' to Fraud', '')}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    {/* Submit / cancel row */}
+                    <div className="flex gap-2">
+                      {actionType ? (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="flex-none"
+                            onClick={() => selectAction(null)}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            className={`flex-1 ${cfg?.btnClass ?? ''}`}
+                            onClick={handleSubmit}
+                            disabled={!canSubmit}
+                          >
+                            {submitting && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+                            {cfg && <cfg.icon className="mr-2 h-3.5 w-3.5" />}
+                            {actionType === 'approve' && 'Approve → Claims Officer'}
+                            {actionType === 'reject' && 'Reject Claim'}
+                            {actionType === 'return_maker' && 'Return for Revision'}
+                            {actionType === 'return_provider' && `Return to Provider${missingDocs.length > 0 ? ` (${missingDocs.length})` : ''}`}
+                            {actionType === 'escalate_fraud' && 'Escalate to Fraud Team'}
+                          </Button>
+                        </>
+                      ) : (
+                        <Button variant="outline" size="sm" className="w-full" onClick={closeClaim}>
+                          Close
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
-            )}
-            <Button variant="outline" onClick={closeAction}>Cancel</Button>
-            {actionType !== 'view' && (
-              <Button
-                variant={
-                  actionType === 'approve' ? 'default'
-                  : actionType === 'reject' || actionType === 'escalate_fraud' ? 'destructive'
-                  : 'secondary'
-                }
-                onClick={handleSubmit}
-                disabled={
-                  submitting ||
-                  (actionType === 'reject' && !comments) ||
-                  (actionType === 'return_maker' && !comments) ||
-                  (actionType === 'return_provider' && !comments) ||
-                  (actionType === 'escalate_fraud' && !comments)
-                }
-                className={
-                  actionType === 'approve'
-                    ? 'bg-emerald-600 hover:bg-emerald-700'
-                    : actionType === 'escalate_fraud'
-                      ? 'bg-red-600 hover:bg-red-700'
-                      : ''
-                }
-              >
-                {submitting && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-                {actionType === 'approve' && <><CheckCircle className="mr-2 h-3.5 w-3.5" /> Approve → Claims Officer</>}
-                {actionType === 'reject' && <><XCircle className="mr-2 h-3.5 w-3.5" /> Reject Claim</>}
-                {actionType === 'return_maker' && <><RotateCcw className="mr-2 h-3.5 w-3.5" /> Return for Revision</>}
-                {actionType === 'return_provider' && (
-                  <><AlertTriangle className="mr-2 h-3.5 w-3.5" /> Return to Provider ({missingDocs.length} item{missingDocs.length !== 1 ? 's' : ''})</>
-                )}
-                {actionType === 'escalate_fraud' && <><AlertOctagon className="mr-2 h-3.5 w-3.5" /> Escalate to Fraud</>}
-              </Button>
-            )}
-          </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>
