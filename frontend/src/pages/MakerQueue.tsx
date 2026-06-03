@@ -280,8 +280,6 @@ export default function MakerQueue() {
   useEffect(() => {
     const load = async () => {
       try {
-        // Sweep any unassigned initial_review claims into maker_checker_review before loading.
-        await api.post('/workflow/reroute-orphans').catch(() => {})
         const { data: resData } = await api.get('/workflow/claims/maker_checker_review')
         // Backend returns { claims, total } — frontend was ignoring this shape and always
         // rendering empty. Normalise here.

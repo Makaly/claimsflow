@@ -118,9 +118,6 @@ export default function CheckerQueue() {
   useEffect(() => {
     const load = async () => {
       try {
-        // Sweep any unassigned claims into an owner before loading — the queue
-        // now shows each maker-checker only their own assigned claims.
-        await api.post('/workflow/reroute-orphans').catch(() => {})
         const { data } = await api.get('/workflow/claims/maker_checker_review')
         const list: any[] = Array.isArray(data) ? data : Array.isArray(data?.claims) ? data.claims : []
 
@@ -163,7 +160,7 @@ export default function CheckerQueue() {
         }))
         setClaims(enriched)
       } catch {
-        setClaims([])
+        // Keep any existing data — don't blank the list on a transient error
       } finally {
         setLoading(false)
       }
