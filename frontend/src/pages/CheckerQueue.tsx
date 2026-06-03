@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react'
 import {
   UserCog, Search, Loader2, FileText, DollarSign, Clock,
-  CheckCircle, XCircle, RotateCcw, Send, AlertOctagon,
-  MessageSquare, Mail, AlertTriangle, Plus, Trash2, X,
-  ChevronRight, Building2, User, Calendar, Hash, ShieldAlert,
+  CheckCircle, AlertTriangle, X, ChevronRight,
+  Building2, User, Calendar, Hash, ShieldAlert, MessageSquare,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,7 +12,6 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Pagination } from '@/components/Pagination'
 import BulkActionsBar from '@/components/BulkActionsBar'
@@ -36,8 +34,6 @@ function claimNumSubseq(claimNumber: string, query: string): boolean {
   return true
 }
 
-type ActionType = 'approve' | 'reject' | 'return_maker' | 'return_provider' | 'escalate_fraud' | null
-
 interface FraudSignal { level: 'critical' | 'warning' | 'info'; title: string; detail: string }
 interface CheckerDoc  { id?: string; name: string; documentType?: string; mimetype?: string }
 
@@ -51,81 +47,14 @@ interface CheckerClaim {
   priority: string
   fraudSignals: FraudSignal[]
   ocrConfidence?: number
-  makerApprovedBy?: string
-  makerApprovedAt?: string
-  makerComments?: string
   documents: CheckerDoc[]
   submittedAt: string
 }
 
-const MISSING_DOC_OPTIONS = [
-  'Discharge Summary', 'Lab Results', 'X-Ray/Scan Report', "Doctor's Report",
-  'Pre-Authorization Letter', 'Original Invoice', 'Prescription', 'Referral Letter',
-  'Member ID Card Copy', 'Inpatient Records', 'Outpatient Records', 'Post-Op Report',
-]
-
-const ACTION_CONFIG = {
-  approve: {
-    label: 'Approve → Claims Officer',
-    shortLabel: 'Approve',
-    icon: CheckCircle,
-    activeClass: 'ring-2 ring-emerald-500 bg-emerald-600 text-white',
-    idleClass: 'border border-emerald-600/40 text-emerald-400 hover:bg-emerald-600/10',
-    btnClass: 'bg-emerald-600 hover:bg-emerald-700 text-white',
-    notesLabel: 'Verification notes', required: false,
-    notesPlaceholder: 'QA notes — confirmed amounts, merged documents, checks performed…',
-    notesHint: 'Routes to the Claims Officer queue. Notes saved to audit trail.',
-  },
-  return_maker: {
-    label: 'Return for Revision',
-    shortLabel: 'Return',
-    icon: RotateCcw,
-    activeClass: 'ring-2 ring-sky-500 bg-sky-600 text-white',
-    idleClass: 'border border-sky-600/40 text-sky-400 hover:bg-sky-600/10',
-    btnClass: 'bg-sky-600 hover:bg-sky-700 text-white',
-    notesLabel: 'Revision reason', required: true,
-    notesPlaceholder: 'Explain what needs to be re-checked or corrected…',
-    notesHint: 'Invoice stays in the queue. Assignee is notified.',
-  },
-  return_provider: {
-    label: 'Return to Provider',
-    shortLabel: 'To Provider',
-    icon: Send,
-    activeClass: 'ring-2 ring-amber-500 bg-amber-600 text-white',
-    idleClass: 'border border-amber-600/40 text-amber-400 hover:bg-amber-600/10',
-    btnClass: 'bg-amber-600 hover:bg-amber-700 text-white',
-    notesLabel: 'Message to provider', required: true,
-    notesPlaceholder: 'Explain what must be corrected or supplied before resubmission…',
-    notesHint: 'Emailed directly to the provider. Invoice returns to initial review.',
-  },
-  reject: {
-    label: 'Reject Claim',
-    shortLabel: 'Reject',
-    icon: XCircle,
-    activeClass: 'ring-2 ring-red-500 bg-red-600 text-white',
-    idleClass: 'border border-red-600/40 text-red-400 hover:bg-red-600/10',
-    btnClass: 'bg-red-600 hover:bg-red-700 text-white',
-    notesLabel: 'Rejection reason', required: true,
-    notesPlaceholder: 'Provide a clear, factual rejection reason. The provider will see this…',
-    notesHint: 'Provider and you will receive an email. Permanently recorded.',
-  },
-  escalate_fraud: {
-    label: 'Escalate to Fraud',
-    shortLabel: 'Escalate',
-    icon: AlertOctagon,
-    activeClass: 'ring-2 ring-rose-700 bg-rose-800 text-white',
-    idleClass: 'border border-rose-700/40 text-rose-400 hover:bg-rose-800/10',
-    btnClass: 'bg-rose-800 hover:bg-rose-900 text-white',
-    notesLabel: 'Escalation reason', required: true,
-    notesPlaceholder: 'Describe the fraud indicators that prompted this escalation…',
-    notesHint: 'Fraud team notified immediately. Invoice placed on hold.',
-  },
-} as const
-
 const SIGNAL_STYLE = {
-  critical: { bg: 'bg-red-950/30 border-red-700', text: 'text-red-300', dot: 'bg-red-500', label: 'CRITICAL' },
-  warning:  { bg: 'bg-amber-950/30 border-amber-700', text: 'text-amber-300', dot: 'bg-amber-500', label: 'WARNING' },
-  info:     { bg: 'bg-blue-950/30 border-blue-700', text: 'text-blue-300', dot: 'bg-blue-400', label: 'INFO' },
+  critical: { bg: 'bg-red-950/30 border-red-700', text: 'text-red-300', label: 'CRITICAL' },
+  warning:  { bg: 'bg-amber-950/30 border-amber-700', text: 'text-amber-300', label: 'WARNING' },
+  info:     { bg: 'bg-blue-950/30 border-blue-700', text: 'text-blue-300', label: 'INFO' },
 }
 
 export default function CheckerQueue() {
@@ -136,15 +65,10 @@ export default function CheckerQueue() {
   const [pageSize, setPageSize] = useState(20)
   const [open, setOpen] = useState(false)
   const [selectedClaim, setSelectedClaim] = useState<CheckerClaim | null>(null)
-  const [actionType, setActionType] = useState<ActionType>(null)
-  const [comments, setComments] = useState('')
-  const [missingDocs, setMissingDocs] = useState<string[]>([])
-  const [customDoc, setCustomDoc] = useState('')
+  const [notes, setNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [actionError, setActionError] = useState<string | null>(null)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
-
-  // Document bytes for the InlinePdfViewer
   const [docBytes, setDocBytes] = useState<Uint8Array | null>(null)
   const [docLoading, setDocLoading] = useState(false)
   const [activeDocIdx, setActiveDocIdx] = useState(0)
@@ -155,48 +79,30 @@ export default function CheckerQueue() {
       try {
         const { data } = await api.get('/workflow/claims/maker_checker_review')
         const list: any[] = Array.isArray(data) ? data : Array.isArray(data?.claims) ? data.claims : []
-        const enriched = await Promise.all(list.map(async (c: any) => {
-          let makerApprovedBy: string | undefined
-          let makerApprovedAt: string | undefined
-          let makerComments: string | undefined
-          try {
-            const { data: approvals } = await api.get(`/workflow/approval-history/${c.id}`)
-            const arr: any[] = Array.isArray(approvals) ? approvals : []
-            const last = [...arr].reverse().find(a => a.level === 'maker' && a.decision === 'approved')
-            if (last) {
-              makerApprovedBy = last.approver?.name || last.approver?.email
-              makerApprovedAt = last.createdAt
-              makerComments   = last.comments || undefined
-            }
-          } catch { /* optional */ }
-          return {
-            id: c.id,
-            claimNumber: c.claimNumber,
-            memberName: c.memberName || c.patientName || '—',
-            memberNumber: c.memberNumber,
-            provider: c.provider ? { name: c.provider.name } : undefined,
-            invoiceAmount: c.invoiceAmount || 0,
-            priority: c.priority || 'normal',
-            fraudSignals: Array.isArray(c.fraudSignals) ? c.fraudSignals : [],
-            ocrConfidence: c.ocrConfidence,
-            makerApprovedBy, makerApprovedAt, makerComments,
-            documents: (c.documents || []).map((d: any) => ({
-              id: d.id,
-              name: d.originalName || d.filename || '',
-              documentType: d.documentType,
-              mimetype: d.mimetype,
-            })),
-            submittedAt: c.submittedAt,
-          }
-        }))
-        setClaims(enriched)
-      } catch { /* keep existing data */ }
+        setClaims(list.map((c: any) => ({
+          id: c.id,
+          claimNumber: c.claimNumber,
+          memberName: c.memberName || c.patientName || '—',
+          memberNumber: c.memberNumber,
+          provider: c.provider ? { name: c.provider.name } : undefined,
+          invoiceAmount: c.invoiceAmount || 0,
+          priority: c.priority || 'normal',
+          fraudSignals: Array.isArray(c.fraudSignals) ? c.fraudSignals : [],
+          ocrConfidence: c.ocrConfidence,
+          documents: (c.documents || []).map((d: any) => ({
+            id: d.id,
+            name: d.originalName || d.filename || '',
+            documentType: d.documentType,
+            mimetype: d.mimetype,
+          })),
+          submittedAt: c.submittedAt,
+        })))
+      } catch { /* keep existing */ }
       finally { setLoading(false) }
     }
     load()
   }, [])
 
-  // Load document bytes when a claim is opened or the active tab changes
   useEffect(() => {
     if (!selectedClaim) return
     const doc = selectedClaim.documents[activeDocIdx]
@@ -214,7 +120,6 @@ export default function CheckerQueue() {
     return () => { cancelled = true }
   }, [selectedClaim, activeDocIdx])
 
-  // Load OCR fields when a claim is opened
   useEffect(() => {
     if (!selectedClaim) return
     let cancelled = false
@@ -230,68 +135,33 @@ export default function CheckerQueue() {
   const openClaim = (claim: CheckerClaim) => {
     setSelectedClaim(claim)
     setActiveDocIdx(0)
-    setActionType(null)
-    setComments('')
-    setMissingDocs([])
-    setCustomDoc('')
-    setActionError(null)
+    setNotes('')
+    setSubmitError(null)
     setOcrFields([])
+    setDocBytes(null)
     setOpen(true)
   }
 
   const closeClaim = () => {
     setOpen(false)
     setSelectedClaim(null)
-    setActionType(null)
-    setComments('')
-    setMissingDocs([])
+    setNotes('')
     setDocBytes(null)
     setOcrFields([])
-    setActionError(null)
+    setSubmitError(null)
   }
 
-  const selectAction = (type: ActionType) => {
-    setActionType(prev => prev === type ? null : type)
-    setComments('')
-    setMissingDocs([])
-    setActionError(null)
-  }
-
-  const toggleMissingDoc = (doc: string) =>
-    setMissingDocs(prev => prev.includes(doc) ? prev.filter(d => d !== doc) : [...prev, doc])
-
-  const addCustomDoc = () => {
-    if (customDoc.trim() && !missingDocs.includes(customDoc.trim())) {
-      setMissingDocs(prev => [...prev, customDoc.trim()])
-      setCustomDoc('')
-    }
-  }
-
-  const handleSubmit = async () => {
-    if (!selectedClaim || !actionType) return
+  const handleForward = async () => {
+    if (!selectedClaim) return
     setSubmitting(true)
-    setActionError(null)
+    setSubmitError(null)
     try {
-      const endpoints: Record<string, string> = {
-        approve:         '/workflow/checker/approve',
-        reject:          '/workflow/checker/reject',
-        return_maker:    '/workflow/checker/return',
-        return_provider: '/workflow/checker/return-to-provider',
-        escalate_fraud:  `/claims/${selectedClaim.id}/fraud/escalate`,
-      }
-      const bodies: Record<string, object> = {
-        approve:         { claimId: selectedClaim.id, comments },
-        reject:          { claimId: selectedClaim.id, reason: comments },
-        return_maker:    { claimId: selectedClaim.id, reason: comments },
-        return_provider: { claimId: selectedClaim.id, reason: comments, missingDocuments: missingDocs },
-        escalate_fraud:  { reason: comments },
-      }
-      await api.post(endpoints[actionType], bodies[actionType])
+      await api.post('/workflow/checker/approve', { claimId: selectedClaim.id, comments: notes })
       setClaims(prev => prev.filter(c => c.id !== selectedClaim.id))
       closeClaim()
     } catch (err: any) {
       const d = err?.response?.data
-      setActionError(
+      setSubmitError(
         err?.response?.status === 403
           ? `Not authorised: ${d?.message || err?.message}`
           : d?.message || d?.error || err?.message || 'Network error — please try again',
@@ -314,18 +184,15 @@ export default function CheckerQueue() {
     totalValue: claims.reduce((s, c) => s + c.invoiceAmount, 0),
   }
 
-  const cfg       = actionType ? ACTION_CONFIG[actionType] : null
-  const canSubmit = actionType && (!ACTION_CONFIG[actionType].required || comments.trim().length > 0) && !submitting
   const activeDoc = selectedClaim?.documents[activeDocIdx]
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Maker-Checker Queue</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
-            Verify and QA invoices before forwarding to the claims officer
+            Verify invoice data and documents, then forward to the Claims Officer
           </p>
         </div>
         <Badge variant="outline" className="text-base px-4 py-2 gap-2">
@@ -333,24 +200,20 @@ export default function CheckerQueue() {
         </Badge>
       </div>
 
-      {/* Stats */}
       <div className="grid gap-4 md:grid-cols-4">
         {[
-          { icon: FileText,    color: 'text-blue-500',    label: 'Pending Review',    value: stats.total },
-          { icon: DollarSign,  color: 'text-amber-500',   label: 'High Value (>100K)', value: stats.highValue },
-          { icon: Clock,       color: 'text-red-500',     label: 'Urgent',            value: stats.urgent },
-          { icon: DollarSign,  color: 'text-emerald-500', label: 'Total Value',       value: formatCurrency(stats.totalValue) },
+          { icon: FileText,   color: 'text-blue-500',    label: 'Pending Review',    value: stats.total },
+          { icon: DollarSign, color: 'text-amber-500',   label: 'High Value (>100K)', value: stats.highValue },
+          { icon: Clock,      color: 'text-red-500',     label: 'Urgent',            value: stats.urgent },
+          { icon: DollarSign, color: 'text-emerald-500', label: 'Total Value',       value: formatCurrency(stats.totalValue) },
         ].map(({ icon: Icon, color, label, value }) => (
-          <Card key={label}>
-            <CardContent className="p-4 flex items-center gap-3">
-              <Icon className={`h-8 w-8 opacity-70 ${color}`} />
-              <div><p className="text-sm text-muted-foreground">{label}</p><p className="text-2xl font-bold">{value}</p></div>
-            </CardContent>
-          </Card>
+          <Card key={label}><CardContent className="p-4 flex items-center gap-3">
+            <Icon className={`h-8 w-8 opacity-70 ${color}`} />
+            <div><p className="text-sm text-muted-foreground">{label}</p><p className="text-2xl font-bold">{value}</p></div>
+          </CardContent></Card>
         ))}
       </div>
 
-      {/* Queue table */}
       <Card>
         <CardContent className="p-4">
           <div className="flex items-center gap-3 mb-4">
@@ -417,9 +280,7 @@ export default function CheckerQueue() {
                               setBulkSelected(prev => { const n = new Set(prev); if (checked) n.add(claim.id); else n.delete(claim.id); return n })
                             }} />
                         </TableCell>
-                        <TableCell className="font-mono text-xs font-semibold text-primary">
-                          {claim.claimNumber}
-                        </TableCell>
+                        <TableCell className="font-mono text-xs font-semibold text-primary">{claim.claimNumber}</TableCell>
                         <TableCell>
                           <p className="font-medium leading-tight">{claim.memberName}</p>
                           {claim.memberNumber && <p className="text-[10px] text-muted-foreground mt-0.5">{claim.memberNumber}</p>}
@@ -435,16 +296,8 @@ export default function CheckerQueue() {
                         <TableCell>
                           {claim.fraudSignals.length > 0 ? (
                             <div className="flex items-center gap-1">
-                              {critCount > 0 && (
-                                <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-400">
-                                  <AlertTriangle className="h-3 w-3" />{critCount}
-                                </span>
-                              )}
-                              {warnCount > 0 && (
-                                <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-400">
-                                  <AlertTriangle className="h-3 w-3" />{warnCount}
-                                </span>
-                              )}
+                              {critCount > 0 && <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-400"><AlertTriangle className="h-3 w-3" />{critCount}</span>}
+                              {warnCount > 0 && <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-400"><AlertTriangle className="h-3 w-3" />{warnCount}</span>}
                             </div>
                           ) : <span className="text-[10px] text-muted-foreground">—</span>}
                         </TableCell>
@@ -462,110 +315,74 @@ export default function CheckerQueue() {
         </CardContent>
       </Card>
 
-      {/* ── Claim Review Panel ── */}
+      {/* ── Invoice Review Panel ── */}
       <Dialog open={open} onOpenChange={() => closeClaim()}>
         <DialogContent hideClose className="max-w-[min(1500px,98vw)] w-[min(1500px,98vw)] h-[96vh] p-0 gap-0 overflow-hidden flex flex-col rounded-xl">
           {selectedClaim && (
             <>
-              {/* ── Panel header ── */}
+              {/* Header */}
               <div className="flex items-center justify-between px-5 py-3 border-b bg-gradient-to-r from-background to-muted/30 shrink-0">
                 <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <span className="font-mono text-base font-black tracking-tight text-primary shrink-0">
-                    {selectedClaim.claimNumber}
-                  </span>
+                  <span className="font-mono text-base font-black tracking-tight text-primary shrink-0">{selectedClaim.claimNumber}</span>
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <Badge className={getPriorityColor(selectedClaim.priority)} variant="secondary">
-                      {selectedClaim.priority}
-                    </Badge>
+                    <Badge className={getPriorityColor(selectedClaim.priority)} variant="secondary">{selectedClaim.priority}</Badge>
                     {selectedClaim.invoiceAmount > 100000 && (
-                      <Badge variant="outline" className="text-amber-400 border-amber-500/40 text-[10px] font-semibold">
-                        High value
-                      </Badge>
+                      <Badge variant="outline" className="text-amber-400 border-amber-500/40 text-[10px] font-semibold">High value</Badge>
                     )}
                     {selectedClaim.fraudSignals.filter(s => s.level === 'critical').length > 0 && (
                       <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/20 border border-red-500/40 text-red-400">
-                        <ShieldAlert className="h-3 w-3" />
-                        {selectedClaim.fraudSignals.filter(s => s.level === 'critical').length} Critical
+                        <ShieldAlert className="h-3 w-3" />{selectedClaim.fraudSignals.filter(s => s.level === 'critical').length} Critical
                       </span>
                     )}
                   </div>
                   <span className="text-muted-foreground text-sm hidden lg:block truncate">
-                    {selectedClaim.memberName}
-                    {selectedClaim.memberNumber ? ` · ${selectedClaim.memberNumber}` : ''}
-                    {' '}· {selectedClaim.provider?.name}
+                    {selectedClaim.memberName}{selectedClaim.memberNumber ? ` · ${selectedClaim.memberNumber}` : ''} · {selectedClaim.provider?.name}
                   </span>
                 </div>
                 <div className="flex items-center gap-3 ml-4 shrink-0">
-                  <span className="font-bold text-base text-emerald-500 tabular-nums">
-                    {formatCurrency(selectedClaim.invoiceAmount)}
-                  </span>
-                  <button
-                    onClick={closeClaim}
-                    className="rounded-lg p-1.5 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors border border-transparent hover:border-border"
-                  >
+                  <span className="font-bold text-base text-emerald-500 tabular-nums">{formatCurrency(selectedClaim.invoiceAmount)}</span>
+                  <button onClick={closeClaim} className="rounded-lg p-1.5 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors border border-transparent hover:border-border">
                     <X className="h-4 w-4" />
                   </button>
                 </div>
               </div>
 
-              {/* ── Panel body ── */}
+              {/* Body */}
               <div className="flex-1 min-h-0 grid grid-cols-[1fr_360px] overflow-hidden">
 
-                {/* LEFT — Document viewer (dark) */}
+                {/* LEFT — Document viewer */}
                 <div className="min-h-0 flex flex-col bg-[#111] border-r border-white/10">
                   {selectedClaim.documents.length > 1 && (
                     <div className="flex items-center gap-1 px-3 py-1.5 border-b border-white/8 bg-[#0a0a0a] shrink-0 overflow-x-auto">
                       {selectedClaim.documents.map((doc, i) => (
                         <button key={doc.id || i} onClick={() => setActiveDocIdx(i)}
                           className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium whitespace-nowrap transition-all ${
-                            i === activeDocIdx
-                              ? 'bg-white/12 text-white border border-white/15'
-                              : 'text-white/40 hover:bg-white/6 hover:text-white/70'
+                            i === activeDocIdx ? 'bg-white/12 text-white border border-white/15' : 'text-white/40 hover:bg-white/6 hover:text-white/70'
                           }`}>
                           <FileText className="h-3 w-3 shrink-0" />
                           <span className="max-w-[200px] truncate">{doc.name}</span>
-                          {doc.documentType && (
-                            <span className="text-[9px] px-1 py-0.5 rounded bg-white/8 text-white/50">
-                              {doc.documentType.replace(/_/g, ' ')}
-                            </span>
-                          )}
+                          {doc.documentType && <span className="text-[9px] px-1 py-0.5 rounded bg-white/8 text-white/50">{doc.documentType.replace(/_/g, ' ')}</span>}
                         </button>
                       ))}
                     </div>
                   )}
                   <div className="flex-1 min-h-0">
                     {selectedClaim.documents.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center h-full gap-3 text-white/30">
-                        <FileText className="h-14 w-14" />
-                        <p className="text-sm font-medium">No documents attached</p>
-                      </div>
+                      <div className="flex flex-col items-center justify-center h-full gap-3 text-white/30"><FileText className="h-14 w-14" /><p className="text-sm font-medium">No documents attached</p></div>
                     ) : docLoading ? (
-                      <div className="flex flex-col items-center justify-center h-full gap-3 text-white/40">
-                        <Loader2 className="h-6 w-6 animate-spin" />
-                        <p className="text-sm">Loading {activeDoc?.name}…</p>
-                      </div>
+                      <div className="flex flex-col items-center justify-center h-full gap-3 text-white/40"><Loader2 className="h-6 w-6 animate-spin" /><p className="text-sm">Loading {activeDoc?.name}…</p></div>
                     ) : docBytes ? (
-                      <InlinePdfViewer
-                        key={`${selectedClaim.id}-${activeDocIdx}`}
-                        bytes={docBytes}
-                        url={null}
-                        claimId={selectedClaim.id}
-                        annotations={ocrFields}
-                        fraudSignalCount={selectedClaim.fraudSignals.length}
-                      />
+                      <InlinePdfViewer key={`${selectedClaim.id}-${activeDocIdx}`} bytes={docBytes} url={null} claimId={selectedClaim.id} annotations={ocrFields} fraudSignalCount={selectedClaim.fraudSignals.length} />
                     ) : (
-                      <div className="flex flex-col items-center justify-center h-full gap-3 text-white/30">
-                        <AlertTriangle className="h-10 w-10" />
-                        <p className="text-sm font-medium">Could not load preview</p>
-                      </div>
+                      <div className="flex flex-col items-center justify-center h-full gap-3 text-white/30"><AlertTriangle className="h-10 w-10" /><p className="text-sm font-medium">Could not load preview</p></div>
                     )}
                   </div>
                 </div>
 
-                {/* RIGHT — Details + signals + actions */}
+                {/* RIGHT — Details + forward action */}
                 <div className="min-h-0 overflow-y-auto flex flex-col bg-background">
 
-                  {/* Metadata strip */}
+                  {/* Metadata */}
                   <div className="px-4 pt-4 pb-3 grid grid-cols-2 gap-x-4 gap-y-3 border-b">
                     {[
                       { icon: Hash,       label: 'Claim #',   value: selectedClaim.claimNumber, className: 'font-mono text-xs font-semibold text-primary' },
@@ -576,19 +393,14 @@ export default function CheckerQueue() {
                       { icon: FileText,   label: 'Documents', value: `${selectedClaim.documents.length} attached`, className: 'text-sm text-muted-foreground' },
                     ].map(({ icon: Icon, label, value, className }) => (
                       <div key={label}>
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <Icon className="h-3 w-3 text-muted-foreground/60 shrink-0" />
-                          <span className="text-[9px] font-bold text-muted-foreground/60 uppercase tracking-widest">{label}</span>
-                        </div>
+                        <div className="flex items-center gap-1.5 mb-0.5"><Icon className="h-3 w-3 text-muted-foreground/60 shrink-0" /><span className="text-[9px] font-bold text-muted-foreground/60 uppercase tracking-widest">{label}</span></div>
                         <p className={`leading-snug truncate ${className}`}>{value}</p>
                       </div>
                     ))}
                   </div>
 
-                  {/* Scrollable content */}
+                  {/* Fraud signals */}
                   <div className="flex-1 px-4 py-3 space-y-3">
-
-                    {/* Fraud signals */}
                     {selectedClaim.fraudSignals.length > 0 && (
                       <div>
                         <div className="flex items-center gap-2 mb-2">
@@ -605,13 +417,8 @@ export default function CheckerQueue() {
                               <div key={i} className={`rounded-lg border p-3 ${s.bg}`}>
                                 <div className="flex items-center gap-2 mb-1">
                                   <span className={`inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider rounded px-1.5 py-0.5 ${
-                                    sig.level === 'critical' ? 'bg-red-500/30 text-red-300' :
-                                    sig.level === 'warning'  ? 'bg-amber-500/30 text-amber-300' :
-                                    'bg-blue-500/30 text-blue-300'
-                                  }`}>
-                                    <AlertTriangle className="h-2.5 w-2.5" />
-                                    {s.label}
-                                  </span>
+                                    sig.level === 'critical' ? 'bg-red-500/30 text-red-300' : sig.level === 'warning' ? 'bg-amber-500/30 text-amber-300' : 'bg-blue-500/30 text-blue-300'
+                                  }`}><AlertTriangle className="h-2.5 w-2.5" />{s.label}</span>
                                   <span className={`text-xs font-semibold ${s.text}`}>{sig.title}</span>
                                 </div>
                                 <p className={`text-[11px] leading-relaxed ${s.text} opacity-75`}>{sig.detail}</p>
@@ -621,125 +428,40 @@ export default function CheckerQueue() {
                         </div>
                       </div>
                     )}
-
-                    {/* Maker notes */}
-                    {selectedClaim.makerComments && (
-                      <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
-                        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5">
-                          Prior notes{selectedClaim.makerApprovedBy ? ` — ${selectedClaim.makerApprovedBy}` : ''}
-                          {selectedClaim.makerApprovedAt ? ` · ${formatDate(selectedClaim.makerApprovedAt)}` : ''}
-                        </p>
-                        <p className="text-sm leading-relaxed">{selectedClaim.makerComments}</p>
-                      </div>
-                    )}
-
-                    {/* Action form */}
-                    {actionType && cfg && (
-                      <div className="space-y-3 animate-in fade-in slide-in-from-bottom-1 duration-150">
-                        <div className="flex items-center gap-2">
-                          <div className="h-px flex-1 bg-border" />
-                          <span className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase px-1">{cfg.notesLabel}</span>
-                          <div className="h-px flex-1 bg-border" />
-                        </div>
-
-                        {actionType === 'return_provider' && (
-                          <div className="space-y-2">
-                            <div className="grid grid-cols-2 gap-1 max-h-36 overflow-y-auto rounded-lg border bg-muted/10 p-1.5">
-                              {MISSING_DOC_OPTIONS.map(doc => (
-                                <button key={doc} onClick={() => toggleMissingDoc(doc)}
-                                  className={`text-left text-[10px] rounded-md px-2 py-1.5 transition-all ${
-                                    missingDocs.includes(doc)
-                                      ? 'bg-amber-500/25 text-amber-300 font-medium'
-                                      : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
-                                  }`}>
-                                  {missingDocs.includes(doc) ? '✓ ' : ''}{doc}
-                                </button>
-                              ))}
-                            </div>
-                            <div className="flex gap-1.5">
-                              <Input placeholder="Other document…" value={customDoc}
-                                onChange={e => setCustomDoc(e.target.value)}
-                                onKeyDown={e => e.key === 'Enter' && addCustomDoc()}
-                                className="h-7 text-xs flex-1" />
-                              <Button size="sm" variant="outline" onClick={addCustomDoc} disabled={!customDoc.trim()} className="h-7 px-2">
-                                <Plus className="h-3 w-3" />
-                              </Button>
-                            </div>
-                            {missingDocs.length > 0 && (
-                              <div className="flex flex-wrap gap-1">
-                                {missingDocs.map(d => (
-                                  <Badge key={d} variant="secondary" className="gap-1 text-[9px] pr-1">
-                                    {d}
-                                    <button onClick={() => setMissingDocs(prev => prev.filter(x => x !== d))}>
-                                      <Trash2 className="h-2.5 w-2.5" />
-                                    </button>
-                                  </Badge>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        <Textarea placeholder={cfg.notesPlaceholder} value={comments}
-                          onChange={e => setComments(e.target.value.slice(0, 2000))}
-                          rows={4} className="resize-none text-xs" />
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="flex items-start gap-1.5 text-[10px] text-muted-foreground flex-1">
-                            <Mail className="h-3 w-3 mt-0.5 shrink-0" />{cfg.notesHint}
-                          </p>
-                          <span className={`text-[10px] tabular-nums shrink-0 ${comments.length > 1800 ? 'text-amber-400' : 'text-muted-foreground'}`}>
-                            {comments.length}/2000
-                          </span>
-                        </div>
-
-                        {actionError && (
-                          <div className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 text-red-400 px-3 py-2 text-xs">
-                            <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />{actionError}
-                          </div>
-                        )}
-                      </div>
-                    )}
                   </div>
 
-                  {/* ── Action bar ── */}
-                  <div className="shrink-0 border-t bg-muted/20 p-3 space-y-2">
-                    {/* Action picker */}
-                    <div className="grid grid-cols-5 gap-1.5">
-                      {(Object.keys(ACTION_CONFIG) as (keyof typeof ACTION_CONFIG)[]).map(type => {
-                        const { shortLabel, icon: Icon, activeClass, idleClass } = ACTION_CONFIG[type]
-                        const isActive = actionType === type
-                        return (
-                          <button key={type} onClick={() => selectAction(type)}
-                            className={`flex flex-col items-center gap-1.5 rounded-xl py-2.5 px-1 text-center transition-all text-[10px] leading-tight font-semibold ${isActive ? activeClass : idleClass}`}>
-                            <Icon className="h-4.5 w-4.5 shrink-0" style={{ width: '1.125rem', height: '1.125rem' }} />
-                            <span className="leading-none">{shortLabel}</span>
-                          </button>
-                        )
-                      })}
+                  {/* Verification / forward section */}
+                  <div className="shrink-0 border-t bg-muted/20 p-4 space-y-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Verification Notes</span>
+                      <span className="text-[9px] border border-border rounded px-1 text-muted-foreground">optional</span>
                     </div>
-
-                    {/* Submit / close */}
+                    <Textarea
+                      placeholder="Summarise your QA checks — confirmed amounts, document quality, member identity, cross-references…"
+                      value={notes}
+                      onChange={e => setNotes(e.target.value.slice(0, 2000))}
+                      rows={3}
+                      className="resize-none text-xs"
+                    />
+                    {submitError && (
+                      <div className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 text-red-400 px-3 py-2 text-xs">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />{submitError}
+                      </div>
+                    )}
                     <div className="flex gap-2">
-                      {actionType ? (
-                        <>
-                          <Button variant="ghost" size="sm" className="flex-none text-muted-foreground" onClick={() => selectAction(null)}>
-                            Cancel
-                          </Button>
-                          <Button size="sm" className={`flex-1 font-semibold ${cfg?.btnClass ?? ''}`} onClick={handleSubmit} disabled={!canSubmit}>
-                            {submitting && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-                            {cfg && !submitting && <cfg.icon className="mr-2 h-3.5 w-3.5" />}
-                            {actionType === 'approve'         && 'Approve → Claims Officer'}
-                            {actionType === 'reject'          && 'Reject Claim'}
-                            {actionType === 'return_maker'    && 'Return for Revision'}
-                            {actionType === 'return_provider' && `Return to Provider${missingDocs.length > 0 ? ` (${missingDocs.length})` : ''}`}
-                            {actionType === 'escalate_fraud'  && 'Escalate to Fraud Team'}
-                          </Button>
-                        </>
-                      ) : (
-                        <Button variant="outline" size="sm" className="w-full font-medium" onClick={closeClaim}>
-                          <X className="mr-2 h-3.5 w-3.5" /> Close
-                        </Button>
-                      )}
+                      <Button variant="outline" size="sm" className="flex-none" onClick={closeClaim}>Close</Button>
+                      <Button
+                        size="sm"
+                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                        onClick={handleForward}
+                        disabled={submitting}
+                      >
+                        {submitting
+                          ? <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />Forwarding…</>
+                          : <><CheckCircle className="mr-2 h-3.5 w-3.5" />Forward to Claims Officer</>
+                        }
+                      </Button>
                     </div>
                   </div>
                 </div>
