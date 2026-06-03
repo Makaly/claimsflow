@@ -10,6 +10,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 
 ### Added
 
+- **Checker Queue — inline OCR field editor, zone capture, and document audit
+  trail** (`src/pages/CheckerQueue.tsx`, `src/components/InlinePdfViewer.tsx`)
+  — all nine standard OCR fields are now shown in the detail panel regardless
+  of extraction success; each field is editable inline (text / number / date
+  input) and saves to the backend via `PATCH /claims/:id/ocr-corrections`.
+  Confidence score badges and anomaly/missing indicators guide the maker-checker
+  to fields that need attention. A "📷 OCR" button per field launches zone
+  capture: drag a rectangle over the embedded PDF, Tesseract reads it, and the
+  result auto-fills the editor. Per-field correction history expands below each
+  field showing who changed it, when, and the old → new values. The Document
+  Indexing section gains an indexing-notes textarea (auto-saves on blur) and a
+  collapsible audit trail with actor, timestamp, and field-level diffs.
+  `InlinePdfViewer` gains a `zoneMode` prop with drag-to-capture rectangle,
+  canvas crop + upscale, `/ocr/zone-text` round-trip, Esc-to-cancel, and a
+  status banner.
+
 - **Scan metering hook and Batch Upload UI gate** — new
   `hooks/useScanMetering` calls `GET /scan-metering/check` on mount and
   exposes `enabled`, `costPerScan`, `currency`, and a `recordScan(meta)`
