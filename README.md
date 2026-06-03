@@ -198,8 +198,20 @@ The backend reads configuration from `.env`. See [backend/.env.example](backend/
 | `OLLAMA_URL`          | Local Ollama server (optional)                                      |
 | `DATA_ENCRYPTION_KEY` | 32-byte hex key for AES-256-GCM field encryption (GDPR Art. 9). Generate with `openssl rand -hex 32` and store in the deployment secret store — **never commit this value**. |
 | `ML_SIDECAR_URL`      | Base URL of the Python ML scoring sidecar (e.g. `http://localhost:8000`). If unset, the backend falls back to a built-in heuristic scorer. |
+| `STORAGE_BACKEND` + `S3_*` | Document storage backend. Defaults to `local` (filesystem). **Set `STORAGE_BACKEND=s3` plus the four `S3_*` keys in any deployment with a non-persistent disk** — see the warning below. Works with AWS S3, Cloudflare R2 and Backblaze B2. |
 
 > **Never commit `.env`.** Rotate API keys immediately if exposed. See [SECURITY.md](SECURITY.md).
+>
+> **⚠️ Production storage:** the default `STORAGE_BACKEND=local` writes uploaded
+> documents to the local filesystem. On platforms with an ephemeral disk
+> (Render, Heroku, most container hosts), that disk is wiped on every
+> deploy/restart — the Postgres `Document` rows survive but the files behind
+> them are lost, and `/download` and `/preview` then return **404 "File not
+> found on disk"**. Any deployment without a guaranteed-persistent disk **must**
+> set `STORAGE_BACKEND=s3` and the `S3_*` keys so documents are persisted to
+> object storage. Confirm it is live after deploy with
+> `GET /api/health/storage` — expect `{"enabled":true,"backend":"s3","ok":true}`.
+> Documents uploaded while on `local` are not migrated and remain unrecoverable.
 
 ---
 

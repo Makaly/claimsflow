@@ -8,6 +8,7 @@ import { OcrService } from '../ocr/ocr.service';
 import { StorageService } from '../common/services/storage.service';
 import { EmailService } from '../notifications/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { MakerCheckerService } from '../workflow/maker-checker.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import { AUTO_DETECT_PROVIDER_NAME } from '../common/constants/auto-detect-provider';
@@ -24,6 +25,7 @@ export class BatchSubmissionService {
     private emailService: EmailService,
     private storage: StorageService,
     private notifications: NotificationsService,
+    private makerChecker: MakerCheckerService,
     @InjectQueue('batch-processing') private batchQueue: Queue,
   ) {}
 
@@ -317,6 +319,17 @@ export class BatchSubmissionService {
           // Non-fatal — the document still serves from the local copy this session.
           console.warn(`Object-storage upload failed for document ${doc.id}: ${(e as Error)?.message}`);
         }
+      }
+
+      // Auto-assign to the least-loaded maker-checker right away so the claim
+      // lands in a checker's own queue the moment the batch is published. OCR
+      // above already ran, so a critical fraud signal will have moved the claim
+      // to fraud_review — autoAssignFreshClaim respects that and skips it.
+      // Best-effort: assignment must never fail the published claim.
+      try {
+        await this.makerChecker.autoAssignFreshClaim(claim.id, batch.uploadedBy ?? undefined);
+      } catch (e) {
+        console.warn(`Auto-assign on publish failed for claim ${claim.id}: ${(e as Error)?.message}`);
       }
 
       return claim;

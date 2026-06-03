@@ -108,6 +108,8 @@ model User {
   tenant                  Tenant?                  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   casesOwned              Case[]                   @relation("CaseOwner")
   caseComments            CaseComment[]            @relation("CaseCommentAuthor")
+  providerRulesAsMaker    ProviderAssignmentRule[] @relation("ProviderRuleMaker")
+  providerRulesAsOfficer  ProviderAssignmentRule[] @relation("ProviderRuleOfficer")
 
   @@index([providerId])
   @@index([email])
@@ -321,12 +323,34 @@ model Provider {
   scanPacingAlerts       ScanPacingAlert[]
   tenantId               String?
   tenant                 Tenant?                      @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  assignmentRule         ProviderAssignmentRule?
 
   @@index([status])
   @@index([type])
   @@index([licenseNumber])
   @@index([tenantId])
   @@map("providers")
+}
+
+/// Admin-configurable per-provider reviewer pins. When a provider has a rule,
+/// the auto-assignment resolver routes that provider's claims to the named
+/// maker-checker / claims-officer (falling back to their reliever, then the
+/// global default strategy). Absence of a row means "use the global strategy".
+model ProviderAssignmentRule {
+  id              String   @id @default(uuid())
+  providerId      String   @unique
+  provider        Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  makerCheckerId  String?
+  makerChecker    User?    @relation("ProviderRuleMaker", fields: [makerCheckerId], references: [id], onDelete: SetNull)
+  claimsOfficerId String?
+  claimsOfficer   User?    @relation("ProviderRuleOfficer", fields: [claimsOfficerId], references: [id], onDelete: SetNull)
+  updatedBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([makerCheckerId])
+  @@index([claimsOfficerId])
+  @@map("provider_assignment_rules")
 }
 
 /// Documents a provider uploads during onboarding to satisfy the procurement

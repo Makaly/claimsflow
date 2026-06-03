@@ -9,6 +9,28 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **Admin-configurable dynamic claim auto-assignment, extended to the
+  claims-officer stage** (`backend/src/assignment/`,
+  `backend/src/claims/claims.service.ts`,
+  `backend/src/workflow/maker-checker.service.ts`,
+  `backend/src/workflow/workflow.service.ts`,
+  `frontend/src/pages/AssignmentRules.tsx`) — a single shared
+  `AssignmentResolverService` now decides every reviewer assignment with the
+  order **provider pin → pinned person's reliever (if on leave) → global
+  default strategy → none**, and only ever picks an *available* reviewer
+  (`isActive && !isOnLeave`). (1) After maker-checker approval, claims now
+  auto-assign to a specific `claims_officer` instead of `assignedTo: null`, and
+  the claims-officer queue is scoped per-assignee on `claims_officer_review`
+  (admins still see all). (2) Admins can pin a dedicated maker-checker and/or
+  claims-officer per provider via a new `ProviderAssignmentRule` table and the
+  new **Assignment Rules** admin page (`/assignment-rules`), and choose the
+  global default strategy — `workload` (least-loaded) or `fifo` (round-robin) —
+  stored in `SystemConfig['assignment_default_strategy']`. (3) The
+  `reroute-orphans` sweep (boot + 5-minute cron) now also rescues unassigned or
+  stranded claims at the claims-officer stage and routes everything through the
+  resolver, so pins and relievers are honoured on reroute exactly as on
+  upload/approval. Migration: `add_provider_assignment_rules`.
+
 - **Landing page redesign — Enterprise Gateway with light/dark theming**
   (`frontend/src/pages/Landing.tsx`, `frontend/src/pages/landing/`,
   `frontend/index.html`, `frontend/tailwind.config.js`) — the public marketing
@@ -248,6 +270,45 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   verification flow so local and staging logins work without an inbox. (PR #61)
 
 ### Fixed
+
+- **Maker-checker queue now shows each checker only their own assigned invoices,
+  with reliable auto-assignment** (`backend/src/claims/claims.service.ts`,
+  `backend/src/workflow/workflow.service.ts`,
+  `backend/src/workflow/maker-checker.service.ts`,
+  `frontend/src/pages/CheckerQueue.tsx`) — three linked fixes. (1)
+  `autoAssignToMaker` routed uploaded claims into the `maker_checker_review`
+  stage but assigned them to a **`claims_officer`**, not a `maker_checker` — the
+  role that actually owns that stage; it now picks the least-loaded active
+  `maker_checker`. (2) `getClaimsByStage` previously showed every checker the
+  full shared pool for the stage; for the `maker_checker` role it now scopes to
+  claims assigned to the caller (`assignedTo = self`), so each checker sees only
+  their own work (an explicit `?assignedTo=` still overrides for supervisors).
+  (3) Because an unassigned claim would now be invisible to everyone, the
+  `reroute-orphans` sweep was extended to also pick up claims left unassigned in
+  `maker_checker_review` (not just `initial_review`), and `CheckerQueue` now
+  triggers the sweep on load for parity with `MakerQueue` — guaranteeing any
+  claim that wasn't auto-assigned on upload gets assigned before the queue
+  renders. (4) The file-first batch path (`processClaimFile`) previously created
+  claims at `initial_review` with no owner and relied entirely on the sweep; it
+  now assigns immediately at publish time via a new reusable
+  `MakerCheckerService.autoAssignFreshClaim` (least-loaded active
+  `maker_checker`, skips claims already in fraud review), so batch-published
+  invoices appear in a checker's queue the moment they're published rather than
+  on the next queue load.
+
+- **Document `/download` and `/preview` returning 404 "File not found on disk"
+  in production** (`README.md`, `backend/.env.example`) — diagnosed: the
+  deployed backend was running on `STORAGE_BACKEND=local`
+  (`GET /api/health/storage` → `{"enabled":false,"backend":"local"}`), so
+  uploaded documents were written to Render's ephemeral local disk and wiped on
+  every deploy/spin-down. The Postgres `Document` rows survived but the files
+  did not, so `getFileStream` threw `NotFoundException('File not found on
+  disk')` while the document metadata still rendered. No code change was needed
+  (the `StorageService` S3/R2/B2 path already existed) — this documents that any
+  deployment without a persistent disk **must** set `STORAGE_BACKEND=s3` and the
+  `S3_*` keys, with a prominent production-storage warning added to the README
+  and a verification step via `GET /api/health/storage`. Documents uploaded
+  while on `local` are not migrated and remain unrecoverable.
 
 - **Provider shown as "Unknown" on OCR batch uploads**
   (`backend/src/ocr/ocr.processor.ts`, `backend/src/common/services/

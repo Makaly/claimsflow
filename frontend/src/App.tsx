@@ -29,6 +29,7 @@ const Roles                 = lazy(() => import('@/pages/Roles'))
 const Permissions           = lazy(() => import('@/pages/Permissions'))
 const Settings              = lazy(() => import('@/pages/Settings'))
 const SystemConfigPage      = lazy(() => import('@/pages/SystemConfigPage'))
+const AssignmentRules       = lazy(() => import('@/pages/AssignmentRules'))
 const DocumentClassifierEditor = lazy(() => import('@/pages/DocumentClassifierEditor'))
 const UnknownDocuments      = lazy(() => import('@/pages/UnknownDocuments'))
 const UnknownDocumentReview = lazy(() => import('@/pages/UnknownDocumentReview'))
@@ -205,6 +206,7 @@ function AppRoutes() {
         <Route path="/appeals" element={<ProtectedRoute><Appeals /></ProtectedRoute>} />
         <Route path="/payment" element={<ProtectedRoute allowedRoles={['admin','finance','claims_officer']}><Payment /></ProtectedRoute>} />
         <Route path="/system-config" element={<ProtectedRoute allowedRoles={['admin']}><SystemConfigPage /></ProtectedRoute>} />
+        <Route path="/assignment-rules" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><AssignmentRules /></ProtectedRoute>} />
         <Route path="/workflow/aging" element={<ProtectedRoute allowedRoles={CIC_STAFF}><AgingDashboard /></ProtectedRoute>} />
         <Route path="/provider-scorecard" element={<ProtectedRoute allowedRoles={['admin','claims_officer']}><ProviderScorecard /></ProtectedRoute>} />
         <Route path="/pre-auth" element={<ProtectedRoute><PreAuth /></ProtectedRoute>} />

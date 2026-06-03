@@ -14,6 +14,7 @@ import { AnomalyScoringService } from './anomaly-scoring.service';
 import { ClaimLabelsService } from './claim-labels.service';
 import { MlScoringService } from './ml-scoring.service';
 import { ClaimTypeConfigService } from './claim-type-config.service';
+import { AssignmentResolverService } from '../assignment/assignment-resolver.service';
 
 @Injectable()
 export class ClaimsService {
@@ -29,6 +30,7 @@ export class ClaimsService {
     private mlScoringService: MlScoringService,
     private claimTypeConfigService: ClaimTypeConfigService,
     private providerResolver: ProviderResolverService,
+    private assignmentResolver: AssignmentResolverService,
   ) {}
 
   /** Normalise a provider name for alias matching: lowercase, strip punctuation, collapse spaces. */
@@ -309,9 +311,9 @@ export class ClaimsService {
           },
           metadata: { source: 'claims.service.create' },
         });
-        // Auto-route to the least-loaded claims officer so uploads land in the
-        // Maker Queue immediately. Best-effort — if no officer is available
-        // the claim stays at initial_review for manual triage.
+        // Auto-route to the least-loaded maker_checker so uploads land in that
+        // checker's own queue immediately. Best-effort — if none is available
+        // the claim stays at initial_review for the reroute sweep to pick up.
         // Auto-assignment is best-effort: a DB hiccup here must not fail the
         // response after the claim row is already committed.
         let routed = null;
@@ -937,33 +939,35 @@ export class ClaimsService {
   }
 
   /**
-   * Pick the active claims_officer with the fewest open assignments and route
+   * Pick the active maker_checker with the fewest open assignments and route
    * the claim to them. Moves the claim to maker_checker_review so it shows up
-   * in the Maker-Checker Queue immediately after upload. Writes a status-history row plus an
-   * audit entry attributing the auto-assignment.
+   * in that maker-checker's own queue immediately after upload. Writes a
+   * status-history row plus an audit entry attributing the auto-assignment.
    *
-   * Safe to call from any upload path — if no officer is available, the claim
-   * is left at initial_review and null is returned.
+   * The maker_checker role owns the maker_checker_review stage, so the claim
+   * must be assigned to one of them (not a claims_officer) — otherwise the
+   * per-assignee queue filter would never surface it to any checker.
+   *
+   * Safe to call from any upload path — if no maker_checker is available, the
+   * claim is dropped into the shared maker_checker_review pool (unassigned) and
+   * null is returned; the reroute-orphans sweep will pick it up later.
    */
   private async autoAssignToMaker(claimId: string, actor?: AuditActor) {
-    const officers = await this.prisma.user.findMany({
-      where: { role: 'claims_officer', isActive: true },
-      select: {
-        id: true,
-        name: true,
-        _count: {
-          select: {
-            // Count only open work — claims still awaiting the officer's action.
-            claimsAssigned: { where: { status: { in: ['submitted', 'under_review', 'resubmitted'] } } },
-          },
-        },
-      },
+    const before = await this.prisma.claim.findUnique({
+      where: { id: claimId },
+      select: { status: true, workflowStage: true, assignedTo: true, providerId: true },
     });
-    if (officers.length === 0) {
-      // No maker/claims-officer to route to. In the provider-first flow the
-      // claim is already fully indexed at upload, so drop it straight into the
-      // shared maker_checker_review pool (unassigned) rather than stranding it
-      // at initial_review — otherwise it never surfaces in any checker queue.
+    if (!before) return null;
+
+    // The resolver honours per-provider pins → reliever → global strategy, and
+    // only ever returns an available (active, not on leave) maker_checker.
+    const { userId } = await this.assignmentResolver.resolveAssignee('maker_checker', before.providerId);
+
+    if (!userId) {
+      // No available checker to route to. In the provider-first flow the claim
+      // is already fully indexed at upload, so drop it straight into the shared
+      // maker_checker_review pool (unassigned) rather than stranding it at
+      // initial_review — the reroute sweep assigns it once someone is available.
       await this.prisma.claim.update({
         where: { id: claimId },
         data: { workflowStage: 'maker_checker_review' },
@@ -971,16 +975,12 @@ export class ClaimsService {
       return null;
     }
 
-    officers.sort((a, b) => a._count.claimsAssigned - b._count.claimsAssigned);
-    const chosen = officers[0];
-
-    const before = await this.prisma.claim.findUnique({ where: { id: claimId } });
-    if (!before) return null;
+    const chosen = await this.prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
 
     const updated = await this.prisma.claim.update({
       where: { id: claimId },
       data: {
-        assignedTo: chosen.id,
+        assignedTo: userId,
         workflowStage: 'maker_checker_review',
         status: 'under_review',
       },
@@ -993,7 +993,7 @@ export class ClaimsService {
         fromStatus: before.status,
         toStatus: 'under_review',
         changedBy: actor?.userId ?? null,
-        reason: `Auto-assigned to maker ${chosen.name}`,
+        reason: `Auto-assigned to maker ${chosen?.name ?? userId}`,
       },
     });
 
@@ -1014,7 +1014,7 @@ export class ClaimsService {
       },
       metadata: {
         claimNumber: updated.claimNumber,
-        makerName: chosen.name,
+        makerName: chosen?.name ?? userId,
         reason: 'auto-routed on upload',
       },
     });

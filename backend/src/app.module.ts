@@ -19,6 +19,7 @@ import { OcrModule } from './ocr/ocr.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { BatchSubmissionModule } from './batch-submission/batch-submission.module';
 import { WorkflowModule } from './workflow/workflow.module';
+import { AssignmentModule } from './assignment/assignment.module';
 import { ActivityLoggingInterceptor } from './common/interceptors/activity-logging.interceptor';
 import { ScheduleModule } from '@nestjs/schedule';
 import { EmailIngestionModule } from './email-ingestion/email-ingestion.module';
@@ -88,6 +89,7 @@ import { JobSetupModule } from './job-setup/job-setup.module';
     NotificationsModule,
     BatchSubmissionModule,
     WorkflowModule,
+    AssignmentModule,
     EmailIngestionModule,
     ActivityLogsModule,
     BranchesModule,

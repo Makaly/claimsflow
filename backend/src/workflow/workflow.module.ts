@@ -10,9 +10,10 @@ import { GreenLaneController } from './green-lane.controller';
 import { BulkOperationsController } from './bulk-operations.controller';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PrismaModule } from '../prisma/prisma.module';
+import { AssignmentModule } from '../assignment/assignment.module';
 
 @Module({
-  imports: [NotificationsModule, PrismaModule],
+  imports: [NotificationsModule, PrismaModule, AssignmentModule],
   controllers: [WorkflowController, GreenLaneController, BulkOperationsController],
   providers: [
     WorkflowService,

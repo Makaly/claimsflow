@@ -1,4 +1,5 @@
-import { Injectable, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException, Logger, OnModuleInit } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EmailService, WorkflowEmailDto } from '../notifications/email.service';
@@ -7,12 +8,46 @@ import { EoxegenIntegrationService } from '../common/services/eoxegen-integratio
 import { PdfWatermarkService } from '../common/services/pdf-watermark.service';
 import { AuditService } from '../common/services/audit.service';
 import { redactEmail } from '../common/services/pii-redaction';
+import { AssignmentResolverService } from '../assignment/assignment-resolver.service';
 
 @Injectable()
-export class MakerCheckerService {
+export class MakerCheckerService implements OnModuleInit {
   private readonly logger = new Logger(MakerCheckerService.name);
 
   private readonly appUrl = process.env.APP_URL || 'http://localhost:3000';
+
+  /**
+   * Backfill on boot: auto-assign any already-existing under-review claim — at
+   * either the maker-checker or claims-officer stage — to an available reviewer,
+   * so the per-assignee queues are populated without waiting for a manual
+   * /reroute-orphans trigger. Best-effort — never blocks or fails startup.
+   */
+  onModuleInit() {
+    this.rerouteOrphans()
+      .then((r) => {
+        if (r.routed > 0) {
+          this.logger.log(`Startup auto-assignment routed ${r.routed} under-review claim(s) to available reviewers`);
+        }
+      })
+      .catch((err: any) => this.logger.warn(`Startup auto-assignment sweep failed: ${err?.message}`));
+  }
+
+  /**
+   * Recurring safety net: continuously auto-assign under-review claims left
+   * unassigned (or stranded on an unavailable reviewer) at the maker-checker or
+   * claims-officer stage, so nothing sits invisible in any per-assignee queue.
+   */
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async autoAssignSweep() {
+    try {
+      const r = await this.rerouteOrphans();
+      if (r.routed > 0) {
+        this.logger.log(`Auto-assignment sweep routed ${r.routed} under-review claim(s) to available reviewers`);
+      }
+    } catch (err: any) {
+      this.logger.warn(`Auto-assignment sweep failed: ${err?.message}`);
+    }
+  }
 
   constructor(
     private prisma: PrismaService,
@@ -22,6 +57,7 @@ export class MakerCheckerService {
     private eoxegenService: EoxegenIntegrationService,
     private pdfWatermarkService: PdfWatermarkService,
     private audit: AuditService,
+    private assignmentResolver: AssignmentResolverService,
   ) {}
 
   // ─────────────────────────────────────────────────────────────
@@ -103,11 +139,19 @@ export class MakerCheckerService {
       },
     });
 
+    // Auto-assign the claims-officer stage the same way as the maker stage:
+    // pin → reliever → global strategy. null falls back to the shared pool and
+    // the reroute sweep picks it up once an officer is available.
+    const { userId: officerId } = await this.assignmentResolver.resolveAssignee(
+      'claims_officer',
+      claim.providerId,
+    );
+
     const updatedClaim = await this.prisma.claim.update({
       where: { id: claimId },
       data: {
         workflowStage: 'claims_officer_review',
-        assignedTo: null,
+        assignedTo: officerId,
         reviewedAt: new Date(),
       },
     });
@@ -118,7 +162,9 @@ export class MakerCheckerService {
         fromStatus: claim.status,
         toStatus: 'under_review',
         changedBy: makerId,
-        reason: 'Maker-checker verified — forwarded to claims officer for final approval',
+        reason: officerId
+          ? 'Maker-checker verified — auto-assigned to claims officer for final approval'
+          : 'Maker-checker verified — forwarded to claims officer for final approval',
       },
     });
 
@@ -128,7 +174,7 @@ export class MakerCheckerService {
       entity: 'claim',
       entityId: claimId,
       oldValue: { workflowStage: claim.workflowStage, assignedTo: claim.assignedTo },
-      newValue: { workflowStage: 'claims_officer_review', assignedTo: null },
+      newValue: { workflowStage: 'claims_officer_review', assignedTo: officerId },
       metadata: { claimNumber: claim.claimNumber, decision: 'approved', comments },
     });
 
@@ -325,13 +371,19 @@ export class MakerCheckerService {
     });
 
     // Route to claims_officer_review — final approval gate is the claims officer.
+    // Auto-assign the same way as the maker stage: pin → reliever → strategy.
+    const { userId: officerId } = await this.assignmentResolver.resolveAssignee(
+      'claims_officer',
+      claim.providerId,
+    );
+
     const updatedClaim = await this.prisma.claim.update({
       where: { id: claimId },
       data: {
         workflowStage: 'claims_officer_review',
         status: 'under_review',
         reviewedAt: new Date(),
-        assignedTo: null,
+        assignedTo: officerId,
       },
     });
 
@@ -341,7 +393,9 @@ export class MakerCheckerService {
         fromStatus: claim.status,
         toStatus: 'under_review',
         changedBy: checkerId,
-        reason: 'Maker-checker verified — awaiting claims officer approval',
+        reason: officerId
+          ? 'Maker-checker verified — auto-assigned to claims officer for approval'
+          : 'Maker-checker verified — awaiting claims officer approval',
       },
     });
 
@@ -351,7 +405,7 @@ export class MakerCheckerService {
       entity: 'claim',
       entityId: claimId,
       oldValue: { status: claim.status, workflowStage: claim.workflowStage },
-      newValue: { status: 'under_review', workflowStage: 'claims_officer_review' },
+      newValue: { status: 'under_review', workflowStage: 'claims_officer_review', assignedTo: officerId },
       metadata: { claimNumber: claim.claimNumber, decision: 'approved', comments },
     });
 
@@ -1304,16 +1358,115 @@ export class MakerCheckerService {
    * appear in the Maker Queue. Returns the list of claims that were routed.
    */
   async rerouteOrphans(actorId?: string) {
+    // Ids of available (active, not on leave) reviewers per role. A claim whose
+    // assignee is NOT in this set is effectively stranded — invisible to every
+    // per-assignee queue — and must be re-routed.
+    const availableMakerIds = await this.assignmentResolver.availableReviewerIds('maker_checker');
+    const availableOfficerIds = await this.assignmentResolver.availableReviewerIds('claims_officer');
+
+    if (availableMakerIds.length === 0 && availableOfficerIds.length === 0) {
+      return { routed: 0, claims: [] };
+    }
+
+    // Sweep every under-review upload that no available reviewer owns, across
+    // both review stages:
+    //  - initial_review never auto-assigned, or maker_checker_review unassigned
+    //    / stranded → re-route to a maker_checker,
+    //  - claims_officer_review unassigned / stranded → re-route to a claims_officer.
+    // Each is resolved through the shared resolver, so per-provider pins and
+    // relievers are honoured on reroute exactly as on upload/approval.
     const orphans = await this.prisma.claim.findMany({
       where: {
-        assignedTo: null,
-        workflowStage: 'initial_review',
-        status: { in: ['submitted', 'resubmitted'] },
+        OR: [
+          { workflowStage: 'initial_review', status: { in: ['submitted', 'resubmitted'] }, assignedTo: null },
+          {
+            workflowStage: 'maker_checker_review',
+            OR: [{ assignedTo: null }, { assignedTo: { notIn: availableMakerIds } }],
+          },
+          {
+            workflowStage: 'claims_officer_review',
+            OR: [{ assignedTo: null }, { assignedTo: { notIn: availableOfficerIds } }],
+          },
+        ],
       },
-      select: { id: true, claimNumber: true, status: true, workflowStage: true },
+      select: { id: true, claimNumber: true, status: true, workflowStage: true, providerId: true },
     });
 
     if (orphans.length === 0) return { routed: 0, claims: [] };
+
+    const routed: Array<{ claimNumber: string; makerName: string }> = [];
+
+    for (const claim of orphans) {
+      const isOfficerStage = claim.workflowStage === 'claims_officer_review';
+      const role = isOfficerStage ? 'claims_officer' : 'maker_checker';
+
+      // Resolved fresh per claim — counts reflect assignments made earlier in
+      // this same sweep, so load stays balanced across the batch.
+      const { userId } = await this.assignmentResolver.resolveAssignee(role, claim.providerId);
+      if (!userId) continue; // no available reviewer for this role yet — leave for the next sweep
+
+      const assignee = await this.prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
+      const assigneeName = assignee?.name ?? userId;
+
+      await this.prisma.claim.update({
+        where: { id: claim.id },
+        data: isOfficerStage
+          ? { assignedTo: userId, status: 'under_review' }
+          : { assignedTo: userId, workflowStage: 'maker_checker_review', status: 'under_review' },
+      });
+
+      await this.prisma.claimStatusHistory.create({
+        data: {
+          claimId: claim.id,
+          fromStatus: claim.status,
+          toStatus: 'under_review',
+          changedBy: actorId ?? null,
+          reason: `Reroute sweep — auto-assigned to ${assigneeName}`,
+        },
+      });
+
+      await this.audit.record({
+        actor: actorId ? { userId: actorId } : undefined,
+        action: isOfficerStage ? 'claims_officer_auto_assigned' : 'maker_auto_assigned',
+        entity: 'claim',
+        entityId: claim.id,
+        oldValue: { status: claim.status, workflowStage: claim.workflowStage },
+        newValue: {
+          status: 'under_review',
+          workflowStage: isOfficerStage ? 'claims_officer_review' : 'maker_checker_review',
+          assignedTo: userId,
+        },
+        metadata: { claimNumber: claim.claimNumber, makerName: assigneeName, reason: 'reroute sweep' },
+      });
+
+      routed.push({ claimNumber: claim.claimNumber, makerName: assigneeName });
+    }
+
+    return { routed: routed.length, claims: routed };
+  }
+
+  /**
+   * Assign a single freshly-published claim to the least-loaded active
+   * maker_checker and move it straight into maker_checker_review, so it shows up
+   * in that checker's own queue the moment the batch is published — without
+   * waiting for the reroute-orphans sweep on the next queue load.
+   *
+   * Best-effort and safe to call from any publish path:
+   *  - returns false (and leaves the claim untouched) when it is already in
+   *    fraud_review / fraud_hold — the fraud team owns it, don't yank it out;
+   *  - when no maker_checker is available, drops the claim into the shared
+   *    maker_checker_review pool unassigned so the sweep can pick it up later.
+   */
+  async autoAssignFreshClaim(claimId: string, actorId?: string): Promise<boolean> {
+    const before = await this.prisma.claim.findUnique({
+      where: { id: claimId },
+      select: { id: true, status: true, workflowStage: true, assignedTo: true, claimNumber: true },
+    });
+    if (!before) return false;
+    // Never pull a claim out of the fraud workflow, and don't re-route one that
+    // is already assigned.
+    if (before.workflowStage === 'fraud_review' || before.status === 'fraud_hold') return false;
+    if (before.assignedTo) return true;
 
     const officers = await this.prisma.user.findMany({
       where: { role: 'maker_checker', isActive: true },
@@ -1329,51 +1482,52 @@ export class MakerCheckerService {
         },
       },
     });
-    if (officers.length === 0) return { routed: 0, claims: [] };
 
-    // Sort ascending by open work so the least-loaded officer gets picked first.
-    officers.sort((a, b) => a._count.claimsAssigned - b._count.claimsAssigned);
-
-    const routed: Array<{ claimNumber: string; makerName: string }> = [];
-    let cursor = 0;
-
-    for (const claim of orphans) {
-      const maker = officers[cursor % officers.length];
-      cursor += 1;
-
-      await this.prisma.claim.update({
-        where: { id: claim.id },
-        data: {
-          assignedTo: maker.id,
-          workflowStage: 'maker_checker_review',
-          status: 'under_review',
-        },
-      });
-
-      await this.prisma.claimStatusHistory.create({
-        data: {
-          claimId: claim.id,
-          fromStatus: claim.status,
-          toStatus: 'under_review',
-          changedBy: actorId ?? null,
-          reason: `Reroute sweep — auto-assigned to ${maker.name}`,
-        },
-      });
-
-      await this.audit.record({
-        actor: actorId ? { userId: actorId } : undefined,
-        action: 'maker_auto_assigned',
-        entity: 'claim',
-        entityId: claim.id,
-        oldValue: { status: claim.status, workflowStage: claim.workflowStage, assignedTo: null },
-        newValue: { status: 'under_review', workflowStage: 'maker_checker_review', assignedTo: maker.id },
-        metadata: { claimNumber: claim.claimNumber, makerName: maker.name, reason: 'reroute sweep' },
-      });
-
-      routed.push({ claimNumber: claim.claimNumber, makerName: maker.name });
+    if (officers.length === 0) {
+      // No checker to own it yet — make sure it at least reaches the review pool
+      // so the reroute sweep surfaces it.
+      if (before.workflowStage !== 'maker_checker_review') {
+        await this.prisma.claim.update({
+          where: { id: claimId },
+          data: { workflowStage: 'maker_checker_review' },
+        });
+      }
+      return false;
     }
 
-    return { routed: routed.length, claims: routed };
+    officers.sort((a, b) => a._count.claimsAssigned - b._count.claimsAssigned);
+    const chosen = officers[0];
+
+    await this.prisma.claim.update({
+      where: { id: claimId },
+      data: {
+        assignedTo: chosen.id,
+        workflowStage: 'maker_checker_review',
+        status: 'under_review',
+      },
+    });
+
+    await this.prisma.claimStatusHistory.create({
+      data: {
+        claimId,
+        fromStatus: before.status,
+        toStatus: 'under_review',
+        changedBy: actorId ?? null,
+        reason: `Auto-assigned to maker-checker ${chosen.name} on publish`,
+      },
+    });
+
+    await this.audit.record({
+      actor: actorId ? { userId: actorId } : undefined,
+      action: 'maker_auto_assigned',
+      entity: 'claim',
+      entityId: claimId,
+      oldValue: { status: before.status, workflowStage: before.workflowStage, assignedTo: null },
+      newValue: { status: 'under_review', workflowStage: 'maker_checker_review', assignedTo: chosen.id },
+      metadata: { claimNumber: before.claimNumber, makerName: chosen.name, reason: 'auto-routed on publish' },
+    });
+
+    return true;
   }
 
   /**
