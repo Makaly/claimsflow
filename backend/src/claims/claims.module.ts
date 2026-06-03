@@ -17,6 +17,7 @@ import { ClaimTypeConfigService } from './claim-type-config.service';
 import { OcrModule } from '../ocr/ocr.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { DocumentsModule } from '../documents/documents.module';
+import { AssignmentModule } from '../assignment/assignment.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { DocumentsModule } from '../documents/documents.module';
     OcrModule,
     NotificationsModule,
     DocumentsModule,
+    AssignmentModule,
   ],
   controllers: [ClaimsController, ClaimLabelsController, ProviderFraudThresholdsController, SignalLiftController],
   providers: [

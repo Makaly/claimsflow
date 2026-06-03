@@ -15,8 +15,9 @@ export class WorkflowService {
 
   /**
    * Get claims by workflow stage, scoped to the caller's role:
-   *  - admin / claims_officer  → everything (optionally filter by `assignedTo`)
-   *  - maker_checker           → assigned to them, plus unclaimed maker_checker_review claims
+   *  - admin                   → everything (optionally filter by `assignedTo`)
+   *  - claims_officer          → own claims in claims_officer_review; see-all on other stages
+   *  - maker_checker           → only claims assigned to them (auto-assigned on upload)
    *  - fraud_officer           → fraud_review stage only, unfiltered
    *  - anyone else             → empty list
    */
@@ -31,15 +32,27 @@ export class WorkflowService {
 
     if (user) {
       const { role, userId } = user;
-      if (role === 'admin' || role === 'claims_officer') {
+      if (role === 'admin') {
         if (assignedTo) where.assignedTo = assignedTo;
+      } else if (role === 'claims_officer') {
+        // Per-assignee on their own stage: a claims officer sees only the claims
+        // assigned to them in claims_officer_review (auto-assigned on maker-checker
+        // approval; the reroute sweep covers any left unassigned). On other stages
+        // they may legitimately view (e.g. the Maker Queue), they keep see-all
+        // behaviour. An explicit ?assignedTo= overrides the self-scope.
+        if (stage === 'claims_officer_review') {
+          where.assignedTo = assignedTo ?? userId;
+        } else if (assignedTo) {
+          where.assignedTo = assignedTo;
+        }
       } else if (role === 'maker_checker') {
-        // Shared verification queue: a checker sees EVERY claim awaiting
-        // verification in this stage — assigned or not — for parity with the web
-        // checker view (frontend CheckerQueue hits the same endpoint). Filtering
-        // to assignedTo=self made the mobile queue look empty even when claims
-        // were waiting. An explicit ?assignedTo= still narrows it on demand.
-        if (assignedTo) where.assignedTo = assignedTo;
+        // Per-assignee queue: a maker_checker sees only the claims assigned to
+        // them. Claims are auto-assigned on upload (autoAssignToMaker) and any
+        // that slip through unassigned are swept into an assignee by
+        // reroute-orphans, so this stays populated without showing a shared pool.
+        // An explicit ?assignedTo= (e.g. a supervisor inspecting one checker's
+        // load) overrides the self-scope.
+        where.assignedTo = assignedTo ?? userId;
       } else if (role === 'fraud_officer') {
         // Fraud officers only work the fraud_review stage.
         if (stage !== 'fraud_review') return { claims: [], total: 0 };

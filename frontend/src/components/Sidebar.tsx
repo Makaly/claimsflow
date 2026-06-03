@@ -69,6 +69,7 @@ const navigation: NavItem[] = [
   { name: 'Provider Scorecard', href: '/provider-scorecard', icon: BarChart3, roles: ['admin', 'claims_officer'] },
   { name: 'Unknown Docs', href: '/unknown-documents', icon: FileQuestion, roles: ['admin', 'maker_checker'] },
   { name: 'System Config', href: '/system-config', icon: SlidersHorizontal, roles: ['admin'] },
+  { name: 'Assignment Rules', href: '/assignment-rules', icon: UserCog, roles: ['admin'] },
   { name: 'Settings', href: '/settings', icon: Settings, roles: ['admin'] },
 ]
 

@@ -40,6 +40,7 @@ export class SystemConfigController {
       { key: 'log_retention_days', value: '730', category: 'compliance', description: 'Activity log retention period in days' },
       { key: 'max_daily_submissions', value: '500', category: 'submissions', description: 'Max claims per provider per day' },
       { key: 'appeal_window_days', value: '30', category: 'workflow', description: 'Days after rejection to file an appeal' },
+      { key: 'assignment_default_strategy', value: 'workload', category: 'workflow', description: 'Default reviewer picker when a provider has no pin: workload (least-loaded) or fifo (round-robin)' },
     ];
   }
 }

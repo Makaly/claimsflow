@@ -7,6 +7,7 @@ import { BarcodeService } from '../common/services/barcode.service';
 import { PdfWatermarkService } from '../common/services/pdf-watermark.service';
 import { OcrModule } from '../ocr/ocr.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { WorkflowModule } from '../workflow/workflow.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     }),
     OcrModule,
     NotificationsModule,
+    WorkflowModule,
   ],
   controllers: [BatchSubmissionController],
   providers: [
