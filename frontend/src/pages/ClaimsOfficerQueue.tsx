@@ -53,6 +53,7 @@ interface OfficerClaim {
   makerCheckerApprovedBy?: string
   makerCheckerApprovedAt?: string
   makerCheckerComments?: string
+  assignedToName?: string
   documents: OfficerDoc[]
   submittedAt: string
 }
@@ -146,10 +147,13 @@ export default function ClaimsOfficerQueue() {
   const [docLoading, setDocLoading] = useState(false)
   const [activeDocIdx, setActiveDocIdx] = useState(0)
   const [ocrFields, setOcrFields] = useState<OcrAnnotation[]>([])
+  // 'mine' = claims assigned to me; 'all' = full team pool (claims assigned to
+  // any claims officer at this stage). Lets an officer pick up a colleague's work.
+  const [scope, setScope] = useState<'mine' | 'all'>('mine')
 
   const loadClaims = async () => {
     try {
-      const { data } = await api.get('/workflow/claims/claims_officer_review')
+      const { data } = await api.get(`/workflow/claims/claims_officer_review${scope === 'all' ? '?scope=all' : ''}`)
       const list: any[] = Array.isArray(data) ? data : Array.isArray(data?.claims) ? data.claims : []
       const enriched = await Promise.all(list.map(async (c: any) => {
         let makerCheckerApprovedBy: string | undefined
@@ -176,6 +180,7 @@ export default function ClaimsOfficerQueue() {
           fraudSignals: Array.isArray(c.fraudSignals) ? c.fraudSignals : [],
           fraudVerdict: c.fraudVerdict ?? null,
           makerCheckerApprovedBy, makerCheckerApprovedAt, makerCheckerComments,
+          assignedToName: c.assignedUser?.name || c.assignedUser?.email || undefined,
           documents: (c.documents || []).map((d: any) => ({
             id: d.id, name: d.originalName || d.filename || '', documentType: d.documentType, mimetype: d.mimetype,
           })),
@@ -187,7 +192,7 @@ export default function ClaimsOfficerQueue() {
     finally { setLoading(false) }
   }
 
-  useEffect(() => { loadClaims() }, [])
+  useEffect(() => { setLoading(true); loadClaims() }, [scope])
 
   useEffect(() => {
     if (!selectedClaim) return
@@ -328,6 +333,23 @@ export default function ClaimsOfficerQueue() {
               <Input placeholder="Search invoices, members, providers…" value={search}
                 onChange={e => setSearch(e.target.value)} className="pl-9" />
             </div>
+            {/* Scope toggle: my queue vs the whole claims-officer pool */}
+            <div className="inline-flex items-center rounded-lg border bg-muted/30 p-0.5 text-xs font-medium shrink-0">
+              <button
+                onClick={() => setScope('mine')}
+                className={`px-3 py-1.5 rounded-md transition-colors ${
+                  scope === 'mine' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+                }`}>
+                Assigned to me
+              </button>
+              <button
+                onClick={() => setScope('all')}
+                className={`px-3 py-1.5 rounded-md transition-colors ${
+                  scope === 'all' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+                }`}>
+                All officers
+              </button>
+            </div>
           </div>
 
           {bulkSelected.size > 0 && (
@@ -400,6 +422,9 @@ export default function ClaimsOfficerQueue() {
                         {claim.makerCheckerApprovedBy
                           ? <p className="text-xs font-medium">{claim.makerCheckerApprovedBy}</p>
                           : <span className="text-[10px] text-muted-foreground">—</span>}
+                        {scope === 'all' && claim.assignedToName && (
+                          <p className="text-[10px] text-muted-foreground mt-0.5">→ {claim.assignedToName}</p>
+                        )}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{formatDate(claim.submittedAt)}</TableCell>
                       <TableCell><ChevronRight className="h-4 w-4 text-muted-foreground" /></TableCell>
