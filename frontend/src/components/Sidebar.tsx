@@ -42,7 +42,6 @@ const navigation: NavItem[] = [
   { name: 'Lookup Sources', href: '/lookup-sources', icon: Database, roles: ['admin', 'claims_officer'] },
   { type: 'separator', name: 'Workflow', roles: CIC_STAFF },
   { name: 'Workflow', href: '/workflow', icon: GitBranch, roles: CIC_STAFF },
-  { name: 'Maker Queue', href: '/workflow/maker', icon: UserCog, roles: ['admin', 'maker_checker'] },
   { name: 'Maker-Checker Queue', href: '/workflow/checker', icon: UserCog, roles: ['admin', 'maker_checker'] },
   { name: 'Claims Officer Queue', href: '/workflow/claims-officer', icon: UserCheck, roles: ['admin', 'claims_officer'] },
   { name: 'Fraud Queue', href: '/workflow/fraud', icon: AlertOctagon, roles: ['admin', 'fraud_officer', 'claims_officer'] },
