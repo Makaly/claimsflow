@@ -151,9 +151,11 @@ export class DocumentsController {
   @Roles('admin', 'claims_officer', 'maker_checker')
   updateMeta(
     @Param('id') id: string,
-    @Body() body: { documentType?: string; originalName?: string },
+    @Body() body: { documentType?: string; originalName?: string; indexingNotes?: string },
+    @Request() req: any,
   ) {
-    return this.documentsService.updateMeta(id, body);
+    const actor = req?.user ? { userId: req.user.userId, name: req.user.name || req.user.email } : undefined;
+    return this.documentsService.updateMeta(id, body, actor);
   }
 
   @Delete(':id')

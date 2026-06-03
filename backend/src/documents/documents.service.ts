@@ -9,6 +9,7 @@ import { EdmsIntegrationService } from '../common/services/edms-integration.serv
 import { StorageService } from '../common/services/storage.service';
 import { BarcodeService } from '../common/services/barcode.service';
 import { PdfWatermarkService } from '../common/services/pdf-watermark.service';
+import { DocumentClassifierService } from '../document-classifier/document-classifier.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import { getPdfPageCount } from '../ocr/pdf-text.util';
@@ -31,6 +32,7 @@ export class DocumentsService {
     private storage: StorageService,
     private barcodeService: BarcodeService,
     private pdfWatermarkService: PdfWatermarkService,
+    private classifier: DocumentClassifierService,
   ) {}
 
   /**
@@ -501,11 +503,57 @@ export class DocumentsService {
     };
   }
 
-  async updateMeta(id: string, body: { documentType?: string; originalName?: string }) {
-    const data: { documentType?: string; originalName?: string } = {}
-    if (body.documentType !== undefined) data.documentType = body.documentType
-    if (body.originalName !== undefined) data.originalName = body.originalName
-    return this.prisma.document.update({ where: { id }, data })
+  async updateMeta(
+    id: string,
+    body: { documentType?: string; originalName?: string; indexingNotes?: string },
+    actor?: { userId?: string; name?: string },
+  ) {
+    const doc = await this.prisma.document.findUnique({
+      where: { id },
+      select: { documentType: true, originalName: true, metadata: true, claimId: true },
+    });
+    if (!doc) throw new NotFoundException('Document not found');
+
+    // Append a change record to the document's metadata.auditTrail array.
+    const existing: any = (doc.metadata && typeof doc.metadata === 'object') ? doc.metadata : {};
+    const auditTrail: any[] = Array.isArray(existing.auditTrail) ? existing.auditTrail : [];
+    const changes: Record<string, { from: any; to: any }> = {};
+    if (body.documentType !== undefined && body.documentType !== doc.documentType) {
+      changes.documentType = { from: doc.documentType, to: body.documentType };
+    }
+    if (body.originalName !== undefined && body.originalName !== doc.originalName) {
+      changes.originalName = { from: doc.originalName, to: body.originalName };
+    }
+    if (Object.keys(changes).length > 0 || body.indexingNotes !== undefined) {
+      auditTrail.push({
+        changedAt: new Date().toISOString(),
+        changedBy: actor?.name || actor?.userId || 'system',
+        changedById: actor?.userId,
+        changes,
+        ...(body.indexingNotes ? { notes: body.indexingNotes } : {}),
+      });
+    }
+
+    const data: any = { metadata: { ...existing, auditTrail } };
+    if (body.documentType !== undefined) data.documentType = body.documentType;
+    if (body.originalName  !== undefined) data.originalName  = body.originalName;
+    if (body.indexingNotes !== undefined) data.metadata.indexingNotes = body.indexingNotes;
+
+    const updated = await this.prisma.document.update({ where: { id }, data });
+
+    // Categorization feeds the classifier's knowledge: a confirmed human label
+    // on a document that previously failed classification teaches the retrain
+    // pipeline. Best-effort — never blocks the indexing save.
+    if (body.documentType !== undefined && body.documentType !== doc.documentType && body.documentType) {
+      this.classifier.recordConfirmedDocumentType({
+        claimId:      doc.claimId,
+        fileName:     doc.originalName,
+        documentType: body.documentType,
+        reviewedBy:   actor?.name || actor?.userId,
+      }).catch((e) => this.logger.warn(`Classifier learning skipped for ${id}: ${(e as Error)?.message}`));
+    }
+
+    return updated;
   }
 
   async remove(id: string) {

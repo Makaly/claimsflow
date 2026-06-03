@@ -1115,6 +1115,54 @@ Return an empty array if everything looks correct. Only flag genuine issues, not
     });
   }
 
+  /**
+   * Teach the classifier from a maker-checker's document-type categorization.
+   * When a document that previously *failed* classification (recorded as an
+   * UnknownDocument) is given a confirmed type during indexing, we promote that
+   * record to `reviewed` with the human label as `guessedType` — which is what
+   * getReviewedLabels()/triggerRetrain() consume. The original AI guess is kept
+   * in `notes` for traceability. Best-effort; returns how many records matched.
+   */
+  async recordConfirmedDocumentType(params: {
+    claimId?: string | null;
+    fileName?: string | null;
+    documentType: string;
+    reviewedBy?: string;
+  }): Promise<{ matched: number }> {
+    if (!params.claimId || !params.documentType) return { matched: 0 };
+
+    const candidates = await this.prisma.unknownDocument.findMany({
+      where: { claimId: params.claimId, status: 'pending' },
+      select: { id: true, fileName: true, guessedType: true, notes: true },
+    });
+    if (!candidates.length) return { matched: 0 };
+
+    // Prefer an exact file-name match; otherwise teach every pending unknown doc
+    // for this claim (a small set in practice).
+    const byName = params.fileName ? candidates.filter(c => c.fileName === params.fileName) : [];
+    const targets = byName.length ? byName : candidates;
+
+    let matched = 0;
+    for (const c of targets) {
+      const priorGuess = c.guessedType ? `AI guessed "${c.guessedType}". ` : '';
+      await this.prisma.unknownDocument.update({
+        where: { id: c.id },
+        data: {
+          status:      'reviewed',
+          guessedType: params.documentType,
+          reviewedBy:  params.reviewedBy ?? 'maker_checker',
+          reviewedAt:  new Date(),
+          notes:       `${priorGuess}Confirmed "${params.documentType}" via maker-checker indexing.`,
+        },
+      }).catch(() => {});
+      matched++;
+    }
+    if (matched) {
+      this.logger.log(`Maker-checker confirmed document type "${params.documentType}" → ${matched} unknown-doc label(s) updated for claim ${params.claimId}`);
+    }
+    return { matched };
+  }
+
   /** Record user correction on an extracted zone hit — closes the feedback loop. */
   async recordZoneCorrection(hitId: string, correctedValue: string, userId: string) {
     return this.prisma.ocrZoneHit.update({

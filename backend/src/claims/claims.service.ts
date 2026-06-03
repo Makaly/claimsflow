@@ -15,6 +15,7 @@ import { ClaimLabelsService } from './claim-labels.service';
 import { MlScoringService } from './ml-scoring.service';
 import { ClaimTypeConfigService } from './claim-type-config.service';
 import { AssignmentResolverService } from '../assignment/assignment-resolver.service';
+import { DocumentClassifierService } from '../document-classifier/document-classifier.service';
 
 @Injectable()
 export class ClaimsService {
@@ -31,6 +32,7 @@ export class ClaimsService {
     private claimTypeConfigService: ClaimTypeConfigService,
     private providerResolver: ProviderResolverService,
     private assignmentResolver: AssignmentResolverService,
+    private documentClassifier: DocumentClassifierService,
   ) {}
 
   /** Normalise a provider name for alias matching: lowercase, strip punctuation, collapse spaces. */
@@ -560,36 +562,91 @@ export class ClaimsService {
     const fieldConf = (ocr?.fieldConfidences as Record<string, number> | null) ?? {};
     const anomalyReasons: string[] = (ocr?.anomalyReasons as string[]) ?? [];
 
-    const fields: Array<{
-      page: number; label: string; value: string; confidence?: number; anomaly?: boolean;
-    }> = [];
+    // The canonical, always-present set of correctable OCR fields. We emit every
+    // one — even when OCR left it blank — so the maker-checker can fill in or fix
+    // anything the extractor missed. `key` is the stable field name the
+    // /ocr-corrections endpoint expects; `type` drives the input widget.
+    type FieldType = 'text' | 'number' | 'date';
+    const STANDARD_FIELDS: Array<{ key: string; label: string; type: FieldType }> = [
+      { key: 'memberName',    label: 'Member',       type: 'text' },
+      { key: 'memberNumber',  label: 'Member No.',   type: 'text' },
+      { key: 'patientId',     label: 'Patient ID',   type: 'text' },
+      { key: 'providerName',  label: 'Provider',     type: 'text' },
+      { key: 'invoiceNumber', label: 'Invoice No.',  type: 'text' },
+      { key: 'invoiceDate',   label: 'Invoice Date', type: 'date' },
+      { key: 'invoiceAmount', label: 'Amount',       type: 'number' },
+      { key: 'dateOfService', label: 'Service Date', type: 'date' },
+      { key: 'diagnosis',     label: 'Diagnosis',    type: 'text' },
+    ];
 
-    const push = (label: string, value: string | null | undefined, key: string) => {
-      if (!value) return;
-      const confidence = fieldConf[key];
-      const anomaly = anomalyReasons.some(
-        r => r.toLowerCase().includes(key.toLowerCase()) || r.toLowerCase().includes(label.toLowerCase()),
-      );
-      fields.push({ page: 1, label, value: String(value), ...(confidence !== undefined ? { confidence } : {}), anomaly: anomaly || undefined });
+    const rawValue = (key: string): string => {
+      const v = (ocr as any)?.[key];
+      if (v == null) return '';
+      if (v instanceof Date) return v.toISOString().slice(0, 10);
+      return String(v);
     };
 
-    push('Member', ocr?.memberName, 'memberName');
-    push('Member No.', ocr?.memberNumber, 'memberNumber');
-    push('Patient ID', ocr?.patientId, 'patientId');
-    push('Provider', ocr?.providerName, 'providerName');
-    push('Invoice No.', ocr?.invoiceNumber, 'invoiceNumber');
-    push('Invoice Date', ocr?.invoiceDate?.toISOString().slice(0, 10), 'invoiceDate');
-    push('Amount', ocr?.invoiceAmount != null ? `KES ${ocr.invoiceAmount.toLocaleString('en-KE', { minimumFractionDigits: 2 })}` : undefined, 'invoiceAmount');
-    push('Service Date', ocr?.dateOfService?.toISOString().slice(0, 10), 'dateOfService');
-    push('Diagnosis', ocr?.diagnosis, 'diagnosis');
+    const fields = STANDARD_FIELDS.map(f => {
+      const confidence = fieldConf[f.key];
+      const anomaly = anomalyReasons.some(
+        r => r.toLowerCase().includes(f.key.toLowerCase()) || r.toLowerCase().includes(f.label.toLowerCase()),
+      );
+      return {
+        page: 1,
+        key: f.key,
+        label: f.label,
+        type: f.type,
+        value: rawValue(f.key),
+        editable: true,
+        ...(confidence !== undefined ? { confidence } : {}),
+        anomaly: anomaly || undefined,
+      };
+    });
+
+    // Procedure codes are shown for context but corrected via the line-item flow,
+    // not this field editor — emit read-only when present.
     if ((ocr?.procedureCodes as string[] | null)?.length) {
-      push('Procedure', (ocr!.procedureCodes as string[]).join(', '), 'procedureCodes');
+      fields.push({
+        page: 1,
+        key: 'procedureCodes',
+        label: 'Procedure',
+        type: 'text',
+        value: (ocr!.procedureCodes as string[]).join(', '),
+        editable: false,
+        anomaly: undefined,
+      } as any);
+    }
+
+    // Per-field correction history — every maker-checker edit is logged to the
+    // activity log as `ocr_field_corrected`; flatten it into one entry per field
+    // so the UI can render an audit trail under each field.
+    const correctionLogs = await this.prisma.activityLog.findMany({
+      where: { action: 'ocr_field_corrected', entity: 'claim', entityId: id },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      select: { username: true, userRole: true, createdAt: true, oldValue: true, newValue: true },
+    });
+    const corrections: Array<{ field: string; from: any; to: any; by: string; role: string | null; at: Date }> = [];
+    for (const log of correctionLogs) {
+      const oldV = (log.oldValue as Record<string, any> | null) ?? {};
+      const newV = (log.newValue as Record<string, any> | null) ?? {};
+      for (const field of Object.keys(newV)) {
+        corrections.push({
+          field,
+          from: oldV[field] ?? null,
+          to: newV[field],
+          by: log.username || 'system',
+          role: log.userRole ?? null,
+          at: log.createdAt,
+        });
+      }
     }
 
     const clinicalSections = this.parseClinicalSections(ocr?.rawText ?? '');
 
     return {
       fields,
+      corrections,
       documents: documents.map(d => ({
         id: d.id,
         name: d.originalName,
@@ -605,6 +662,119 @@ export class ClaimsService {
       clinicalSections,
       status: ocr?.status ?? null,
     };
+  }
+
+  /**
+   * Apply maker-checker corrections to OCR-extracted fields.
+   * Updates the OcrExtraction record and writes a full audit trail entry so
+   * every human correction is traceable (who, when, old value → new value).
+   */
+  async applyOcrCorrections(
+    claimId: string,
+    corrections: {
+      memberName?: string; memberNumber?: string; patientId?: string;
+      providerName?: string; invoiceNumber?: string; invoiceDate?: string;
+      invoiceAmount?: number; dateOfService?: string; diagnosis?: string;
+    },
+    actor?: AuditActor,
+  ) {
+    const ocr = await this.prisma.ocrExtraction.findUnique({ where: { claimId } });
+    if (!ocr) throw new NotFoundException('No OCR extraction found for this claim');
+
+    const oldValues: Record<string, any> = {};
+    const newValues: Record<string, any> = {};
+    const data: Record<string, any> = {};
+
+    const applyField = (key: string, val: any) => {
+      if (val === undefined) return;
+      oldValues[key] = (ocr as any)[key];
+      newValues[key] = val;
+      data[key] = val;
+    };
+
+    applyField('memberName',   corrections.memberName);
+    applyField('memberNumber', corrections.memberNumber);
+    applyField('patientId',    corrections.patientId);
+    applyField('providerName', corrections.providerName);
+    applyField('invoiceNumber',corrections.invoiceNumber);
+    applyField('invoiceAmount',corrections.invoiceAmount != null ? corrections.invoiceAmount : undefined);
+    if (corrections.invoiceDate)    { applyField('invoiceDate',   new Date(corrections.invoiceDate)); }
+    if (corrections.dateOfService)  { applyField('dateOfService', new Date(corrections.dateOfService)); }
+    applyField('diagnosis',    corrections.diagnosis);
+
+    if (Object.keys(data).length === 0) return ocr;
+
+    const updated = await this.prisma.ocrExtraction.update({ where: { claimId }, data });
+
+    const claim = await this.prisma.claim.findUnique({
+      where: { id: claimId },
+      select: { claimNumber: true, providerId: true, provider: { select: { name: true } } },
+    });
+
+    // ── Write canonical fields back to the Claim record ──────────────────────
+    // So downstream officers / finance see the corrected values, not just the
+    // raw OCR extraction. providerName has no scalar column on Claim (it's a
+    // relation) — it stays on the OcrExtraction only.
+    const claimData: Record<string, any> = {};
+    if (data.memberName    !== undefined) claimData.memberName    = data.memberName;
+    if (data.memberNumber  !== undefined) claimData.memberNumber  = data.memberNumber;
+    if (data.patientId     !== undefined) claimData.patientId     = data.patientId;
+    if (data.invoiceNumber !== undefined) claimData.invoiceNumber = data.invoiceNumber;
+    if (data.invoiceDate   !== undefined) claimData.invoiceDate   = data.invoiceDate;
+    if (data.invoiceAmount !== undefined) claimData.invoiceAmount = data.invoiceAmount;
+    if (data.dateOfService !== undefined) claimData.dateOfService = data.dateOfService;
+    if (data.diagnosis     !== undefined) claimData.diagnosis     = data.diagnosis;
+    if (Object.keys(claimData).length > 0) {
+      await this.prisma.claim.update({ where: { id: claimId }, data: claimData }).catch(() => {});
+    }
+
+    await this.audit.record({
+      actor,
+      action: 'ocr_field_corrected',
+      entity: 'claim',
+      entityId: claimId,
+      oldValue: oldValues,
+      newValue: newValues,
+      metadata: { claimNumber: claim?.claimNumber, source: 'maker_checker_correction' },
+    });
+
+    // ── Feed the classifier learning loop ────────────────────────────────────
+    // Each human-confirmed correction is recorded as a manual zone hit
+    // (wasCorrect = true). This grows the knowledge base that powers provider
+    // hints and best-known-value pre-fill on future uploads. Best-effort — a
+    // learning failure must never break the correction.
+    // OcrExtraction field name → classifier MANUAL_ZONES fieldName.
+    const ZONE_FIELD_MAP: Record<string, string> = {
+      memberNumber:  'memberNumber',
+      patientId:     'patientId',
+      providerName:  'providerName',
+      invoiceNumber: 'invoiceNumber',
+      invoiceDate:   'invoiceDate',
+      invoiceAmount: 'invoiceAmount',
+      dateOfService: 'serviceDate',
+      diagnosis:     'diagnosis',
+    };
+    const docForHit = await this.prisma.document.findFirst({
+      where: { claimId },
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    const providerName = corrections.providerName ?? claim?.provider?.name ?? undefined;
+    for (const [ocrKey, val] of Object.entries(newValues)) {
+      const zoneField = ZONE_FIELD_MAP[ocrKey];
+      if (!zoneField || val == null || val === '') continue;
+      const extractedValue = val instanceof Date ? val.toISOString().slice(0, 10) : String(val);
+      await this.documentClassifier.recordManualZoneHit({
+        fieldName:      zoneField,
+        extractedValue,
+        engine:         'maker_checker',
+        claimId,
+        documentId:     docForHit?.id,
+        providerName,
+      }).catch(() => { /* learning is best-effort */ });
+    }
+
+    return updated;
   }
 
   private parseClinicalSections(rawText: string): {

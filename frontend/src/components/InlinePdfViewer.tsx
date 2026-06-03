@@ -9,6 +9,7 @@
  * ArrayBuffer" errors because pdfjs transfers ArrayBuffer ownership on load.
  */
 import { useState, useCallback, useRef, useEffect, useLayoutEffect } from 'react'
+import type { MouseEvent as ReactMouseEvent } from 'react'
 import { toast } from 'sonner'
 import * as pdfjsLib from 'pdfjs-dist'
 import {
@@ -38,10 +39,19 @@ interface Props {
   annotations?: OcrAnnotation[]
   fraudSignalCount?: number
   claimId?: string
+  /** When true, the user can drag a rectangle over the page to OCR that region. */
+  zoneMode?: boolean
+  /** Label of the field being captured — shown in the zone-mode banner. */
+  zoneHint?: string
+  /** Called with the OCR-extracted text once a zone is recognised. */
+  onZoneText?: (text: string) => void
+  /** Called when zone mode should end (capture done, or cancelled with Esc). */
+  onExitZoneMode?: () => void
 }
 
 export function InlinePdfViewer({
   bytes, url, onFullScreen, annotations: annotationsProp = [], fraudSignalCount = 0, claimId,
+  zoneMode = false, zoneHint, onZoneText, onExitZoneMode,
 }: Props) {
   const srcRef = useRef<{ data: Uint8Array } | { url: string } | null>(
     bytes ? { data: bytes.slice() } : url ? { url } : null,
@@ -63,6 +73,11 @@ export function InlinePdfViewer({
   const [activeAnnotIdx,  setActiveAnnotIdx]  = useState(-1)
   const [userAnnotations, setUserAnnotations] = useState<UserAnnotation[]>([])
   const [flashBox, setFlashBox] = useState<{ page: number; x: number; y: number; w: number; h: number } | null>(null)
+
+  // ── Zone OCR (drag a box → Tesseract on that region) ──────────────────────
+  const [zoneStart, setZoneStart] = useState<{ x: number; y: number } | null>(null)
+  const [zoneRect,  setZoneRect]  = useState<{ x: number; y: number; w: number; h: number } | null>(null)
+  const [zoneBusy,  setZoneBusy]  = useState(false)
 
   useEffect(() => {
     mountedRef.current = true
@@ -262,6 +277,67 @@ export function InlinePdfViewer({
     } catch { /* best-effort */ }
   }, [pdfDoc, canvasDims, annotations, totalPages])
 
+  // Esc cancels an in-progress zone capture.
+  useEffect(() => {
+    if (!zoneMode) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setZoneStart(null); setZoneRect(null); onExitZoneMode?.() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [zoneMode, onExitZoneMode])
+
+  const resetZone = () => { setZoneStart(null); setZoneRect(null) }
+
+  // Crop the drawn region out of the rendered canvas, upscale small selections
+  // for legibility, and send it to the Tesseract zone endpoint.
+  const runZoneOcr = useCallback(async (rect: { x: number; y: number; w: number; h: number }, rw: number, rh: number) => {
+    const canvas = canvasRef.current
+    if (!canvas || rw === 0 || rh === 0) { resetZone(); return }
+    const sx = (rect.x / rw) * canvas.width
+    const sy = (rect.y / rh) * canvas.height
+    const sw = (rect.w / rw) * canvas.width
+    const sh = (rect.h / rh) * canvas.height
+    if (sw < 8 || sh < 8) { resetZone(); return }
+
+    // Upscale tiny regions — Tesseract reads larger glyphs far better.
+    const up = sw < 240 || sh < 70 ? 3 : 1.5
+    const off = document.createElement('canvas')
+    off.width  = Math.round(sw * up)
+    off.height = Math.round(sh * up)
+    const octx = off.getContext('2d')
+    if (!octx) { resetZone(); return }
+    octx.imageSmoothingEnabled = true
+    octx.imageSmoothingQuality = 'high'
+    octx.drawImage(canvas, sx, sy, sw, sh, 0, 0, off.width, off.height)
+
+    setZoneBusy(true)
+    off.toBlob(async (blob) => {
+      try {
+        if (!blob) throw new Error('no blob')
+        const fd = new FormData()
+        fd.append('file', new File([blob], 'ocr-zone.png', { type: 'image/png' }))
+        const { data } = await api.post('/ocr/zone-text', fd, {
+          headers: { 'Content-Type': 'multipart/form-data' }, timeout: 30000,
+        })
+        const text = String(data?.text || '').replace(/\s*\n\s*/g, ' ').trim()
+        if (text) onZoneText?.(text)
+        else toast.info('No text detected in that region — try a tighter box')
+      } catch {
+        toast.error('Zone OCR failed — please try again')
+      } finally {
+        setZoneBusy(false)
+        resetZone()
+        onExitZoneMode?.()
+      }
+    }, 'image/png')
+  }, [onZoneText, onExitZoneMode])
+
+  const zonePoint = (e: ReactMouseEvent) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    return { x: e.clientX - r.left, y: e.clientY - r.top, rw: r.width, rh: r.height }
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
@@ -335,6 +411,38 @@ export function InlinePdfViewer({
         {pdfDoc ? (
           <div style={{ position: 'relative', display: 'inline-block' }}>
             <canvas ref={canvasRef} className="shadow-md rounded max-w-full block" />
+
+            {/* Zone OCR capture layer */}
+            {zoneMode && (
+              <div
+                onMouseDown={e => { const p = zonePoint(e); setZoneStart({ x: p.x, y: p.y }); setZoneRect({ x: p.x, y: p.y, w: 0, h: 0 }) }}
+                onMouseMove={e => {
+                  if (!zoneStart) return
+                  const p = zonePoint(e)
+                  setZoneRect({ x: Math.min(zoneStart.x, p.x), y: Math.min(zoneStart.y, p.y), w: Math.abs(p.x - zoneStart.x), h: Math.abs(p.y - zoneStart.y) })
+                }}
+                onMouseUp={e => { const p = zonePoint(e); if (zoneRect && !zoneBusy) runZoneOcr(zoneRect, p.rw, p.rh) }}
+                style={{ position: 'absolute', inset: 0, cursor: zoneBusy ? 'wait' : 'crosshair', zIndex: 25 }}
+              >
+                {zoneRect && (
+                  <div style={{
+                    position: 'absolute', left: zoneRect.x, top: zoneRect.y, width: zoneRect.w, height: zoneRect.h,
+                    border: '2px dashed #06b6d4', background: 'rgba(6,182,212,0.12)', pointerEvents: 'none',
+                  }} />
+                )}
+              </div>
+            )}
+
+            {/* Zone-mode banner */}
+            {zoneMode && (
+              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex items-center gap-1.5 rounded-full bg-cyan-600/90 text-white text-[11px] font-medium px-3 py-1 shadow-lg whitespace-nowrap">
+                {zoneBusy ? (
+                  <><Loader2 className="h-3 w-3 animate-spin" /> Reading region…</>
+                ) : (
+                  <><ScanLine className="h-3 w-3" /> Drag a box around {zoneHint ? `“${zoneHint}”` : 'the value'} · Esc to cancel</>
+                )}
+              </div>
+            )}
             {showAnnotations && canvasDims && userAnnotations.length > 0 && (
               <canvas ref={annotOverlayRef} style={{ position: 'absolute', top: 0, left: 0, width: canvasDims.w, height: canvasDims.h, pointerEvents: 'none' }} />
             )}

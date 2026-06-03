@@ -307,6 +307,29 @@ export class ClaimsController {
     return this.claimsService.getOcrFields(id, this.actorFrom(req));
   }
 
+  /**
+   * Maker-checker correction: update one or more OCR-extracted field values.
+   * Writes an audit record so each correction is traceable.
+   */
+  @Patch(':id/ocr-corrections')
+  patchOcrCorrections(
+    @Param('id') id: string,
+    @Body() body: {
+      memberName?: string
+      memberNumber?: string
+      patientId?: string
+      providerName?: string
+      invoiceNumber?: string
+      invoiceDate?: string
+      invoiceAmount?: number
+      dateOfService?: string
+      diagnosis?: string
+    },
+    @Request() req: any,
+  ) {
+    return this.claimsService.applyOcrCorrections(id, body, this.actorFrom(req));
+  }
+
   @Get(':id/anomaly-detail')
   async getAnomalyDetail(@Param('id') id: string) {
     return this.anomalyScoringService.getAnomalyDetail(id);

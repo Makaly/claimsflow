@@ -3,7 +3,8 @@ import {
   UserCog, Search, Loader2, FileText, DollarSign, Clock,
   CheckCircle, AlertTriangle, X, ChevronRight,
   Building2, User, Calendar, Hash, ShieldAlert, MessageSquare,
-  CheckSquare, Square, Tag, RefreshCw,
+  CheckSquare, Square, Tag, RefreshCw, Pencil, Save, History,
+  ChevronDown, ChevronUp, ScanLine,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,7 +14,8 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import * as VisuallyHidden from '@radix-ui/react-visually-hidden'
 import { Pagination } from '@/components/Pagination'
 import BulkActionsBar from '@/components/BulkActionsBar'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -37,6 +39,22 @@ function claimNumSubseq(claimNumber: string, query: string): boolean {
 
 interface FraudSignal { level: 'critical' | 'warning' | 'info'; title: string; detail: string }
 interface CheckerDoc  { id?: string; name: string; documentType?: string; mimetype?: string }
+
+// OCR fields now carry a stable `key` (the correction endpoint's field name),
+// an input `type`, and an `editable` flag from the backend.
+interface OcrField extends OcrAnnotation {
+  key?: string
+  type?: 'text' | 'number' | 'date'
+  editable?: boolean
+}
+interface OcrCorrection {
+  field: string
+  from: any
+  to: any
+  by: string
+  role: string | null
+  at: string
+}
 
 interface CheckerClaim {
   id: string
@@ -99,10 +117,21 @@ export default function CheckerQueue() {
   const [docBytes, setDocBytes] = useState<Uint8Array | null>(null)
   const [docLoading, setDocLoading] = useState(false)
   const [activeDocIdx, setActiveDocIdx] = useState(0)
-  const [ocrFields, setOcrFields] = useState<OcrAnnotation[]>([])
+  const [ocrFields, setOcrFields] = useState<OcrField[]>([])
+  const [ocrCorrections, setOcrCorrections] = useState<OcrCorrection[]>([])
+  const [showFieldHistory, setShowFieldHistory] = useState<Record<string, boolean>>({})
   // doc type indexing: docId → type string
   const [docTypes, setDocTypes] = useState<Record<string, string>>({})
+  const [docNotes, setDocNotes] = useState<Record<string, string>>({})
+  const [docAuditTrail, setDocAuditTrail] = useState<Record<string, any[]>>({})
+  const [showAuditTrail, setShowAuditTrail] = useState<Record<string, boolean>>({})
   const [savingDocId, setSavingDocId] = useState<string | null>(null)
+  // OCR field editing
+  const [editingField, setEditingField] = useState<string | null>(null)
+  const [fieldEdits, setFieldEdits] = useState<Record<string, string>>({})
+  const [savingFields, setSavingFields] = useState(false)
+  // Zone OCR: the field currently being captured by drawing a box on the document.
+  const [scanField, setScanField] = useState<{ key: string; type: string; editKey: string; label: string } | null>(null)
 
   useEffect(() => {
     const load = async () => {
@@ -156,8 +185,11 @@ export default function CheckerQueue() {
     ;(async () => {
       try {
         const { data } = await api.get(`/claims/${selectedClaim.id}/ocr-fields`)
-        if (!cancelled) setOcrFields(data?.fields ?? [])
-      } catch { if (!cancelled) setOcrFields([]) }
+        if (!cancelled) {
+          setOcrFields(data?.fields ?? [])
+          setOcrCorrections(data?.corrections ?? [])
+        }
+      } catch { if (!cancelled) { setOcrFields([]); setOcrCorrections([]) } }
     })()
     return () => { cancelled = true }
   }, [selectedClaim?.id])
@@ -168,30 +200,79 @@ export default function CheckerQueue() {
     setNotes('')
     setSubmitError(null)
     setOcrFields([])
+    setOcrCorrections([])
+    setShowFieldHistory({})
+    setScanField(null)
     setDocBytes(null)
-    // Initialise local type map from current doc metadata
-    const initial: Record<string, string> = {}
-    claim.documents.forEach(d => { if (d.id) initial[d.id] = d.documentType || '' })
-    setDocTypes(initial)
+    setEditingField(null)
+    setFieldEdits({})
+    const initialTypes: Record<string, string> = {}
+    const initialNotes: Record<string, string> = {}
+    const initialAudit: Record<string, any[]> = {}
+    claim.documents.forEach(d => {
+      if (d.id) {
+        initialTypes[d.id] = d.documentType || ''
+        initialNotes[d.id] = (d as any).indexingNotes || ''
+        initialAudit[d.id] = (d as any).auditTrail || []
+      }
+    })
+    setDocTypes(initialTypes)
+    setDocNotes(initialNotes)
+    setDocAuditTrail(initialAudit)
+    setShowAuditTrail({})
     setOpen(true)
   }
 
-  const saveDocType = async (docId: string, type: string) => {
-    setDocTypes(prev => ({ ...prev, [docId]: type }))
+  const saveDocMeta = async (docId: string, patch: { documentType?: string; indexingNotes?: string }) => {
+    if (patch.documentType !== undefined) setDocTypes(prev => ({ ...prev, [docId]: patch.documentType! }))
+    if (patch.indexingNotes !== undefined) setDocNotes(prev => ({ ...prev, [docId]: patch.indexingNotes! }))
     setSavingDocId(docId)
     try {
-      await api.patch(`/documents/${docId}`, { documentType: type })
-      // Update local claim state so the tab strip reflects the new type
-      setSelectedClaim(prev => prev ? {
-        ...prev,
-        documents: prev.documents.map(d => d.id === docId ? { ...d, documentType: type } : d),
-      } : prev)
-      setClaims(prev => prev.map(c => ({
-        ...c,
-        documents: c.documents.map(d => d.id === docId ? { ...d, documentType: type } : d),
-      })))
-    } catch { /* best-effort — local state already updated optimistically */ }
+      const res = await api.patch(`/documents/${docId}`, patch)
+      const trail: any[] = res.data?.metadata?.auditTrail || []
+      setDocAuditTrail(prev => ({ ...prev, [docId]: trail }))
+      if (patch.documentType !== undefined) {
+        setSelectedClaim(prev => prev ? {
+          ...prev,
+          documents: prev.documents.map(d => d.id === docId ? { ...d, documentType: patch.documentType } : d),
+        } : prev)
+        setClaims(prev => prev.map(c => ({
+          ...c,
+          documents: c.documents.map(d => d.id === docId ? { ...d, documentType: patch.documentType } : d),
+        })))
+      }
+    } catch { /* best-effort */ }
     finally { setSavingDocId(null) }
+  }
+
+  const saveOcrField = async (key: string, type: string, editKey: string, value: string) => {
+    if (!selectedClaim) return
+    setFieldEdits(prev => ({ ...prev, [editKey]: value }))
+    setEditingField(null)
+    setSavingFields(true)
+    try {
+      // invoiceAmount is numeric on the backend — coerce before sending.
+      const payloadValue = type === 'number'
+        ? (value.trim() === '' ? undefined : Number(value.replace(/[^0-9.-]/g, '')) || undefined)
+        : value
+      await api.patch(`/claims/${selectedClaim.id}/ocr-corrections`, { [key]: payloadValue })
+      // Refresh fields + correction history so values, confidence and the audit
+      // trail all reflect the saved change.
+      const { data } = await api.get(`/claims/${selectedClaim.id}/ocr-fields`)
+      setOcrFields(data?.fields ?? [])
+      setOcrCorrections(data?.corrections ?? [])
+      setFieldEdits(prev => { const n = { ...prev }; delete n[editKey]; return n })
+    } catch { /* best-effort */ }
+    finally { setSavingFields(false) }
+  }
+
+  // Zone OCR result lands here — drop it into the target field's editor so the
+  // checker can verify/tweak the captured text before saving the correction.
+  const handleZoneText = (text: string) => {
+    if (!scanField) return
+    const value = scanField.type === 'number' ? text.replace(/[^0-9.]/g, '') : text
+    setFieldEdits(prev => ({ ...prev, [scanField.editKey]: value }))
+    setEditingField(scanField.editKey)
   }
 
   const closeClaim = () => {
@@ -200,6 +281,8 @@ export default function CheckerQueue() {
     setNotes('')
     setDocBytes(null)
     setOcrFields([])
+    setOcrCorrections([])
+    setScanField(null)
     setSubmitError(null)
   }
 
@@ -370,6 +453,7 @@ export default function CheckerQueue() {
       {/* ── Invoice Review Panel ── */}
       <Dialog open={open} onOpenChange={() => closeClaim()}>
         <DialogContent hideClose className="max-w-[min(1500px,98vw)] w-[min(1500px,98vw)] h-[96vh] p-0 gap-0 overflow-hidden flex flex-col rounded-xl">
+          <VisuallyHidden.Root><DialogTitle>{selectedClaim?.claimNumber ?? 'Claim Review'}</DialogTitle></VisuallyHidden.Root>
           {selectedClaim && (
             <>
               {/* Header */}
@@ -403,7 +487,9 @@ export default function CheckerQueue() {
               <div className="flex-1 min-h-0 grid grid-cols-[1fr_360px] overflow-hidden">
 
                 {/* LEFT — Document viewer */}
-                <div className="min-h-0 flex flex-col bg-[#111] border-r border-white/10">
+                <div className={`min-h-0 flex flex-col bg-[#111] border-r transition-all ${
+                  scanField ? 'border-cyan-500/70 ring-2 ring-cyan-500/40 ring-inset' : 'border-white/10'
+                }`}>
                   {selectedClaim.documents.length > 1 && (
                     <div className="flex items-center gap-1 px-3 py-1.5 border-b border-white/8 bg-[#0a0a0a] shrink-0 overflow-x-auto">
                       {selectedClaim.documents.map((doc, i) => (
@@ -424,7 +510,15 @@ export default function CheckerQueue() {
                     ) : docLoading ? (
                       <div className="flex flex-col items-center justify-center h-full gap-3 text-white/40"><Loader2 className="h-6 w-6 animate-spin" /><p className="text-sm">Loading {activeDoc?.name}…</p></div>
                     ) : docBytes ? (
-                      <InlinePdfViewer key={`${selectedClaim.id}-${activeDocIdx}`} bytes={docBytes} url={null} claimId={selectedClaim.id} annotations={ocrFields} fraudSignalCount={selectedClaim.fraudSignals.length} />
+                      <InlinePdfViewer
+                        key={`${selectedClaim.id}-${activeDocIdx}`}
+                        bytes={docBytes} url={null} claimId={selectedClaim.id}
+                        annotations={ocrFields} fraudSignalCount={selectedClaim.fraudSignals.length}
+                        zoneMode={!!scanField}
+                        zoneHint={scanField?.label}
+                        onZoneText={handleZoneText}
+                        onExitZoneMode={() => setScanField(null)}
+                      />
                     ) : (
                       <div className="flex flex-col items-center justify-center h-full gap-3 text-white/30"><AlertTriangle className="h-10 w-10" /><p className="text-sm font-medium">Could not load preview</p></div>
                     )}
@@ -451,10 +545,188 @@ export default function CheckerQueue() {
                     ))}
                   </div>
 
-                  {/* ── Document Indexing (primary work area) ── */}
+                  {/* ── Primary work area ── */}
                   <div className="flex-1 px-4 py-3 space-y-4 overflow-y-auto">
 
-                    {/* Document index table */}
+                    {/* ── OCR Data Verification ── */}
+                    {ocrFields.length > 0 && (
+                      <div>
+                        {/* Section header */}
+                        <div className="flex items-center gap-2 mb-2">
+                          <Pencil className="h-3.5 w-3.5 text-primary" />
+                          <span className="text-xs font-bold text-foreground uppercase tracking-wider">OCR Fields</span>
+                          {savingFields && <RefreshCw className="h-3 w-3 text-muted-foreground animate-spin ml-auto" />}
+                        </div>
+
+                        {/* OCR Zone capture toolbar — always visible when a doc is loaded */}
+                        {docBytes && (
+                          <div className={`mb-2 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-colors ${
+                            scanField
+                              ? 'border-cyan-500/50 bg-cyan-500/10 text-cyan-300'
+                              : 'border-border bg-muted/20 text-muted-foreground'
+                          }`}>
+                            <ScanLine className={`h-4 w-4 shrink-0 ${scanField ? 'text-cyan-400' : 'text-muted-foreground'}`} />
+                            {scanField ? (
+                              <>
+                                <span className="font-semibold text-cyan-300">OCR active for <span className="text-white">{scanField.label}</span></span>
+                                <span className="text-cyan-400/70">— drag a box on the document over that value</span>
+                                <button onClick={() => setScanField(null)} className="ml-auto text-cyan-400 hover:text-white font-semibold">Cancel</button>
+                              </>
+                            ) : (
+                              <>
+                                <span>Click <span className="font-semibold text-foreground">📷 OCR</span> next to any field to scan it from the document</span>
+                              </>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Field rows */}
+                        <div className="space-y-1.5">
+                          {ocrFields.map((f, i) => {
+                            const LABEL_KEY: Record<string, string> = {
+                              'Member': 'memberName', 'Member No.': 'memberNumber',
+                              'Patient ID': 'patientId', 'Provider': 'providerName',
+                              'Invoice No.': 'invoiceNumber', 'Invoice Date': 'invoiceDate',
+                              'Amount': 'invoiceAmount', 'Service Date': 'dateOfService',
+                              'Diagnosis': 'diagnosis',
+                            }
+                            const LABEL_TYPE: Record<string, 'text'|'number'|'date'> = {
+                              'Invoice Date': 'date', 'Service Date': 'date', 'Amount': 'number',
+                            }
+                            // Use backend key if provided, else derive from label
+                            const resolvedKey  = f.key ?? LABEL_KEY[f.label] ?? null
+                            const resolvedType = f.type ?? LABEL_TYPE[f.label] ?? 'text'
+                            const apiKey     = f.editable !== false ? resolvedKey : null
+                            const editKey    = `${i}-${resolvedKey ?? f.label}`
+                            const isEditing  = editingField === editKey
+                            const isScanning = scanField?.editKey === editKey
+                            const pending    = fieldEdits[editKey]
+                            const editValue  = pending ?? f.value ?? ''
+                            const confidence = f.confidence
+                            const isLow      = confidence !== undefined && confidence < 0.7
+                            const isAnomaly  = f.anomaly
+                            const isEmpty    = !(pending ?? f.value)
+                            const inputType  = resolvedType === 'date' ? 'date' : resolvedType === 'number' ? 'number' : 'text'
+                            // Strip currency symbols / commas before Number() so
+                            // "KES 552,991.82" parses correctly (old API format).
+                            const numericStr = editValue.replace(/[^0-9.-]/g, '')
+                            const display    = resolvedKey === 'invoiceAmount' && numericStr
+                              ? `KES ${Number(numericStr).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`
+                              : editValue
+                            const history    = f.key ? ocrCorrections.filter(c => c.field === f.key) : []
+                            const showHist   = !!showFieldHistory[editKey]
+
+                            return (
+                              <div key={editKey} className={`rounded-lg border transition-all ${
+                                isScanning ? 'border-cyan-500/60 bg-cyan-950/20' :
+                                isEditing  ? 'border-primary/50 bg-primary/5' :
+                                isAnomaly  ? 'border-red-500/40 bg-red-950/20' :
+                                isEmpty    ? 'border-amber-500/30 bg-amber-950/10' :
+                                             'border-border/50 bg-muted/10'
+                              }`}>
+                                <div className="px-3 pt-2.5 pb-1">
+                                  {/* Label row */}
+                                  <div className="flex items-center gap-1.5 mb-1">
+                                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{f.label}</span>
+                                    {confidence !== undefined && (
+                                      <span className={`text-[9px] px-1 rounded font-semibold ${
+                                        isAnomaly ? 'bg-red-500/20 text-red-400' :
+                                        isLow     ? 'bg-amber-500/20 text-amber-400' :
+                                        'bg-emerald-500/15 text-emerald-500'
+                                      }`}>{Math.round(confidence * 100)}%</span>
+                                    )}
+                                    {isAnomaly && <span className="text-[9px] text-red-400 font-bold">⚠ anomaly</span>}
+                                    {isEmpty && !isEditing && <span className="text-[9px] text-amber-400 font-semibold">missing</span>}
+                                  </div>
+
+                                  {/* Value or editor */}
+                                  {isEditing ? (
+                                    <div className="space-y-1.5">
+                                      <input
+                                        type={inputType}
+                                        autoFocus
+                                        className="w-full h-8 rounded-md border-2 border-primary/60 bg-background px-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40"
+                                        value={editValue}
+                                        onChange={e => setFieldEdits(prev => ({ ...prev, [editKey]: e.target.value }))}
+                                        onKeyDown={e => {
+                                          if (e.key === 'Enter' && apiKey) saveOcrField(apiKey, resolvedType, editKey, editValue)
+                                          if (e.key === 'Escape') { setEditingField(null); setFieldEdits(p => { const n={...p}; delete n[editKey]; return n }) }
+                                        }}
+                                      />
+                                      <div className="flex gap-1.5">
+                                        <button onClick={() => saveOcrField(apiKey!, resolvedType, editKey, editValue)}
+                                          className="flex-1 flex items-center justify-center gap-1.5 h-7 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold">
+                                          <Save className="h-3.5 w-3.5" /> Save
+                                        </button>
+                                        <button onClick={() => { setEditingField(null); setFieldEdits(p => { const n={...p}; delete n[editKey]; return n }) }}
+                                          className="flex-none px-3 h-7 rounded-md border text-xs font-medium text-muted-foreground hover:bg-muted">
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <p className={`text-sm font-semibold leading-snug mb-2 ${
+                                      isEmpty   ? 'text-muted-foreground/40 italic font-normal' :
+                                      isAnomaly ? 'text-red-300' :
+                                      isLow     ? 'text-amber-300' :
+                                      'text-foreground'
+                                    }`}>
+                                      {isEmpty ? '— not extracted —' : display}
+                                    </p>
+                                  )}
+                                </div>
+
+                                {/* Action bar — full-width buttons, always visible */}
+                                {apiKey && !isEditing && (
+                                  <div className="flex border-t border-border/30">
+                                    <button
+                                      onClick={() => setEditingField(editKey)}
+                                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-primary hover:bg-primary/8 transition-colors rounded-bl-lg border-r border-border/30">
+                                      <Pencil className="h-3.5 w-3.5" /> Edit
+                                    </button>
+                                    <button
+                                      onClick={() => setScanField(isScanning ? null : { key: apiKey, type: resolvedType, editKey, label: f.label })}
+                                      className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold transition-colors ${
+                                        isScanning
+                                          ? 'text-cyan-400 bg-cyan-500/15 rounded-br-lg'
+                                          : 'text-muted-foreground hover:text-cyan-400 hover:bg-cyan-500/10 rounded-br-lg'
+                                      } ${history.length > 0 ? 'border-r border-border/30 rounded-none' : ''}`}>
+                                      <ScanLine className="h-3.5 w-3.5" /> {isScanning ? 'Scanning…' : 'OCR'}
+                                    </button>
+                                    {history.length > 0 && (
+                                      <button
+                                        onClick={() => setShowFieldHistory(prev => ({ ...prev, [editKey]: !prev[editKey] }))}
+                                        className="px-3 flex items-center gap-1 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors rounded-br-lg">
+                                        <History className="h-3.5 w-3.5" />{history.length}
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Per-field audit trail */}
+                                {showHist && history.length > 0 && (
+                                  <div className="px-3 pb-2.5 border-t border-border/30 pt-2 space-y-1.5">
+                                    {history.map((c, j) => (
+                                      <div key={j} className="text-[10px] text-muted-foreground">
+                                        <span className="font-medium">{new Date(c.at).toLocaleString('en-KE', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                                        {' · '}{c.by}{c.role ? ` (${c.role})` : ''}
+                                        <div className="mt-0.5 flex items-center gap-1">
+                                          <span className="line-through opacity-50">{c.from ?? '—'}</span>
+                                          <span>→</span>
+                                          <span className="text-emerald-400 font-medium">{c.to ?? '—'}</span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Document Indexing ── */}
                     <div>
                       <div className="flex items-center gap-2 mb-2">
                         <Tag className="h-3.5 w-3.5 text-muted-foreground" />
@@ -462,55 +734,99 @@ export default function CheckerQueue() {
                       </div>
                       {selectedClaim.documents.length === 0 ? (
                         <div className="rounded-lg border border-dashed border-border/50 p-4 text-center text-xs text-muted-foreground">
-                          No documents attached to this claim
+                          No documents attached
                         </div>
                       ) : (
-                        <div className="space-y-1.5">
+                        <div className="space-y-2">
                           {selectedClaim.documents.map((doc, i) => {
-                            const currentType = docTypes[doc.id || ''] || doc.documentType || ''
+                            const docId      = doc.id || String(i)
+                            const currentType = docTypes[docId] || doc.documentType || ''
+                            const notes      = docNotes[docId] || ''
                             const isSaving   = savingDocId === doc.id
-                            const typeLabel  = DOCUMENT_TYPES.find(t => t.value === currentType)?.label
+                            const trail      = docAuditTrail[docId] || []
+                            const showTrail  = showAuditTrail[docId]
+
                             return (
-                              <div
-                                key={doc.id || i}
-                                className={`rounded-lg border p-2.5 cursor-pointer transition-all ${
-                                  i === activeDocIdx
-                                    ? 'border-primary/40 bg-primary/5'
-                                    : 'border-border/50 hover:border-border hover:bg-muted/30'
-                                }`}
-                                onClick={() => setActiveDocIdx(i)}
-                              >
-                                <div className="flex items-start justify-between gap-2 mb-1.5">
-                                  <div className="flex items-center gap-1.5 min-w-0">
-                                    <FileText className={`h-3.5 w-3.5 shrink-0 ${i === activeDocIdx ? 'text-primary' : 'text-muted-foreground'}`} />
-                                    <span className="text-xs font-medium truncate">{doc.name}</span>
-                                  </div>
+                              <div key={docId}
+                                className={`rounded-lg border transition-all ${
+                                  i === activeDocIdx ? 'border-primary/50 bg-primary/5' : 'border-border/50'
+                                }`}>
+                                {/* Header — click to switch to this doc */}
+                                <div className="flex items-center gap-2 px-2.5 pt-2.5 pb-1.5 cursor-pointer"
+                                  onClick={() => setActiveDocIdx(i)}>
+                                  <FileText className={`h-3.5 w-3.5 shrink-0 ${i === activeDocIdx ? 'text-primary' : 'text-muted-foreground'}`} />
+                                  <span className="text-xs font-medium truncate flex-1">{doc.name}</span>
                                   {isSaving && <RefreshCw className="h-3 w-3 text-muted-foreground animate-spin shrink-0" />}
-                                  {!isSaving && currentType && (
-                                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-medium shrink-0 whitespace-nowrap">
-                                      ✓ indexed
-                                    </span>
-                                  )}
-                                  {!isSaving && !currentType && (
-                                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-medium shrink-0">
-                                      ! needs type
-                                    </span>
-                                  )}
+                                  {!isSaving && currentType
+                                    ? <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-medium shrink-0 whitespace-nowrap">✓ indexed</span>
+                                    : !isSaving && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-medium shrink-0">! needs type</span>
+                                  }
                                 </div>
-                                <select
-                                  className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
-                                  value={currentType}
-                                  onClick={e => e.stopPropagation()}
-                                  onChange={e => {
-                                    if (doc.id) saveDocType(doc.id, e.target.value)
-                                    else setDocTypes(prev => ({ ...prev, [String(i)]: e.target.value }))
-                                  }}
-                                >
-                                  <option value="">— Select document type —</option>
-                                  {DOCUMENT_TYPES.map(t => (
-                                    <option key={t.value} value={t.value}>{t.label}</option>
-                                  ))}
-                                </select>
+
+                                {/* Type selector */}
+                                <div className="px-2.5 pb-1.5">
+                                  <select
+                                    className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                                    value={currentType}
+                                    onClick={e => e.stopPropagation()}
+                                    onChange={e => {
+                                      if (doc.id) saveDocMeta(doc.id, { documentType: e.target.value })
+                                      else setDocTypes(prev => ({ ...prev, [docId]: e.target.value }))
+                                    }}
+                                  >
+                                    <option value="">— Select document type —</option>
+                                    {DOCUMENT_TYPES.map(t => (
+                                      <option key={t.value} value={t.value}>{t.label}</option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                {/* Notes */}
+                                <div className="px-2.5 pb-2">
+                                  <textarea
+                                    rows={2}
+                                    placeholder="Indexing notes (optional) — document condition, completeness, any anomalies…"
+                                    className="w-full rounded-md border border-input bg-background px-2 py-1 text-[11px] resize-none focus:outline-none focus:ring-1 focus:ring-ring text-foreground placeholder:text-muted-foreground/50"
+                                    value={notes}
+                                    onChange={e => setDocNotes(prev => ({ ...prev, [docId]: e.target.value }))}
+                                    onBlur={() => {
+                                      if (doc.id) saveDocMeta(doc.id, { indexingNotes: notes })
+                                    }}
+                                  />
+                                </div>
+
+                                {/* Audit trail toggle */}
+                                {trail.length > 0 && (
+                                  <div className="px-2.5 pb-2">
+                                    <button
+                                      className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                                      onClick={() => setShowAuditTrail(prev => ({ ...prev, [docId]: !prev[docId] }))}>
+                                      <History className="h-3 w-3" />
+                                      {trail.length} change{trail.length !== 1 ? 's' : ''}
+                                      {showTrail ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                                    </button>
+                                    {showTrail && (
+                                      <div className="mt-1.5 border-l-2 border-border/50 pl-2.5 space-y-1.5">
+                                        {[...trail].reverse().map((entry, j) => (
+                                          <div key={j} className="text-[10px]">
+                                            <span className="text-muted-foreground">
+                                              {new Date(entry.changedAt).toLocaleString('en-KE', { dateStyle: 'short', timeStyle: 'short' })}
+                                              {' · '}{entry.changedBy}
+                                            </span>
+                                            {Object.entries(entry.changes || {}).map(([field, change]: [string, any]) => (
+                                              <div key={field} className="text-[10px] text-muted-foreground mt-0.5">
+                                                <span className="font-medium text-foreground">{field}</span>:
+                                                {' '}<span className="line-through opacity-50">{change.from || '—'}</span>
+                                                {' → '}<span className="text-emerald-400">{change.to || '—'}</span>
+                                              </div>
+                                            ))}
+                                            {entry.notes && <div className="text-muted-foreground italic mt-0.5">"{entry.notes}"</div>}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             )
                           })}
@@ -518,7 +834,7 @@ export default function CheckerQueue() {
                       )}
                     </div>
 
-                    {/* Required documents checklist */}
+                    {/* ── Required Documents checklist ── */}
                     <div>
                       <div className="flex items-center gap-2 mb-2">
                         <CheckSquare className="h-3.5 w-3.5 text-muted-foreground" />
@@ -529,7 +845,7 @@ export default function CheckerQueue() {
                           const present = Object.values(docTypes).includes(req.value) ||
                             selectedClaim.documents.some(d => d.documentType === req.value)
                           return (
-                            <div key={req.value} className="flex items-center gap-2 py-1">
+                            <div key={req.value} className="flex items-center gap-2 py-0.5">
                               {present
                                 ? <CheckSquare className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
                                 : <Square className={`h-3.5 w-3.5 shrink-0 ${req.required ? 'text-red-400' : 'text-muted-foreground/40'}`} />
@@ -537,9 +853,7 @@ export default function CheckerQueue() {
                               <span className={`text-xs ${present ? 'text-foreground' : req.required ? 'text-red-400' : 'text-muted-foreground'}`}>
                                 {req.label}
                               </span>
-                              {req.required && !present && (
-                                <span className="text-[9px] px-1 rounded bg-red-500/15 text-red-400 font-semibold ml-auto">required</span>
-                              )}
+                              {req.required && !present && <span className="text-[9px] px-1 rounded bg-red-500/15 text-red-400 font-semibold ml-auto">required</span>}
                               {present && <span className="text-[9px] text-emerald-500 ml-auto">✓</span>}
                             </div>
                           )
@@ -547,10 +861,10 @@ export default function CheckerQueue() {
                       </div>
                     </div>
 
-                    {/* Fraud signals (secondary — compact) */}
+                    {/* Fraud signals (compact) */}
                     {selectedClaim.fraudSignals.length > 0 && (
                       <div>
-                        <div className="flex items-center gap-2 mb-2">
+                        <div className="flex items-center gap-2 mb-1.5">
                           <div className="h-px flex-1 bg-border" />
                           <span className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase px-1">
                             {selectedClaim.fraudSignals.length} Signal{selectedClaim.fraudSignals.length !== 1 ? 's' : ''}
