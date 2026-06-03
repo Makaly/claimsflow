@@ -464,70 +464,85 @@ export default function CheckerQueue() {
 
       {/* ── Claim Review Panel ── */}
       <Dialog open={open} onOpenChange={() => closeClaim()}>
-        <DialogContent className="max-w-[min(1500px,98vw)] w-[min(1500px,98vw)] h-[96vh] p-0 gap-0 overflow-hidden flex flex-col">
+        <DialogContent hideClose className="max-w-[min(1500px,98vw)] w-[min(1500px,98vw)] h-[96vh] p-0 gap-0 overflow-hidden flex flex-col rounded-xl">
           {selectedClaim && (
             <>
-              {/* Header */}
-              <div className="flex items-start justify-between px-5 py-3 border-b bg-card shrink-0">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2.5 flex-wrap">
-                    <span className="font-mono text-lg font-black tracking-tight text-primary">{selectedClaim.claimNumber}</span>
-                    <Badge className={getPriorityColor(selectedClaim.priority)} variant="secondary">{selectedClaim.priority}</Badge>
+              {/* ── Panel header ── */}
+              <div className="flex items-center justify-between px-5 py-3 border-b bg-gradient-to-r from-background to-muted/30 shrink-0">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <span className="font-mono text-base font-black tracking-tight text-primary shrink-0">
+                    {selectedClaim.claimNumber}
+                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <Badge className={getPriorityColor(selectedClaim.priority)} variant="secondary">
+                      {selectedClaim.priority}
+                    </Badge>
                     {selectedClaim.invoiceAmount > 100000 && (
-                      <Badge variant="outline" className="text-amber-400 border-amber-500/40 text-[10px]">High value</Badge>
+                      <Badge variant="outline" className="text-amber-400 border-amber-500/40 text-[10px] font-semibold">
+                        High value
+                      </Badge>
                     )}
                     {selectedClaim.fraudSignals.filter(s => s.level === 'critical').length > 0 && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-500/15 border border-red-500/30 text-red-400">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/20 border border-red-500/40 text-red-400">
                         <ShieldAlert className="h-3 w-3" />
-                        {selectedClaim.fraudSignals.filter(s => s.level === 'critical').length} Critical Signal{selectedClaim.fraudSignals.filter(s => s.level === 'critical').length !== 1 ? 's' : ''}
+                        {selectedClaim.fraudSignals.filter(s => s.level === 'critical').length} Critical
                       </span>
                     )}
                   </div>
-                  <p className="text-muted-foreground text-sm">
-                    {selectedClaim.memberName}{selectedClaim.memberNumber ? ` · ${selectedClaim.memberNumber}` : ''} · {selectedClaim.provider?.name} ·{' '}
-                    <span className="font-semibold text-foreground">{formatCurrency(selectedClaim.invoiceAmount)}</span>
-                  </p>
+                  <span className="text-muted-foreground text-sm hidden lg:block truncate">
+                    {selectedClaim.memberName}
+                    {selectedClaim.memberNumber ? ` · ${selectedClaim.memberNumber}` : ''}
+                    {' '}· {selectedClaim.provider?.name}
+                  </span>
                 </div>
-                <button onClick={closeClaim} className="rounded-md p-1.5 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors ml-4">
-                  <X className="h-4 w-4" />
-                </button>
+                <div className="flex items-center gap-3 ml-4 shrink-0">
+                  <span className="font-bold text-base text-emerald-500 tabular-nums">
+                    {formatCurrency(selectedClaim.invoiceAmount)}
+                  </span>
+                  <button
+                    onClick={closeClaim}
+                    className="rounded-lg p-1.5 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors border border-transparent hover:border-border"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
 
-              {/* Body: 3-column layout */}
-              <div className="flex-1 min-h-0 grid grid-cols-[1fr_340px] overflow-hidden">
+              {/* ── Panel body ── */}
+              <div className="flex-1 min-h-0 grid grid-cols-[1fr_360px] overflow-hidden">
 
-                {/* LEFT — Document viewer */}
-                <div className="min-h-0 flex flex-col border-r bg-neutral-950">
-                  {/* Document tabs */}
-                  {selectedClaim.documents.length > 0 && (
-                    <div className="flex items-center gap-1 px-2 py-1.5 border-b border-white/10 bg-neutral-900 shrink-0 overflow-x-auto">
+                {/* LEFT — Document viewer (dark) */}
+                <div className="min-h-0 flex flex-col bg-[#111] border-r border-white/10">
+                  {selectedClaim.documents.length > 1 && (
+                    <div className="flex items-center gap-1 px-3 py-1.5 border-b border-white/8 bg-[#0a0a0a] shrink-0 overflow-x-auto">
                       {selectedClaim.documents.map((doc, i) => (
                         <button key={doc.id || i} onClick={() => setActiveDocIdx(i)}
-                          className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium whitespace-nowrap transition-colors ${
-                            i === activeDocIdx ? 'bg-white/15 text-white' : 'text-white/50 hover:bg-white/8 hover:text-white/80'
+                          className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium whitespace-nowrap transition-all ${
+                            i === activeDocIdx
+                              ? 'bg-white/12 text-white border border-white/15'
+                              : 'text-white/40 hover:bg-white/6 hover:text-white/70'
                           }`}>
                           <FileText className="h-3 w-3 shrink-0" />
-                          <span className="max-w-[180px] truncate">{doc.name}</span>
+                          <span className="max-w-[200px] truncate">{doc.name}</span>
                           {doc.documentType && (
-                            <Badge variant="outline" className="text-[9px] h-4 px-1 border-white/20 text-white/60">
+                            <span className="text-[9px] px-1 py-0.5 rounded bg-white/8 text-white/50">
                               {doc.documentType.replace(/_/g, ' ')}
-                            </Badge>
+                            </span>
                           )}
                         </button>
                       ))}
                     </div>
                   )}
-                  {/* Viewer area */}
                   <div className="flex-1 min-h-0">
                     {selectedClaim.documents.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center h-full gap-2 text-white/40">
-                        <FileText className="h-12 w-12" />
-                        <p className="text-sm">No documents attached</p>
+                      <div className="flex flex-col items-center justify-center h-full gap-3 text-white/30">
+                        <FileText className="h-14 w-14" />
+                        <p className="text-sm font-medium">No documents attached</p>
                       </div>
                     ) : docLoading ? (
-                      <div className="flex items-center justify-center h-full gap-2 text-white/40">
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                        <span className="text-sm">Loading {activeDoc?.name}…</span>
+                      <div className="flex flex-col items-center justify-center h-full gap-3 text-white/40">
+                        <Loader2 className="h-6 w-6 animate-spin" />
+                        <p className="text-sm">Loading {activeDoc?.name}…</p>
                       </div>
                     ) : docBytes ? (
                       <InlinePdfViewer
@@ -539,76 +554,78 @@ export default function CheckerQueue() {
                         fraudSignalCount={selectedClaim.fraudSignals.length}
                       />
                     ) : (
-                      <div className="flex flex-col items-center justify-center h-full gap-2 text-white/40">
-                        <AlertTriangle className="h-8 w-8" />
-                        <p className="text-sm">Could not load preview</p>
+                      <div className="flex flex-col items-center justify-center h-full gap-3 text-white/30">
+                        <AlertTriangle className="h-10 w-10" />
+                        <p className="text-sm font-medium">Could not load preview</p>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* RIGHT — Details, signals, action bar */}
-                <div className="min-h-0 overflow-y-auto flex flex-col bg-card">
+                {/* RIGHT — Details + signals + actions */}
+                <div className="min-h-0 overflow-y-auto flex flex-col bg-background">
 
-                  <div className="p-4 space-y-4 flex-1">
-                    {/* Claim metadata */}
-                    <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 text-sm">
-                      {[
-                        { icon: Hash,       label: 'Claim #',   value: selectedClaim.claimNumber, mono: true },
-                        { icon: DollarSign, label: 'Amount',    value: formatCurrency(selectedClaim.invoiceAmount), bold: true },
-                        { icon: User,       label: 'Member',    value: selectedClaim.memberName },
-                        { icon: Building2,  label: 'Provider',  value: selectedClaim.provider?.name || '—' },
-                        { icon: Calendar,   label: 'Submitted', value: formatDate(selectedClaim.submittedAt) },
-                        { icon: FileText,   label: 'Documents', value: `${selectedClaim.documents.length} attached` },
-                      ].map(({ icon: Icon, label, value, mono, bold }) => (
-                        <div key={label} className="flex items-start gap-2">
-                          <Icon className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
-                          <div>
-                            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</p>
-                            <p className={`text-sm leading-snug ${mono ? 'font-mono text-xs' : ''} ${bold ? 'font-bold text-base' : ''}`}>{value}</p>
-                          </div>
+                  {/* Metadata strip */}
+                  <div className="px-4 pt-4 pb-3 grid grid-cols-2 gap-x-4 gap-y-3 border-b">
+                    {[
+                      { icon: Hash,       label: 'Claim #',   value: selectedClaim.claimNumber, className: 'font-mono text-xs font-semibold text-primary' },
+                      { icon: DollarSign, label: 'Amount',    value: formatCurrency(selectedClaim.invoiceAmount), className: 'font-bold text-emerald-500' },
+                      { icon: User,       label: 'Member',    value: selectedClaim.memberName, className: 'text-sm font-medium' },
+                      { icon: Building2,  label: 'Provider',  value: selectedClaim.provider?.name || '—', className: 'text-sm' },
+                      { icon: Calendar,   label: 'Submitted', value: formatDate(selectedClaim.submittedAt), className: 'text-sm text-muted-foreground' },
+                      { icon: FileText,   label: 'Documents', value: `${selectedClaim.documents.length} attached`, className: 'text-sm text-muted-foreground' },
+                    ].map(({ icon: Icon, label, value, className }) => (
+                      <div key={label}>
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <Icon className="h-3 w-3 text-muted-foreground/60 shrink-0" />
+                          <span className="text-[9px] font-bold text-muted-foreground/60 uppercase tracking-widest">{label}</span>
                         </div>
-                      ))}
-                    </div>
+                        <p className={`leading-snug truncate ${className}`}>{value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Scrollable content */}
+                  <div className="flex-1 px-4 py-3 space-y-3">
 
                     {/* Fraud signals */}
                     {selectedClaim.fraudSignals.length > 0 && (
-                      <div className="space-y-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <AlertTriangle className="h-3 w-3 text-red-400" />
-                          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                            {selectedClaim.fraudSignals.filter(s => s.level === 'critical').length > 0
-                              ? `${selectedClaim.fraudSignals.filter(s => s.level === 'critical').length} Critical`
-                              : ''
-                            }
-                            {selectedClaim.fraudSignals.filter(s => s.level === 'critical').length > 0 && selectedClaim.fraudSignals.filter(s => s.level === 'warning').length > 0 ? ' · ' : ''}
-                            {selectedClaim.fraudSignals.filter(s => s.level === 'warning').length > 0
-                              ? `${selectedClaim.fraudSignals.filter(s => s.level === 'warning').length} Warning`
-                              : ''
-                            }
-                            {' '}Signal{selectedClaim.fraudSignals.length !== 1 ? 's' : ''}
-                          </p>
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="h-px flex-1 bg-border" />
+                          <span className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase px-1">
+                            {selectedClaim.fraudSignals.length} Warning Signal{selectedClaim.fraudSignals.length !== 1 ? 's' : ''}
+                          </span>
+                          <div className="h-px flex-1 bg-border" />
                         </div>
-                        {selectedClaim.fraudSignals.map((sig, i) => {
-                          const s = SIGNAL_STYLE[sig.level]
-                          return (
-                            <div key={i} className={`rounded-lg border-l-4 p-2.5 space-y-0.5 ${s.bg}`}>
-                              <div className="flex items-center gap-1.5">
-                                <span className={`inline-block h-1.5 w-1.5 rounded-full shrink-0 ${s.dot}`} />
-                                <span className={`text-[10px] font-bold uppercase tracking-wider ${s.text} opacity-70`}>{s.label}</span>
-                                <span className={`text-xs font-semibold ${s.text}`}>{sig.title}</span>
+                        <div className="space-y-2">
+                          {selectedClaim.fraudSignals.map((sig, i) => {
+                            const s = SIGNAL_STYLE[sig.level]
+                            return (
+                              <div key={i} className={`rounded-lg border p-3 ${s.bg}`}>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className={`inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider rounded px-1.5 py-0.5 ${
+                                    sig.level === 'critical' ? 'bg-red-500/30 text-red-300' :
+                                    sig.level === 'warning'  ? 'bg-amber-500/30 text-amber-300' :
+                                    'bg-blue-500/30 text-blue-300'
+                                  }`}>
+                                    <AlertTriangle className="h-2.5 w-2.5" />
+                                    {s.label}
+                                  </span>
+                                  <span className={`text-xs font-semibold ${s.text}`}>{sig.title}</span>
+                                </div>
+                                <p className={`text-[11px] leading-relaxed ${s.text} opacity-75`}>{sig.detail}</p>
                               </div>
-                              <p className={`text-[11px] leading-relaxed ${s.text} opacity-80`}>{sig.detail}</p>
-                            </div>
-                          )
-                        })}
+                            )
+                          })}
+                        </div>
                       </div>
                     )}
 
                     {/* Maker notes */}
                     {selectedClaim.makerComments && (
-                      <div className="rounded-lg border border-border/50 bg-muted/30 p-3 space-y-1">
-                        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                      <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5">
                           Prior notes{selectedClaim.makerApprovedBy ? ` — ${selectedClaim.makerApprovedBy}` : ''}
                           {selectedClaim.makerApprovedAt ? ` · ${formatDate(selectedClaim.makerApprovedAt)}` : ''}
                         </p>
@@ -618,20 +635,22 @@ export default function CheckerQueue() {
 
                     {/* Action form */}
                     {actionType && cfg && (
-                      <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-150">
-                        <div className="h-px bg-border" />
+                      <div className="space-y-3 animate-in fade-in slide-in-from-bottom-1 duration-150">
+                        <div className="flex items-center gap-2">
+                          <div className="h-px flex-1 bg-border" />
+                          <span className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase px-1">{cfg.notesLabel}</span>
+                          <div className="h-px flex-1 bg-border" />
+                        </div>
+
                         {actionType === 'return_provider' && (
                           <div className="space-y-2">
-                            <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                              Missing / Required Documents
-                            </Label>
-                            <div className="grid grid-cols-2 gap-1 max-h-36 overflow-y-auto">
+                            <div className="grid grid-cols-2 gap-1 max-h-36 overflow-y-auto rounded-lg border bg-muted/10 p-1.5">
                               {MISSING_DOC_OPTIONS.map(doc => (
                                 <button key={doc} onClick={() => toggleMissingDoc(doc)}
-                                  className={`text-left text-[10px] rounded border px-2 py-1.5 transition-all ${
+                                  className={`text-left text-[10px] rounded-md px-2 py-1.5 transition-all ${
                                     missingDocs.includes(doc)
-                                      ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
-                                      : 'border-border/50 text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                                      ? 'bg-amber-500/25 text-amber-300 font-medium'
+                                      : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
                                   }`}>
                                   {missingDocs.includes(doc) ? '✓ ' : ''}{doc}
                                 </button>
@@ -661,27 +680,20 @@ export default function CheckerQueue() {
                           </div>
                         )}
 
-                        <div className="space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <Label className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                              <MessageSquare className="h-3.5 w-3.5" />
-                              {cfg.notesLabel}
-                              {!cfg.required && <span className="ml-1 text-[9px] normal-case font-normal border border-border rounded px-1">optional</span>}
-                            </Label>
-                            <span className={`text-[10px] tabular-nums ${comments.length > 1800 ? 'text-amber-400' : 'text-muted-foreground'}`}>
-                              {comments.length}/2000
-                            </span>
-                          </div>
-                          <Textarea placeholder={cfg.notesPlaceholder} value={comments}
-                            onChange={e => setComments(e.target.value.slice(0, 2000))}
-                            rows={3} className="resize-none text-xs" />
-                          <p className="flex items-start gap-1.5 text-[10px] text-muted-foreground">
+                        <Textarea placeholder={cfg.notesPlaceholder} value={comments}
+                          onChange={e => setComments(e.target.value.slice(0, 2000))}
+                          rows={4} className="resize-none text-xs" />
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="flex items-start gap-1.5 text-[10px] text-muted-foreground flex-1">
                             <Mail className="h-3 w-3 mt-0.5 shrink-0" />{cfg.notesHint}
                           </p>
+                          <span className={`text-[10px] tabular-nums shrink-0 ${comments.length > 1800 ? 'text-amber-400' : 'text-muted-foreground'}`}>
+                            {comments.length}/2000
+                          </span>
                         </div>
 
                         {actionError && (
-                          <div className="flex items-start gap-2 rounded-md border border-red-500/30 bg-red-500/10 text-red-400 px-3 py-2 text-xs">
+                          <div className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 text-red-400 px-3 py-2 text-xs">
                             <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />{actionError}
                           </div>
                         )}
@@ -689,29 +701,33 @@ export default function CheckerQueue() {
                     )}
                   </div>
 
-                  {/* Action bar — always visible at bottom */}
-                  <div className="shrink-0 border-t bg-card p-3 space-y-2.5">
-                    <div className="grid grid-cols-5 gap-1">
+                  {/* ── Action bar ── */}
+                  <div className="shrink-0 border-t bg-muted/20 p-3 space-y-2">
+                    {/* Action picker */}
+                    <div className="grid grid-cols-5 gap-1.5">
                       {(Object.keys(ACTION_CONFIG) as (keyof typeof ACTION_CONFIG)[]).map(type => {
                         const { shortLabel, icon: Icon, activeClass, idleClass } = ACTION_CONFIG[type]
                         const isActive = actionType === type
                         return (
                           <button key={type} onClick={() => selectAction(type)}
-                            className={`flex flex-col items-center gap-1 rounded-lg px-1 py-2 text-center transition-all text-[10px] leading-tight font-medium ${isActive ? activeClass : idleClass}`}>
-                            <Icon className="h-4 w-4 shrink-0" />
-                            <span>{shortLabel}</span>
+                            className={`flex flex-col items-center gap-1.5 rounded-xl py-2.5 px-1 text-center transition-all text-[10px] leading-tight font-semibold ${isActive ? activeClass : idleClass}`}>
+                            <Icon className="h-4.5 w-4.5 shrink-0" style={{ width: '1.125rem', height: '1.125rem' }} />
+                            <span className="leading-none">{shortLabel}</span>
                           </button>
                         )
                       })}
                     </div>
 
+                    {/* Submit / close */}
                     <div className="flex gap-2">
                       {actionType ? (
                         <>
-                          <Button variant="ghost" size="sm" className="flex-none" onClick={() => selectAction(null)}>Cancel</Button>
-                          <Button size="sm" className={`flex-1 ${cfg?.btnClass ?? ''}`} onClick={handleSubmit} disabled={!canSubmit}>
+                          <Button variant="ghost" size="sm" className="flex-none text-muted-foreground" onClick={() => selectAction(null)}>
+                            Cancel
+                          </Button>
+                          <Button size="sm" className={`flex-1 font-semibold ${cfg?.btnClass ?? ''}`} onClick={handleSubmit} disabled={!canSubmit}>
                             {submitting && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-                            {cfg && <cfg.icon className="mr-2 h-3.5 w-3.5" />}
+                            {cfg && !submitting && <cfg.icon className="mr-2 h-3.5 w-3.5" />}
                             {actionType === 'approve'         && 'Approve → Claims Officer'}
                             {actionType === 'reject'          && 'Reject Claim'}
                             {actionType === 'return_maker'    && 'Return for Revision'}
@@ -720,7 +736,9 @@ export default function CheckerQueue() {
                           </Button>
                         </>
                       ) : (
-                        <Button variant="outline" size="sm" className="w-full" onClick={closeClaim}>Close</Button>
+                        <Button variant="outline" size="sm" className="w-full font-medium" onClick={closeClaim}>
+                          <X className="mr-2 h-3.5 w-3.5" /> Close
+                        </Button>
                       )}
                     </div>
                   </div>
