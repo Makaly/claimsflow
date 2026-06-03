@@ -3,6 +3,7 @@ import {
   UserCog, Search, Loader2, FileText, DollarSign, Clock,
   CheckCircle, AlertTriangle, X, ChevronRight,
   Building2, User, Calendar, Hash, ShieldAlert, MessageSquare,
+  CheckSquare, Square, Tag, RefreshCw,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -57,6 +58,32 @@ const SIGNAL_STYLE = {
   info:     { bg: 'bg-blue-950/30 border-blue-700', text: 'text-blue-300', label: 'INFO' },
 }
 
+const DOCUMENT_TYPES = [
+  { value: 'invoice',              label: 'Invoice' },
+  { value: 'discharge_summary',   label: 'Discharge Summary' },
+  { value: 'lab_results',         label: 'Lab Results' },
+  { value: 'xray_scan_report',    label: 'X-Ray / Scan Report' },
+  { value: 'doctors_report',      label: "Doctor's Report" },
+  { value: 'pre_authorization',   label: 'Pre-Authorization Letter' },
+  { value: 'prescription',        label: 'Prescription' },
+  { value: 'referral_letter',     label: 'Referral Letter' },
+  { value: 'member_id',           label: 'Member ID Card Copy' },
+  { value: 'inpatient_records',   label: 'Inpatient Records' },
+  { value: 'outpatient_records',  label: 'Outpatient Records' },
+  { value: 'operation_report',    label: 'Operation / Post-Op Report' },
+  { value: 'cost_estimate',       label: 'Cost Estimate / Pro-Forma' },
+  { value: 'other',               label: 'Other' },
+]
+
+// Required document types for a complete claim
+const REQUIRED_DOC_TYPES: { value: string; label: string; required: boolean }[] = [
+  { value: 'invoice',            label: 'Invoice',                    required: true },
+  { value: 'discharge_summary',  label: 'Discharge Summary',          required: false },
+  { value: 'lab_results',        label: 'Lab Results',                required: false },
+  { value: 'pre_authorization',  label: 'Pre-Authorization Letter',   required: false },
+  { value: 'doctors_report',     label: "Doctor's Report",            required: false },
+]
+
 export default function CheckerQueue() {
   const [claims, setClaims] = useState<CheckerClaim[]>([])
   const [loading, setLoading] = useState(true)
@@ -73,6 +100,9 @@ export default function CheckerQueue() {
   const [docLoading, setDocLoading] = useState(false)
   const [activeDocIdx, setActiveDocIdx] = useState(0)
   const [ocrFields, setOcrFields] = useState<OcrAnnotation[]>([])
+  // doc type indexing: docId → type string
+  const [docTypes, setDocTypes] = useState<Record<string, string>>({})
+  const [savingDocId, setSavingDocId] = useState<string | null>(null)
 
   useEffect(() => {
     const load = async () => {
@@ -139,7 +169,29 @@ export default function CheckerQueue() {
     setSubmitError(null)
     setOcrFields([])
     setDocBytes(null)
+    // Initialise local type map from current doc metadata
+    const initial: Record<string, string> = {}
+    claim.documents.forEach(d => { if (d.id) initial[d.id] = d.documentType || '' })
+    setDocTypes(initial)
     setOpen(true)
+  }
+
+  const saveDocType = async (docId: string, type: string) => {
+    setDocTypes(prev => ({ ...prev, [docId]: type }))
+    setSavingDocId(docId)
+    try {
+      await api.patch(`/documents/${docId}`, { documentType: type })
+      // Update local claim state so the tab strip reflects the new type
+      setSelectedClaim(prev => prev ? {
+        ...prev,
+        documents: prev.documents.map(d => d.id === docId ? { ...d, documentType: type } : d),
+      } : prev)
+      setClaims(prev => prev.map(c => ({
+        ...c,
+        documents: c.documents.map(d => d.id === docId ? { ...d, documentType: type } : d),
+      })))
+    } catch { /* best-effort — local state already updated optimistically */ }
+    finally { setSavingDocId(null) }
   }
 
   const closeClaim = () => {
@@ -399,29 +451,124 @@ export default function CheckerQueue() {
                     ))}
                   </div>
 
-                  {/* Fraud signals */}
-                  <div className="flex-1 px-4 py-3 space-y-3">
+                  {/* ── Document Indexing (primary work area) ── */}
+                  <div className="flex-1 px-4 py-3 space-y-4 overflow-y-auto">
+
+                    {/* Document index table */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Tag className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Document Indexing</span>
+                      </div>
+                      {selectedClaim.documents.length === 0 ? (
+                        <div className="rounded-lg border border-dashed border-border/50 p-4 text-center text-xs text-muted-foreground">
+                          No documents attached to this claim
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {selectedClaim.documents.map((doc, i) => {
+                            const currentType = docTypes[doc.id || ''] || doc.documentType || ''
+                            const isSaving   = savingDocId === doc.id
+                            const typeLabel  = DOCUMENT_TYPES.find(t => t.value === currentType)?.label
+                            return (
+                              <div
+                                key={doc.id || i}
+                                className={`rounded-lg border p-2.5 cursor-pointer transition-all ${
+                                  i === activeDocIdx
+                                    ? 'border-primary/40 bg-primary/5'
+                                    : 'border-border/50 hover:border-border hover:bg-muted/30'
+                                }`}
+                                onClick={() => setActiveDocIdx(i)}
+                              >
+                                <div className="flex items-start justify-between gap-2 mb-1.5">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <FileText className={`h-3.5 w-3.5 shrink-0 ${i === activeDocIdx ? 'text-primary' : 'text-muted-foreground'}`} />
+                                    <span className="text-xs font-medium truncate">{doc.name}</span>
+                                  </div>
+                                  {isSaving && <RefreshCw className="h-3 w-3 text-muted-foreground animate-spin shrink-0" />}
+                                  {!isSaving && currentType && (
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-medium shrink-0 whitespace-nowrap">
+                                      ✓ indexed
+                                    </span>
+                                  )}
+                                  {!isSaving && !currentType && (
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-medium shrink-0">
+                                      ! needs type
+                                    </span>
+                                  )}
+                                </div>
+                                <select
+                                  className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                                  value={currentType}
+                                  onClick={e => e.stopPropagation()}
+                                  onChange={e => {
+                                    if (doc.id) saveDocType(doc.id, e.target.value)
+                                    else setDocTypes(prev => ({ ...prev, [String(i)]: e.target.value }))
+                                  }}
+                                >
+                                  <option value="">— Select document type —</option>
+                                  {DOCUMENT_TYPES.map(t => (
+                                    <option key={t.value} value={t.value}>{t.label}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Required documents checklist */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <CheckSquare className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Required Documents</span>
+                      </div>
+                      <div className="space-y-1">
+                        {REQUIRED_DOC_TYPES.map(req => {
+                          const present = Object.values(docTypes).includes(req.value) ||
+                            selectedClaim.documents.some(d => d.documentType === req.value)
+                          return (
+                            <div key={req.value} className="flex items-center gap-2 py-1">
+                              {present
+                                ? <CheckSquare className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                                : <Square className={`h-3.5 w-3.5 shrink-0 ${req.required ? 'text-red-400' : 'text-muted-foreground/40'}`} />
+                              }
+                              <span className={`text-xs ${present ? 'text-foreground' : req.required ? 'text-red-400' : 'text-muted-foreground'}`}>
+                                {req.label}
+                              </span>
+                              {req.required && !present && (
+                                <span className="text-[9px] px-1 rounded bg-red-500/15 text-red-400 font-semibold ml-auto">required</span>
+                              )}
+                              {present && <span className="text-[9px] text-emerald-500 ml-auto">✓</span>}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Fraud signals (secondary — compact) */}
                     {selectedClaim.fraudSignals.length > 0 && (
                       <div>
                         <div className="flex items-center gap-2 mb-2">
                           <div className="h-px flex-1 bg-border" />
                           <span className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase px-1">
-                            {selectedClaim.fraudSignals.length} Warning Signal{selectedClaim.fraudSignals.length !== 1 ? 's' : ''}
+                            {selectedClaim.fraudSignals.length} Signal{selectedClaim.fraudSignals.length !== 1 ? 's' : ''}
                           </span>
                           <div className="h-px flex-1 bg-border" />
                         </div>
-                        <div className="space-y-2">
+                        <div className="space-y-1.5">
                           {selectedClaim.fraudSignals.map((sig, i) => {
                             const s = SIGNAL_STYLE[sig.level]
                             return (
-                              <div key={i} className={`rounded-lg border p-3 ${s.bg}`}>
-                                <div className="flex items-center gap-2 mb-1">
+                              <div key={i} className={`rounded-lg border p-2.5 ${s.bg}`}>
+                                <div className="flex items-center gap-2 mb-0.5">
                                   <span className={`inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider rounded px-1.5 py-0.5 ${
                                     sig.level === 'critical' ? 'bg-red-500/30 text-red-300' : sig.level === 'warning' ? 'bg-amber-500/30 text-amber-300' : 'bg-blue-500/30 text-blue-300'
                                   }`}><AlertTriangle className="h-2.5 w-2.5" />{s.label}</span>
                                   <span className={`text-xs font-semibold ${s.text}`}>{sig.title}</span>
                                 </div>
-                                <p className={`text-[11px] leading-relaxed ${s.text} opacity-75`}>{sig.detail}</p>
+                                <p className={`text-[10px] leading-relaxed ${s.text} opacity-70`}>{sig.detail}</p>
                               </div>
                             )
                           })}

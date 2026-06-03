@@ -146,6 +146,16 @@ export class DocumentsController {
     stream.pipe(res);
   }
 
+  /** Update document metadata — used by the maker-checker indexing workflow. */
+  @Patch(':id')
+  @Roles('admin', 'claims_officer', 'maker_checker')
+  updateMeta(
+    @Param('id') id: string,
+    @Body() body: { documentType?: string; originalName?: string },
+  ) {
+    return this.documentsService.updateMeta(id, body);
+  }
+
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.documentsService.remove(id);

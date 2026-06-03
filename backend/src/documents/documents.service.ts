@@ -501,6 +501,13 @@ export class DocumentsService {
     };
   }
 
+  async updateMeta(id: string, body: { documentType?: string; originalName?: string }) {
+    const data: { documentType?: string; originalName?: string } = {}
+    if (body.documentType !== undefined) data.documentType = body.documentType
+    if (body.originalName !== undefined) data.originalName = body.originalName
+    return this.prisma.document.update({ where: { id }, data })
+  }
+
   async remove(id: string) {
     const document = await this.findOne(id);
     await this.storage.delete(document.path);
