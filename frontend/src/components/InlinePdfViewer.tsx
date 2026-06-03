@@ -9,7 +9,6 @@
  * ArrayBuffer" errors because pdfjs transfers ArrayBuffer ownership on load.
  */
 import { useState, useCallback, useRef, useEffect, useLayoutEffect } from 'react'
-import type { MouseEvent as ReactMouseEvent } from 'react'
 import { toast } from 'sonner'
 import * as pdfjsLib from 'pdfjs-dist'
 import {
@@ -289,55 +288,6 @@ export function InlinePdfViewer({
 
   const resetZone = () => { setZoneStart(null); setZoneRect(null) }
 
-  // Crop the drawn region out of the rendered canvas, upscale small selections
-  // for legibility, and send it to the Tesseract zone endpoint.
-  const runZoneOcr = useCallback(async (rect: { x: number; y: number; w: number; h: number }, rw: number, rh: number) => {
-    const canvas = canvasRef.current
-    if (!canvas || rw === 0 || rh === 0) { resetZone(); return }
-    const sx = (rect.x / rw) * canvas.width
-    const sy = (rect.y / rh) * canvas.height
-    const sw = (rect.w / rw) * canvas.width
-    const sh = (rect.h / rh) * canvas.height
-    if (sw < 8 || sh < 8) { resetZone(); return }
-
-    // Upscale tiny regions — Tesseract reads larger glyphs far better.
-    const up = sw < 240 || sh < 70 ? 3 : 1.5
-    const off = document.createElement('canvas')
-    off.width  = Math.round(sw * up)
-    off.height = Math.round(sh * up)
-    const octx = off.getContext('2d')
-    if (!octx) { resetZone(); return }
-    octx.imageSmoothingEnabled = true
-    octx.imageSmoothingQuality = 'high'
-    octx.drawImage(canvas, sx, sy, sw, sh, 0, 0, off.width, off.height)
-
-    setZoneBusy(true)
-    off.toBlob(async (blob) => {
-      try {
-        if (!blob) throw new Error('no blob')
-        const fd = new FormData()
-        fd.append('file', new File([blob], 'ocr-zone.png', { type: 'image/png' }))
-        const { data } = await api.post('/ocr/zone-text', fd, {
-          headers: { 'Content-Type': 'multipart/form-data' }, timeout: 30000,
-        })
-        const text = String(data?.text || '').replace(/\s*\n\s*/g, ' ').trim()
-        if (text) onZoneText?.(text)
-        else toast.info('No text detected in that region — try a tighter box')
-      } catch {
-        toast.error('Zone OCR failed — please try again')
-      } finally {
-        setZoneBusy(false)
-        resetZone()
-        onExitZoneMode?.()
-      }
-    }, 'image/png')
-  }, [onZoneText, onExitZoneMode])
-
-  const zonePoint = (e: ReactMouseEvent) => {
-    const r = e.currentTarget.getBoundingClientRect()
-    return { x: e.clientX - r.left, y: e.clientY - r.top, rw: r.width, rh: r.height }
-  }
-
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
@@ -406,43 +356,12 @@ export function InlinePdfViewer({
         </div>
       </div>
 
-      {/* Canvas */}
-      <div ref={containerRef} className="flex-1 overflow-auto flex justify-center p-2 bg-muted/30">
+      {/* Canvas wrapper - non-scrolling anchor for zone overlay */}
+      <div className="flex-1 min-h-0 relative">
+        <div ref={containerRef} className={`absolute inset-0 flex justify-center p-2 bg-muted/30 ${zoneMode ? 'overflow-hidden' : 'overflow-auto'}`}>
         {pdfDoc ? (
           <div style={{ position: 'relative', display: 'inline-block' }}>
             <canvas ref={canvasRef} className="shadow-md rounded max-w-full block" />
-
-            {/* Zone OCR capture layer */}
-            {zoneMode && (
-              <div
-                onMouseDown={e => { const p = zonePoint(e); setZoneStart({ x: p.x, y: p.y }); setZoneRect({ x: p.x, y: p.y, w: 0, h: 0 }) }}
-                onMouseMove={e => {
-                  if (!zoneStart) return
-                  const p = zonePoint(e)
-                  setZoneRect({ x: Math.min(zoneStart.x, p.x), y: Math.min(zoneStart.y, p.y), w: Math.abs(p.x - zoneStart.x), h: Math.abs(p.y - zoneStart.y) })
-                }}
-                onMouseUp={e => { const p = zonePoint(e); if (zoneRect && !zoneBusy) runZoneOcr(zoneRect, p.rw, p.rh) }}
-                style={{ position: 'absolute', inset: 0, cursor: zoneBusy ? 'wait' : 'crosshair', zIndex: 25 }}
-              >
-                {zoneRect && (
-                  <div style={{
-                    position: 'absolute', left: zoneRect.x, top: zoneRect.y, width: zoneRect.w, height: zoneRect.h,
-                    border: '2px dashed #06b6d4', background: 'rgba(6,182,212,0.12)', pointerEvents: 'none',
-                  }} />
-                )}
-              </div>
-            )}
-
-            {/* Zone-mode banner */}
-            {zoneMode && (
-              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex items-center gap-1.5 rounded-full bg-cyan-600/90 text-white text-[11px] font-medium px-3 py-1 shadow-lg whitespace-nowrap">
-                {zoneBusy ? (
-                  <><Loader2 className="h-3 w-3 animate-spin" /> Reading region…</>
-                ) : (
-                  <><ScanLine className="h-3 w-3" /> Drag a box around {zoneHint ? `“${zoneHint}”` : 'the value'} · Esc to cancel</>
-                )}
-              </div>
-            )}
             {showAnnotations && canvasDims && userAnnotations.length > 0 && (
               <canvas ref={annotOverlayRef} style={{ position: 'absolute', top: 0, left: 0, width: canvasDims.w, height: canvasDims.h, pointerEvents: 'none' }} />
             )}
@@ -489,7 +408,79 @@ export function InlinePdfViewer({
             <Loader2 className="h-5 w-5 animate-spin" /><span className="text-sm">Loading…</span>
           </div>
         )}
-      </div>
+        </div>{/* end scrollable container */}
+
+        {/* Zone OCR capture layer — sits OUTSIDE the scrollable div so dragging
+            never competes with scroll. Covers the full canvas area. Coordinates
+            are mapped to canvas pixels via getBoundingClientRect(). */}
+        {zoneMode && (
+          <div
+            style={{ position: 'absolute', inset: 0, zIndex: 40, cursor: zoneBusy ? 'wait' : 'crosshair', userSelect: 'none' }}
+            onMouseDown={e => {
+              const r = e.currentTarget.getBoundingClientRect()
+              const x = e.clientX - r.left; const y = e.clientY - r.top
+              setZoneStart({ x, y }); setZoneRect({ x, y, w: 0, h: 0 })
+            }}
+            onMouseMove={e => {
+              if (!zoneStart) return
+              const r = e.currentTarget.getBoundingClientRect()
+              const cx = e.clientX - r.left; const cy = e.clientY - r.top
+              setZoneRect({ x: Math.min(zoneStart.x, cx), y: Math.min(zoneStart.y, cy), w: Math.abs(cx - zoneStart.x), h: Math.abs(cy - zoneStart.y) })
+            }}
+            onMouseUp={e => {
+              if (!zoneRect || !zoneStart || zoneBusy) return
+              const overlayRect = e.currentTarget.getBoundingClientRect()
+              const canvas = canvasRef.current
+              if (!canvas) { resetZone(); return }
+              const cr = canvas.getBoundingClientRect()
+              // Selection in overlay coords → canvas pixel coords
+              const scaleX = canvas.width / cr.width
+              const scaleY = canvas.height / cr.height
+              const canvasOffX = cr.left - overlayRect.left
+              const canvasOffY = cr.top  - overlayRect.top
+              const sx = Math.max(0, (zoneRect.x - canvasOffX) * scaleX)
+              const sy = Math.max(0, (zoneRect.y - canvasOffY) * scaleY)
+              const sw = zoneRect.w * scaleX
+              const sh = zoneRect.h * scaleY
+              if (sw < 8 || sh < 8) { resetZone(); return }
+              setZoneBusy(true)
+              // Crop the selection out of the canvas buffer directly
+              const off = document.createElement('canvas')
+              const up = sw < 240 || sh < 70 ? 3 : 1.5
+              off.width = Math.round(sw * up); off.height = Math.round(sh * up)
+              const octx = off.getContext('2d')!
+              octx.imageSmoothingEnabled = true; octx.imageSmoothingQuality = 'high'
+              octx.drawImage(canvas, sx, sy, sw, sh, 0, 0, off.width, off.height)
+              off.toBlob(async blob => {
+                try {
+                  if (!blob) throw new Error('no blob')
+                  const fd = new FormData()
+                  fd.append('file', new File([blob], 'zone.png', { type: 'image/png' }))
+                  const { data } = await api.post('/ocr/zone-text', fd, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 30000 })
+                  const text = String(data?.text ?? '').replace(/\s*\n\s*/g, ' ').trim()
+                  if (text) onZoneText?.(text)
+                  else toast.info('No text detected — try dragging a tighter box around the value')
+                } catch { toast.error('Zone OCR failed — please try again') }
+                finally { setZoneBusy(false); resetZone(); onExitZoneMode?.() }
+              }, 'image/png')
+            }}
+          >
+            {zoneRect && zoneRect.w > 2 && zoneRect.h > 2 && (
+              <div style={{
+                position: 'absolute', left: zoneRect.x, top: zoneRect.y, width: zoneRect.w, height: zoneRect.h,
+                border: '2.5px dashed #06b6d4', background: 'rgba(6,182,212,0.14)', pointerEvents: 'none', boxSizing: 'border-box',
+              }} />
+            )}
+            {zoneBusy && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/30 pointer-events-none">
+                <div className="flex items-center gap-2 rounded-full bg-cyan-600 text-white text-sm font-semibold px-4 py-2 shadow-xl">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Reading region…
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>{/* end canvas wrapper */}
 
       {/* OCR field strip */}
       {showAnnotations && hasAnnotations && (

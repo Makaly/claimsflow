@@ -490,6 +490,22 @@ export default function CheckerQueue() {
                 <div className={`min-h-0 flex flex-col bg-[#111] border-r transition-all ${
                   scanField ? 'border-cyan-500/70 ring-2 ring-cyan-500/40 ring-inset' : 'border-white/10'
                 }`}>
+
+                  {/* OCR capture instruction — pinned at top of document pane */}
+                  {scanField && (
+                    <div className="shrink-0 flex items-center gap-3 px-4 py-2.5 bg-cyan-500 text-black font-semibold text-sm z-30">
+                      <ScanLine className="h-5 w-5 shrink-0" />
+                      <span>
+                        Drag a box on the document below to read <strong>"{scanField.label}"</strong>
+                      </span>
+                      <button
+                        onClick={() => setScanField(null)}
+                        className="ml-auto flex items-center gap-1 rounded bg-black/20 hover:bg-black/40 px-2 py-0.5 text-xs font-bold transition-colors">
+                        <X className="h-3.5 w-3.5" /> Cancel
+                      </button>
+                    </div>
+                  )}
+
                   {selectedClaim.documents.length > 1 && (
                     <div className="flex items-center gap-1 px-3 py-1.5 border-b border-white/8 bg-[#0a0a0a] shrink-0 overflow-x-auto">
                       {selectedClaim.documents.map((doc, i) => (
