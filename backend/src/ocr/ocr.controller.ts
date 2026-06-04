@@ -30,7 +30,11 @@ export class OcrController {
       models.find(m => m.available && m.provider === defaultProvider && m.tier === 'recommended')?.id
       ?? models.find(m => m.available && m.provider === defaultProvider)?.id
       ?? models.find(m => m.available)?.id;
-    return { models, defaultModel };
+    // `aiAvailable` lets the mobile/web clients show an "AI extraction
+    // unavailable — using basic OCR" banner up-front instead of inferring it
+    // from blank results. False = only the Tesseract regex fallback is usable.
+    const aiAvailable = this.visionRouter.aiAvailable();
+    return { models, defaultModel, aiAvailable };
   }
 
   /**

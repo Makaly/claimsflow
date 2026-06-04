@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ClaudeVisionService } from './claude-vision.service';
 import { GeminiVisionService } from './gemini-vision.service';
 import { OllamaOcrService } from './ollama-ocr.service';
@@ -38,7 +38,7 @@ function isQuotaOrBillingError(err: any): boolean {
 }
 
 @Injectable()
-export class VisionRouterService {
+export class VisionRouterService implements OnModuleInit {
   private readonly logger = new Logger(VisionRouterService.name);
 
   // Circuit breaker: maps provider → timestamp when it becomes available again.
@@ -50,6 +50,31 @@ export class VisionRouterService {
     private readonly ollama: OllamaOcrService,
     private readonly prisma: PrismaService,
   ) {}
+
+  /**
+   * True when at least one AI vision provider is configured (Claude or Gemini
+   * API key present). When false, OCR silently degrades to the Tesseract regex
+   * fallback (~0% on scanned invoices) — callers should surface this to users.
+   */
+  aiAvailable(): boolean {
+    return this.claude.isAvailable() || this.gemini.isAvailable();
+  }
+
+  /**
+   * Emit a loud startup warning when no AI keys are configured, so an operator
+   * sees it in the logs instead of discovering blank extractions in production.
+   * This is the #1 "looks like a product bug but is really a missing env var"
+   * failure mode on the Render host.
+   */
+  onModuleInit(): void {
+    if (!this.aiAvailable()) {
+      this.logger.warn(
+        '⚠️  No AI vision keys configured (ANTHROPIC_API_KEY / GEMINI_API_KEY unset). ' +
+        'OCR will fall back to Tesseract regex extraction — low accuracy on scanned/handwritten ' +
+        'invoices and likely blank fields. Set an AI key to enable accurate extraction.',
+      );
+    }
+  }
 
   /** Returns true when a provider's circuit is open (i.e. it is being skipped). */
   private isCircuitOpen(provider: VisionProvider): boolean {
