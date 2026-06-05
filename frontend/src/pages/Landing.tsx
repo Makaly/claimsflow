@@ -12,6 +12,7 @@ import {
   Apple,
   Play,
   BadgeCheck,
+  Download,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Reveal } from '@/components/Reveal'
@@ -120,7 +121,7 @@ export default function Landing() {
               </Link>
               <a href="#mobile">
                 <Button variant="outline" className={cn('h-12 px-6', OUTLINE_CTA)}>
-                  <Smartphone className="mr-2 h-4 w-4" />
+                  <Download className="mr-2 h-4 w-4" />
                   Get the app
                 </Button>
               </a>
@@ -267,18 +268,28 @@ export default function Landing() {
               ))}
             </ul>
 
-            {/* "Coming soon" store badges — app is not yet published */}
-            <div className="flex flex-wrap gap-3 pt-2">
-              <StoreBadge line1="Coming soon to the" line2="App Store" icon={Apple} />
-              <StoreBadge line1="Coming soon on" line2="Google Play" icon={Play} />
+            {/* Store badges — Android is live, iOS is coming soon */}
+            <div className="space-y-3 pt-2">
+              <div className="flex flex-wrap gap-3">
+                <StoreBadge
+                  line1="Download for"
+                  line2="Android"
+                  icon={Play}
+                  href="/claimsflow-android.apk"
+                />
+                <StoreBadge line1="Coming soon to the" line2="App Store" icon={Apple} />
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-500">
+                Android beta · enable &ldquo;Install unknown apps&rdquo; in Settings before installing
+              </p>
             </div>
 
-            {/* Waitlist — presentational only for now */}
-            <form onSubmit={handleNotify} className="flex max-w-md flex-col gap-2 pt-2 sm:flex-row">
+            {/* iOS waitlist */}
+            <form onSubmit={handleNotify} className="flex max-w-md flex-col gap-2 pt-1 sm:flex-row">
               {notified ? (
                 <p className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
                   <CheckCircle2 className="h-4 w-4" />
-                  Thanks — we&rsquo;ll let you know the moment it launches.
+                  Thanks — we&rsquo;ll notify you when the iOS app is ready.
                 </p>
               ) : (
                 <>
@@ -288,11 +299,11 @@ export default function Landing() {
                     value={notifyEmail}
                     onChange={(e) => setNotifyEmail(e.target.value)}
                     placeholder="you@company.com"
-                    aria-label="Email for launch notification"
+                    aria-label="Email for iOS launch notification"
                     className="h-11 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/60 dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:placeholder:text-slate-500"
                   />
                   <Button type="submit" className={cn('h-11', PRIMARY_CTA)}>
-                    Notify me
+                    Notify me for iOS
                   </Button>
                 </>
               )}
@@ -417,25 +428,49 @@ function StoreBadge({
   line1,
   line2,
   icon: Icon,
+  href,
 }: {
   line1: string
   line2: string
   icon: React.ComponentType<{ className?: string }>
+  href?: string
 }) {
-  return (
-    <div
-      aria-disabled="true"
-      title="Coming soon"
-      className="inline-flex cursor-default items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 dark:border-white/15 dark:bg-white/[0.04]"
-    >
-      <Icon className="h-6 w-6 text-slate-700 dark:text-slate-200" />
+  const inner = (
+    <>
+      <Icon className="h-6 w-6 flex-shrink-0 text-slate-700 dark:text-slate-200" />
       <span className="flex flex-col text-left leading-tight">
         <span className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">{line1}</span>
         <span className="flex items-center gap-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
           {line2}
-          <BadgeCheck className="h-3.5 w-3.5 text-brand-600 dark:text-brand-400" />
+          {href ? (
+            <Download className="h-3.5 w-3.5 text-brand-600 dark:text-brand-400" />
+          ) : (
+            <BadgeCheck className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
+          )}
         </span>
       </span>
+    </>
+  )
+
+  if (href) {
+    return (
+      <a
+        href={href}
+        download
+        className="inline-flex cursor-pointer items-center gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-2.5 transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md dark:border-brand-400/30 dark:bg-brand-500/10 dark:hover:border-brand-400/50 dark:hover:bg-brand-500/15"
+      >
+        {inner}
+      </a>
+    )
+  }
+
+  return (
+    <div
+      aria-disabled="true"
+      title="Coming soon"
+      className="inline-flex cursor-default items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 opacity-60 dark:border-white/10 dark:bg-white/[0.03]"
+    >
+      {inner}
     </div>
   )
 }
