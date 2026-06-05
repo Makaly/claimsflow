@@ -27,6 +27,7 @@ export class WorkflowService {
     limit: number = 50,
     offset: number = 0,
     user?: { userId: string; role: string },
+    seeAll: boolean = false,
   ) {
     const where: any = { workflowStage: stage };
 
@@ -39,9 +40,12 @@ export class WorkflowService {
         // assigned to them in claims_officer_review (auto-assigned on maker-checker
         // approval; the reroute sweep covers any left unassigned). On other stages
         // they may legitimately view (e.g. the Maker Queue), they keep see-all
-        // behaviour. An explicit ?assignedTo= overrides the self-scope.
+        // behaviour. An explicit ?assignedTo= overrides the self-scope, and
+        // ?scope=all (seeAll) lets an officer view the full team pool so claims
+        // assigned to a colleague are never invisible.
         if (stage === 'claims_officer_review') {
-          where.assignedTo = assignedTo ?? userId;
+          if (assignedTo) where.assignedTo = assignedTo;
+          else if (!seeAll) where.assignedTo = userId;
         } else if (assignedTo) {
           where.assignedTo = assignedTo;
         }
@@ -51,8 +55,9 @@ export class WorkflowService {
         // that slip through unassigned are swept into an assignee by
         // reroute-orphans, so this stays populated without showing a shared pool.
         // An explicit ?assignedTo= (e.g. a supervisor inspecting one checker's
-        // load) overrides the self-scope.
-        where.assignedTo = assignedTo ?? userId;
+        // load) overrides the self-scope; ?scope=all shows the full team pool.
+        if (assignedTo) where.assignedTo = assignedTo;
+        else if (!seeAll) where.assignedTo = userId;
       } else if (role === 'fraud_officer') {
         // Fraud officers only work the fraud_review stage.
         if (stage !== 'fraud_review') return { claims: [], total: 0 };

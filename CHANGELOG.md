@@ -9,6 +9,28 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **Maker-checker OCR field corrections with audit trail and classifier
+  learning** (`backend/src/claims/claims.controller.ts`,
+  `backend/src/claims/claims.service.ts`,
+  `backend/src/document-classifier/document-classifier.service.ts`,
+  `backend/src/documents/documents.service.ts`,
+  `frontend/src/components/InlinePdfViewer.tsx`,
+  `frontend/src/pages/CheckerQueue.tsx`) — the maker-checker queue now exposes
+  all nine standard OCR fields for inline correction regardless of whether the
+  extractor populated them. Each save calls `PATCH /claims/:id/ocr-corrections`,
+  writes a structured activity-log entry (actor, old value → new value,
+  timestamp), and syncs verified values back to the canonical Claim record so
+  downstream officers always see human-checked data. The document classifier
+  learns from every correction via `recordManualZoneHit()` and from every
+  document-type confirmation via `recordConfirmedDocumentType()` (best-effort —
+  classifier failures never block the workflow). The UI adds zone OCR (drag a
+  rectangle on the embedded PDF → Tesseract extracts the text and fills the
+  field), per-field confidence badges, anomaly warnings, correction-history
+  toggles, and a document audit trail with field-level old → new diffs.
+  `documents.service.updateMeta()` now accepts optional `indexingNotes` and
+  builds a structured `metadata.auditTrail` array so every document-type
+  change is attributable.
+
 - **Admin-configurable dynamic claim auto-assignment, extended to the
   claims-officer stage** (`backend/src/assignment/`,
   `backend/src/claims/claims.service.ts`,

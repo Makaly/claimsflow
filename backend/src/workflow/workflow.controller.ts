@@ -45,6 +45,7 @@ export class WorkflowController {
     @Query('assignedTo') assignedTo?: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
+    @Query('scope') scope?: string,
   ) {
     return this.workflowService.getClaimsByStage(
       stage,
@@ -54,6 +55,7 @@ export class WorkflowController {
       req?.user
         ? { userId: req.user.userId, role: req.user.role }
         : undefined,
+      scope === 'all',
     );
   }
 

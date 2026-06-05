@@ -18,6 +18,7 @@ import { OcrModule } from '../ocr/ocr.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { DocumentsModule } from '../documents/documents.module';
 import { AssignmentModule } from '../assignment/assignment.module';
+import { DocumentClassifierModule } from '../document-classifier/document-classifier.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { AssignmentModule } from '../assignment/assignment.module';
     NotificationsModule,
     DocumentsModule,
     AssignmentModule,
+    DocumentClassifierModule,
   ],
   controllers: [ClaimsController, ClaimLabelsController, ProviderFraudThresholdsController, SignalLiftController],
   providers: [

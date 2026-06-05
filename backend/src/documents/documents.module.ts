@@ -6,9 +6,10 @@ import { SearchablePdfService } from '../ocr/searchable-pdf.service';
 import { ImagePreprocessorService } from '../ocr/image-preprocessor.service';
 import { BarcodeService } from '../common/services/barcode.service';
 import { PdfWatermarkService } from '../common/services/pdf-watermark.service';
+import { DocumentClassifierModule } from '../document-classifier/document-classifier.module';
 
 @Module({
-  imports: [OcrModule],
+  imports: [OcrModule, DocumentClassifierModule],
   controllers: [DocumentsController],
   providers: [
     DocumentsService,

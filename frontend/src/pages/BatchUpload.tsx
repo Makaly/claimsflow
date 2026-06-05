@@ -3,6 +3,7 @@ import CameraScanner from '@/components/CameraScanner'
 import { useDropzone } from 'react-dropzone'
 import { downloadXlsx } from '@/lib/xlsx-export'
 import * as pdfjsLib from 'pdfjs-dist'
+import { getDocumentSafe } from '@/lib/pdfSafe'
 import {
   Upload, X, CheckCircle, AlertCircle,
   Loader2, CloudUpload, Brain, Sparkles,
@@ -713,7 +714,7 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId, jobSetup }: {
           if (!r.ok) throw new Error(`HTTP ${r.status}`)
           src = { data: new Uint8Array(await r.arrayBuffer()) }
         }
-        const pdf = await pdfjsLib.getDocument(src).promise
+        const pdf = await getDocumentSafe(src).promise
         if (dead) { pdf.destroy(); return }
         setPdfDoc(pdf); setNumPages(pdf.numPages)
         // Build thumbnails in background
@@ -2331,6 +2332,11 @@ export default function BatchUpload() {
   const [selectedModel, setSelectedModel] = useState<string>(() =>
     localStorage.getItem('visionModel') || ''
   )
+  // False when the backend has no AI vision keys configured (Claude/Gemini),
+  // so extraction silently degrades to the Tesseract regex engine (~0% on
+  // scans). Defaults to true so the warning never flashes before /ocr/models
+  // resolves. Drives the "AI extraction unavailable" banner below.
+  const [aiAvailable, setAiAvailable] = useState<boolean>(true)
 
   useEffect(() => {
     let cancelled = false
@@ -2338,6 +2344,13 @@ export default function BatchUpload() {
       if (cancelled) return
       const models: VisionModelOption[] = data.models || []
       setVisionModels(models)
+      // `aiAvailable` is the explicit backend flag; fall back to inferring it
+      // from the model list for older backends that don't send it.
+      setAiAvailable(
+        data.aiAvailable !== undefined
+          ? !!data.aiAvailable
+          : models.some(m => m.available && m.provider !== 'tesseract'),
+      )
       const stored = localStorage.getItem('visionModel')
       const validStored = stored && models.find(m => m.id === stored && m.available)
       if (!validStored) {
@@ -2870,7 +2883,7 @@ export default function BatchUpload() {
         if (!scanPreviewDocRef.current) {
           const resp = await fetch(scanPreviewUrl)
           const buf  = await resp.arrayBuffer()
-          const doc  = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise
+          const doc  = await getDocumentSafe({ data: new Uint8Array(buf) }).promise
           if (cancelled) { doc.destroy(); return }
           scanPreviewDocRef.current = doc
           setScanPreviewPages(doc.numPages)
@@ -3689,6 +3702,19 @@ export default function BatchUpload() {
             onClick={resetAll}>
             <RotateCcw className="h-3 w-3 mr-1" /> Start fresh
           </Button>
+        </div>
+      )}
+
+      {/* ── AI extraction unavailable banner ───────────────────────────────── */}
+      {!aiAvailable && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-orange-300 bg-orange-50 dark:bg-orange-950/30 dark:border-orange-700 px-4 py-3 text-sm">
+          <AlertTriangle className="h-4 w-4 text-orange-600 shrink-0" />
+          <span className="text-orange-800 dark:text-orange-300 flex-1">
+            <strong>AI extraction unavailable.</strong> No AI vision keys are configured on the
+            server, so invoices are read with basic OCR (Tesseract) — accuracy is low on scanned
+            or handwritten documents. <strong>Please verify every extracted field</strong> before
+            publishing. Ask an administrator to set an AI key to restore automatic extraction.
+          </span>
         </div>
       )}
 
