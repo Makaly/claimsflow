@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
 import * as speakeasy from 'speakeasy';
 import * as QRCode from 'qrcode';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class TwoFactorService {
@@ -128,9 +129,24 @@ export class TwoFactorService {
   }
 
   private generateBackupCodes(): string[] {
-    return Array.from({ length: 10 }, () =>
-      Math.random().toString(36).substring(2, 10).toUpperCase(),
-    );
+    // Cryptographically secure backup codes. Math.random() is predictable and
+    // must never be used for security tokens. Each code is 8 chars from an
+    // unambiguous base-32 alphabet (no 0/O/1/I), drawn via rejection sampling
+    // to avoid modulo bias.
+    const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 32 symbols
+    const codeLen = 8;
+    return Array.from({ length: 10 }, () => {
+      let code = '';
+      while (code.length < codeLen) {
+        for (const byte of crypto.randomBytes(codeLen)) {
+          if (byte < 256 - (256 % ALPHABET.length)) {
+            code += ALPHABET[byte % ALPHABET.length];
+            if (code.length === codeLen) break;
+          }
+        }
+      }
+      return code;
+    });
   }
 
   private async verifyBackupCode(userId: string, code: string, user: any): Promise<boolean> {

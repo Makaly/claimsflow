@@ -1,4 +1,4 @@
-import { Controller, Post, Patch, Body, Get, UseGuards, Request, Response, HttpCode, Query, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Controller, Post, Patch, Body, Get, UseGuards, Request, Response, HttpCode, Query, BadRequestException, NotFoundException, NotImplementedException } from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { EmailOtpService } from './email-otp.service';
@@ -43,23 +43,20 @@ export class AuthController {
     if (!body?.memberNumber || !/^\d{4,}$/.test(body?.pin ?? '')) {
       throw new BadRequestException('memberNumber and 4-digit pin required');
     }
-    // TODO: hand off to AuthService.memberLogin once it exists; this stub
-    // simply echoes the inputs so the mobile DTO contract can be wired
-    // against a 200. The cookie path mirrors the provider login for parity.
-    const stubToken = `STUB.${Buffer.from(body.memberNumber).toString('base64')}.MEMBER`;
-    const isProduction = process.env.NODE_ENV === 'production';
-    res.cookie('access_token', stubToken, {
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: isProduction ? 'none' : 'lax',
-      maxAge: 24 * 60 * 60 * 1000,
-      path: '/',
-    });
+    // SECURITY: this is an unimplemented stub that performs NO credential
+    // verification. It must never run in production — issuing any auth cookie
+    // from an unverified path is an authentication-bypass risk. Members also do
+    // not log in under the provider-first model. We hard-fail in production and
+    // keep the stub only in non-prod so the mobile DTO contract can be wired
+    // against a 200 during development. No cookie is issued.
+    if (process.env.NODE_ENV === 'production') {
+      throw new NotImplementedException('Member login is not available.');
+    }
     return {
       memberNumber: body.memberNumber,
       memberName: 'Demo Member',
-      accessToken: stubToken,
       scope: 'member',
+      stub: true,
     };
   }
 
