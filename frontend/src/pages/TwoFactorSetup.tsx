@@ -1,24 +1,54 @@
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { Shield, Copy, CheckCircle, Loader2 } from 'lucide-react'
-import { QRCodeSVG } from 'qrcode.react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import api from '@/services/api'
 
 export default function TwoFactorSetup() {
   const [step, setStep] = useState<'intro' | 'scan' | 'verify' | 'complete'>('intro')
   const [code, setCode] = useState('')
-  const secret = 'JBSWY3DPEHPK3PXP'
-  const otpAuthUrl = `otpauth://totp/CIC%20Claims:admin@cic.co.ke?secret=${secret}&issuer=CIC%20Claims`
+  const [busy, setBusy] = useState(false)
+  // Secret, QR image, and recovery codes are issued PER USER by the backend.
+  // Previously these were hardcoded (a fixed RFC-example TOTP secret and fake
+  // recovery codes), which is both non-functional and misleading.
+  const [secret, setSecret] = useState('')
+  const [qrCode, setQrCode] = useState('') // data-URL image from the server
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([])
 
-  const recoveryCodes = [
-    'ABCD-EFGH-1234', 'IJKL-MNOP-5678',
-    'QRST-UVWX-9012', 'YZAB-CDEF-3456',
-    'GHIJ-KLMN-7890', 'OPQR-STUV-1234',
-  ]
+  // Step 1 → ask the server to generate a fresh secret + QR for this account.
+  const startSetup = async () => {
+    setBusy(true)
+    try {
+      const { data } = await api.post('/auth/2fa/generate')
+      setSecret(data.manualEntryKey ?? data.secret ?? '')
+      setQrCode(data.qrCode ?? '')
+      setStep('scan')
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'Could not start 2FA setup.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Step 2 → verify the TOTP code; on success the server enables 2FA and
+  // returns the one-time recovery codes to display.
+  const verifyAndEnable = async () => {
+    setBusy(true)
+    try {
+      const { data } = await api.post('/auth/2fa/enable', { token: code })
+      setRecoveryCodes(Array.isArray(data.backupCodes) ? data.backupCodes : [])
+      setStep('complete')
+      toast.success('Two-factor authentication enabled.')
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'Invalid verification code.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -44,7 +74,8 @@ export default function TwoFactorSetup() {
               <p>2. Scan the QR code with your authenticator app</p>
               <p>3. Enter the verification code to confirm setup</p>
             </div>
-            <Button onClick={() => setStep('scan')} className="mt-4">
+            <Button onClick={startSetup} disabled={busy} className="mt-4">
+              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Get Started
             </Button>
           </CardContent>
@@ -60,7 +91,9 @@ export default function TwoFactorSetup() {
           <CardContent className="space-y-6">
             <div className="flex justify-center">
               <div className="rounded-xl bg-white p-4">
-                <QRCodeSVG value={otpAuthUrl} size={200} />
+                {qrCode
+                  ? <img src={qrCode} alt="2FA QR code" width={200} height={200} />
+                  : <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />}
               </div>
             </div>
 
@@ -86,7 +119,8 @@ export default function TwoFactorSetup() {
                   className="text-center font-mono text-lg tracking-widest"
                   maxLength={6}
                 />
-                <Button onClick={() => setStep('complete')} disabled={code.length !== 6}>
+                <Button onClick={verifyAndEnable} disabled={code.length !== 6 || busy}>
+                  {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Verify
                 </Button>
               </div>
