@@ -6,11 +6,11 @@ acknowledge new disclosures within **two business days**.
 
 ## Supported versions
 
-| Version | Supported       |
-| ------- | --------------- |
-| 1.2.x   | ✅ Yes          |
-| 1.1.x   | ⚠️ Security only |
-| < 1.1   | ❌ No           |
+| Version | Supported        |
+| ------- | ---------------- |
+| 2.0.x   | ✅ Yes           |
+| 1.9.x   | ⚠️ Security only  |
+| < 1.9   | ❌ No            |
 
 ## Reporting a vulnerability
 
@@ -34,15 +34,23 @@ We will:
 ## Hardening checklist for operators
 
 - Rotate `JWT_SECRET` whenever a `.env` file is leaked or shared.
+- Set `JWT_SECRET` to at least 32 random characters (`openssl rand -hex 64`
+  is recommended). The backend refuses to start in production if it detects
+  a known-insecure placeholder value.
 - Rotate **all** API keys (AI Vision, Gemini, Twilio, Africa's Talking,
-  SMTP) on any suspicion of disclosure — they cannot be revoked
-  retroactively.
+  SMTP, `ML_SIDECAR_API_KEY`, `SSO_WEBHOOK_SECRET`) on any suspicion of
+  disclosure — they cannot be revoked retroactively.
 - Run the backend behind TLS termination only. The application sets HSTS
   via Helmet but expects an HTTPS-terminating proxy in production.
 - Enable two-factor authentication for every administrator account.
 - Restrict database and Redis network access to the application subnet.
+  In Docker Compose, both services bind to `127.0.0.1` by default.
 - Keep the underlying base image patched (`alpine:latest` is rebuilt
   weekly in CI).
+- In Kubernetes, apply `k8s/networkpolicy.yaml` to enforce default-deny
+  ingress within the namespace.
+- Admin-configured lookup source URLs are validated against an SSRF
+  allowlist; do not disable `assertSafeOutboundUrl` in deployment.
 
 ## What we consider in-scope
 
