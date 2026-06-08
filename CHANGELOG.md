@@ -7,7 +7,131 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-06-08
+
 ### Added
+
+- **Diagnosis-vs-billing correspondence audit** (`backend/src/claims/diagnosis-billing.service.ts`,
+  `backend/prisma/schema.prisma`, `frontend/src/components/InvoiceBillingAudit.tsx`,
+  `frontend/src/components/BillingValidationPanel.tsx`,
+  `frontend/src/components/LineItemsTable.tsx`) — a new `DiagnosisBillingService`
+  uses the Gemini LLM adapter to assess whether each extracted line item is
+  clinically appropriate for the stated diagnosis. Results are persisted on the
+  `Claim` and `InvoiceLineItem` models (`billingAuditStatus`, `billingAuditScore`,
+  `billingAuditSummary`, `billingAuditItems`, `diagnosisMatch`,
+  `diagnosisMatchReason`, `diagnosisMatchScore`) so Gemini is called once and the
+  cached verdict is served on subsequent page views (30-day TTL). Two endpoints are
+  exposed: `GET /claims/:id/billing-validation` (works on any persisted claim) and
+  `POST /claims/billing-validation/assess` (inline raw-data path). The Claims
+  detail pane gains a dedicated **Billing** tab showing per-item diagnosis match
+  badges, an overall appropriateness score, and the AI summary. `BatchUpload`
+  previews include the same audit panel inline.
+
+- **Claim detail pane tabbed layout** (`frontend/src/pages/Claims.tsx`) — the
+  single-column detail scroll is replaced with a four-tab layout (Overview /
+  Clinical / Billing / Info), reducing scroll fatigue and grouping related signals
+  together. The detail pane widens from 320 px to 360 px.
+
+- **Centralised password-strength policy** (`backend/src/auth/password-policy.ts`)
+  — `assertStrongPassword()` enforces a minimum of 10 characters and at least
+  three character classes (lowercase, uppercase, digit, symbol). It is called on
+  both registration and password-reset so the two code paths can no longer drift.
+
+- **Fail-fast environment validation** (`backend/src/config/validate-env.ts`) —
+  `validateEnv()` runs synchronously before the Nest application is created. In
+  production it throws if `JWT_SECRET` or `DATA_ENCRYPTION_KEY` are missing, too
+  short, or a well-known placeholder. In non-production it logs a warning instead,
+  so local dev still boots without a full secret set.
+
+- **SSRF protection for ESCL scan agent** (`scan-agent/drivers/escl.js`) — every
+  scanner URL is validated against an allow-list of private address ranges
+  (loopback, RFC 1918, link-local, `.local` mDNS names) before the HTTP client
+  contacts it. Public IPs or arbitrary hostnames in `ESCL_SCANNERS` are rejected,
+  preventing the privileged local service from being used as a request proxy.
+
+- **Kubernetes NetworkPolicy** (`k8s/networkpolicy.yaml`) — default-deny-ingress
+  plus explicit allow rules: frontend → backend on port 4000, ingress-nginx →
+  frontend on port 8080. Restricts lateral movement within the cluster namespace.
+
+### Changed
+
+- **2FA setup wired to live backend** (`frontend/src/pages/TwoFactorSetup.tsx`) —
+  the previous page used a hardcoded RFC-example TOTP secret and fake recovery
+  codes that made 2FA non-functional. It now calls `POST /auth/2fa/generate` to
+  obtain a per-account secret + QR image and `POST /auth/2fa/enable` to verify the
+  code and receive real recovery codes. Loading and error states are handled with
+  `Loader2` spinners and `toast` notifications.
+
+- **HttpOnly-cookie-only authentication** (`frontend/src/services/api.ts`,
+  `frontend/src/store/authStore.ts`) — the Axios request interceptor that read
+  `localStorage.getItem('token')` and attached a Bearer header has been removed.
+  Tokens stored in `localStorage` are accessible to any XSS payload; the backend's
+  HttpOnly cookie (already sent via `withCredentials`) is the sole auth channel.
+
+- **Self-hosted pdf.js worker** (`frontend/public/pdf.worker.min.mjs`,
+  `frontend/vite.config.ts`, all PDF-rendering components) — the CDN-hosted
+  `pdf.worker.min.js` is replaced with a local `.mjs` build, removing the
+  cdnjs.cloudflare.com third-party origin from the CSP and ensuring the worker
+  version is always locked to the installed `pdfjs-dist` package. Production
+  source maps are disabled to prevent TypeScript source exposure.
+
+- **SSO leaver webhook secured with HMAC-SHA256**
+  (`backend/src/auth/sso.controller.ts`) — the `POST /auth/sso/leaver` endpoint
+  previously had no authentication (a TODO comment). It now verifies a
+  timing-safe HMAC-SHA256 signature in `X-Leaver-Signature` against
+  `SSO_WEBHOOK_SECRET`. When the secret is not configured the endpoint fails
+  closed with 401.
+
+- **JWT strategy rejects deactivated users** (`backend/src/auth/strategies/jwt.strategy.ts`)
+  — `validate()` now checks `user.isActive`. A disabled or off-boarded user's
+  still-valid JWT no longer grants access for up to a day until natural expiry.
+
+- **Member-login stub refuses in production** (`backend/src/auth/auth.controller.ts`)
+  — the stub that issued an auth cookie without verifying credentials now throws
+  `501 Not Implemented` in production, preventing an authentication-bypass path.
+  In non-production it still returns a stub payload for mobile DTO wiring, but
+  no cookie is issued.
+
+- **2FA backup codes use CSPRNG** (`backend/src/auth/two-factor.service.ts`) —
+  `Math.random()` (predictable PRNG) replaced with `crypto.randomBytes()` plus
+  rejection sampling to avoid modulo bias. Codes are drawn from an unambiguous
+  base-32 alphabet (no 0/O/1/I).
+
+- **Kubernetes backend: pinned image tag + read-only root filesystem**
+  (`k8s/backend.yaml`) — `:latest` tag replaced with `v0.2.0` (CI rewrites it
+  per release). `readOnlyRootFilesystem: true` is enforced; `/tmp` and
+  `/app/uploads` are provided as `emptyDir` volumes so the process still has the
+  scratch space it needs.
+
+- **Render deployment: CSP + security headers** (`render.yaml`) — the frontend
+  service now sends `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
+  `Strict-Transport-Security` with 2-year max-age and preload, `Referrer-Policy`,
+  `Permissions-Policy`, and a full enforcing `Content-Security-Policy`. The CSP
+  allows only self-hosted scripts/workers plus the jsdelivr/unpkg origins needed
+  for the Tesseract.js OCR worker.
+
+- **ML sidecar: API key auth + OpenAPI lockdown**
+  (`ml-sidecar/main.py`) — every non-health endpoint now requires the shared
+  `X-API-Key` header matching `ML_SIDECAR_API_KEY`. When the key is not set the
+  service logs a warning and allows requests (dev/CI only); in all compose/render/k8s
+  configs the key is required. Auto-generated OpenAPI docs (`/docs`, `/redoc`,
+  `/openapi.json`) are disabled unless `ML_SIDECAR_DEBUG=1`.
+
+- **File-signature validation on document upload**
+  (`backend/src/documents/file-signature.ts`,
+  `backend/src/documents/documents.controller.ts`) — the magic-byte check that was
+  planned as defence-in-depth is now enforced: `assertAllowedFileSignature()`
+  verifies the real file header (PDF `%PDF`, JPEG `FF D8 FF`, PNG `89 50 4E 47`,
+  GIF `47 49 46`, TIFF `49 49`/`4D 4D`) before persisting the upload.
+  If the extension was spoofed the file is rejected and deleted.
+
+- **SSRF guard extracted to shared module**
+  (`backend/src/common/security/ssrf-guard.ts`) — the shared SSRF-check utility
+  is now importable across services (OCR, scan-agent proxy, webhooks).
+
+### Added
+
+
 
 - **Maker-checker OCR field corrections with audit trail and classifier
   learning** (`backend/src/claims/claims.controller.ts`,
@@ -1578,6 +1702,202 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   request and requires no preflight in any browser. The scan-agent `/scan`
   handler was updated to merge `req.query` and `req.body` so both forms are
   accepted.
+
+- **AI diagnosis-vs-billing validation** (`backend/src/claims/diagnosis-
+  billing.service.ts`, `backend/src/claims/claims.controller.ts`,
+  `backend/src/claims/claims.module.ts`, `backend/src/ocr/ocr.processor.ts`,
+  `backend/prisma/schema.prisma`) — a new `DiagnosisBillingService` uses the
+  Gemini LLM to compare each claim's diagnosis/treatment text against its
+  extracted invoice line items and score the clinical appropriateness of every
+  charge. Results are cached on the `Claim` record (`billingAuditStatus`,
+  `billingAuditScore`, `billingAuditSummary`, `billingAuditItems`,
+  `billingAuditAt`) and on each `InvoiceLineItem` row (`diagnosisMatch`,
+  `diagnosisMatchReason`, `diagnosisMatchScore`). The OCR processor triggers
+  the check automatically after line-item extraction so the verdict is ready
+  by the time the claims officer opens the queue. Two new API endpoints are
+  exposed: `GET /claims/:id/billing-validation` (served from cache when
+  available) and `POST /claims/billing-validation/assess` for inline
+  assessment without a persisted claim. Line items are processed in batches
+  of 10 to stay within API limits; the Gemini model is updated to
+  `gemini-flash-latest`.
+
+- **Billing audit UI — `InvoiceBillingAudit` and `BillingValidationPanel`
+  components** (`frontend/src/components/InvoiceBillingAudit.tsx`,
+  `frontend/src/components/BillingValidationPanel.tsx`) — a new
+  `InvoiceBillingAudit` component fetches and renders the diagnosis-billing
+  verdict (overall match status, confidence score, per-item breakdown with
+  expandable reasoning) inside the Claims view's new **Billing** tab. The
+  companion `BillingValidationPanel` renders the inline assessment form for
+  ad-hoc checks. The `LineItemsTable` adds a **Dx** column with
+  colour-coded match/mismatch/uncertain badge (`DxMatchBadge`) and a
+  mismatch count summary badge, surfacing AI-detected inconsistencies
+  alongside the existing arithmetic and price-ceiling flags.
+
+- **Claims view tabbed detail panel** (`frontend/src/pages/Claims.tsx`) — the
+  fixed-width side panel is reorganised into four tabs — **Overview**,
+  **Clinical**, **Billing**, and **Info** — grouping claim fields by reviewer
+  workflow step. The Billing tab embeds `InvoiceBillingAudit` + the full
+  `LineItemsTable`. Panel width increased from 320 px to 360 px.
+
+- **Kubernetes NetworkPolicy** (`k8s/networkpolicy.yaml`) — a default-deny
+  ingress policy for the `claimsflow` namespace is paired with explicit
+  allow rules: the frontend may receive traffic from the ingress-nginx
+  namespace; the backend may only receive traffic from frontend pods on port
+  4000. Postgres and Redis are external managed services not selectable by
+  pod selector; their access is restricted at the cloud firewall level.
+
+- **Root `.env.example`** — a docker-compose–level environment template
+  that documents the three required secrets (`POSTGRES_PASSWORD`,
+  `JWT_SECRET`, `ML_SIDECAR_API_KEY`) with `openssl rand` generation
+  instructions. Docker Compose now uses `${VAR:?error}` interpolation so it
+  **refuses to start** if any required secret is unset.
+
+### Changed
+
+- **TwoFactorSetup page now fetches real per-user QR code and recovery codes
+  from the server** (`frontend/src/pages/TwoFactorSetup.tsx`) — the previous
+  implementation hardcoded a static RFC-example TOTP secret and fabricated
+  recovery codes, making 2FA registration non-functional. The setup flow now
+  calls `POST /auth/2fa/generate` to obtain a per-account TOTP secret and
+  QR image, and `POST /auth/2fa/enable` to confirm the TOTP token. Recovery
+  codes are retrieved from the server rather than rendered from a static
+  list.
+
+- **pdfjs-dist worker upgraded to `.mjs` for v4 compatibility**
+  (`frontend/src/main.tsx`, `frontend/public/`) — pdfjs-dist v4 ships an ES
+  module worker (`pdf.worker.min.mjs`). The self-hosted worker file in
+  `public/` was updated from `pdf.worker.min.js` to `pdf.worker.min.mjs` and
+  `GlobalWorkerOptions.workerSrc` updated to match. All components using
+  `pdfjsLib.getDocument` were migrated to the `getDocumentSafe` helper.
+
+- **ML sidecar Swagger docs disabled in production** (`ml-sidecar/main.py`) —
+  `/docs`, `/redoc`, and `/openapi.json` are now only served when
+  `ML_SIDECAR_DEBUG=1`. In all other environments the auto-generated API
+  surface is not exposed, reducing attack surface on the internal sidecar.
+
+- **Kubernetes image tags pinned to `v0.2.0`; read-only root filesystem
+  enforced** (`k8s/backend.yaml`, `k8s/frontend.yaml`) — both pod specs
+  changed from `:latest` to a pinned immutable tag (CI rewrites per release
+  via `sed`). The backend pod sets `readOnlyRootFilesystem: true` with two
+  `emptyDir` volume mounts (`/tmp`, `/app/uploads`) so the runtime has no
+  write access to the image filesystem.
+
+- **Docker Compose Postgres and Redis bound to loopback** (`docker-compose.yml`)
+  — port bindings changed from `0.0.0.0:5432:5432` / `0.0.0.0:6379:6379` to
+  `127.0.0.1:5432:5432` / `127.0.0.1:6379:6379`. The ML sidecar port is no
+  longer published (`ports` replaced with `expose: ["8000"]`). Internal
+  services reach Postgres, Redis, and the sidecar via the `cic_network` Docker
+  network; only the backend (`4000`) and frontend (`8080`) remain accessible
+  from the host.
+
+- **Render security headers added** (`render.yaml`) — five HTTP response
+  headers are injected at the CDN layer for every path: `X-Frame-Options:
+  DENY`, `X-Content-Type-Options: nosniff`, `Strict-Transport-Security`
+  with a 2-year max-age and `includeSubDomains; preload`, `Referrer-Policy:
+  strict-origin-when-cross-origin`, and `Permissions-Policy` restricting
+  camera to `self` and disabling microphone and geolocation. The
+  Content-Security-Policy moves to enforcing mode (previously report-only).
+
+- **Backend Dockerfile runs as unprivileged `node` user** (`backend/Dockerfile`)
+  — `RUN chown -R node:node /app` followed by `USER node` ensures the
+  process has no write access to the image filesystem at runtime, matching
+  the Kubernetes `readOnlyRootFilesystem` posture.
+
+- **WebSocket auth no longer reads token from `localStorage`**
+  (`frontend/src/hooks/useWebSocket.ts`, `frontend/src/store/authStore.ts`) —
+  the Socket.IO `auth.token` fallback that read `localStorage.getItem('token')`
+  is removed. Auth relies exclusively on the HttpOnly cookie sent via
+  `withCredentials: true`, eliminating the XSS exfiltration surface.
+
+### Security
+
+- **Centralised password policy** (`backend/src/auth/password-policy.ts`) —
+  a new `assertStrongPassword()` function enforces a minimum of 10 characters
+  and at least 3 of 4 character classes (lowercase, uppercase, digit, symbol)
+  on every code path that sets or resets a password. The previous
+  implementation applied an 8-character minimum only at registration and a
+  separate 8-character minimum at reset; the two checks could drift and
+  neither enforced complexity.
+
+- **Fail-fast startup env validation** (`backend/src/config/validate-env.ts`,
+  `backend/src/main.ts`) — `validateEnv()` runs before the Nest application
+  is created and refuses to boot in production if `JWT_SECRET` is absent,
+  too short (< 32 chars), or matches a known insecure placeholder, or if
+  `DATA_ENCRYPTION_KEY` is absent or too short. Misconfigured deployments
+  fail immediately with a descriptive message instead of serving with a
+  forgeable JWT or plaintext PII.
+
+- **Magic-byte file-type validation on uploads**
+  (`backend/src/documents/file-signature.ts`,
+  `backend/src/documents/documents.controller.ts`) — `assertAllowedFileSignature()`
+  reads the first 8 bytes of every uploaded file and confirms the content
+  matches a PDF, JPEG, PNG, or TIFF magic signature. Files that fail the
+  check are deleted from disk and a 400 is returned. The previous filter
+  trusted only the client-supplied filename extension, which is trivially
+  spoofable.
+
+- **SSRF guard for outbound URLs** (`backend/src/common/security/ssrf-guard.ts`,
+  `backend/src/lookup/lookup.service.ts`) — `assertSafeOutboundUrl()` blocks
+  non-HTTP(S) schemes and rejects any host resolving to loopback, RFC1918,
+  unique-local, or link-local address ranges (including the cloud metadata
+  endpoint 169.254.169.254). Applied to admin-configured "REST API" lookup
+  source URLs, preventing the backend from being used as an SSRF proxy.
+
+- **Member login stub fails closed in production**
+  (`backend/src/auth/auth.controller.ts`) — the unimplemented member-login
+  endpoint previously issued an auth cookie for any request regardless of
+  credentials. It now throws `NotImplementedException` in production. In
+  non-production environments the stub returns `{ stub: true }` with no
+  cookie so the mobile DTO contract can be tested without granting access.
+
+- **SSO leaver webhook requires timing-safe HMAC verification**
+  (`backend/src/auth/sso.controller.ts`) — the `/auth/sso/leaver` endpoint
+  previously accepted any caller. It now requires the `x-leaver-signature`
+  header to match `SSO_WEBHOOK_SECRET` via `crypto.timingSafeEqual()`. When
+  the secret is not configured the endpoint fails closed (returns 401) rather
+  than allowing unauthenticated account deactivations.
+
+- **Deactivated-account check in JWT strategy**
+  (`backend/src/auth/strategies/jwt.strategy.ts`) — the Passport JWT strategy
+  now rejects tokens for users where `isActive = false`. Without this check,
+  a disabled or off-boarded user's still-valid JWT continued to authenticate
+  requests until natural expiry.
+
+- **2FA backup codes generated with CSPRNG**
+  (`backend/src/auth/two-factor.service.ts`) — recovery codes previously used
+  `Math.random()`, which is not cryptographically secure. They are now
+  generated via `crypto.randomBytes()` with rejection sampling over an
+  unambiguous base-32 alphabet (no 0/O/1/I confusion), each code 8
+  characters, 10 codes per account.
+
+- **Temporary password generation uses CSPRNG**
+  (`backend/src/auth/auth.controller.ts`,
+  `backend/src/auth/users.controller.ts`) — all code paths that issued a
+  temporary password called `Math.random().toString(36)`, which is
+  predictable. Generation is replaced with `crypto.randomBytes()` via a
+  rejection-sampling helper over a base-62 alphabet, with hardcoded suffix
+  characters to guarantee complexity.
+
+- **ML sidecar API-key authentication on all endpoints**
+  (`ml-sidecar/main.py`) — a `require_api_key` FastAPI dependency enforces
+  the `ML_SIDECAR_API_KEY` shared secret (presented in `X-Api-Key`) on every
+  non-health endpoint. When the key is not configured the sidecar logs a
+  prominent warning and allows requests (local dev only); all real deployments
+  (Compose, Render, Kubernetes) require the key. Uses `hmac.compare_digest()`
+  for timing-safe comparison.
+
+- **PowerShell device-ID injection fixed via env var**
+  (`scan-agent/agent.js`) — the Windows WIA device enumeration script
+  previously interpolated the device ID directly into a PowerShell string
+  with quote-escaping. The ID is now passed via the `CFA_DEVICE_ID`
+  environment variable and read as `$env:CFA_DEVICE_ID` in the script,
+  eliminating the injection surface entirely.
+
+- **SSRF guard for eSCL scanner URLs** (`scan-agent/drivers/escl.js`) —
+  `assertEsclHostAllowed()` validates every scanner URL before the agent
+  contacts it. Only loopback, RFC1918, link-local, and `.local` mDNS hosts
+  are allowed; any public IP or hostname is rejected, preventing the scan
+  agent from being used as a network proxy to internal or cloud endpoints.
 
 ---
 
