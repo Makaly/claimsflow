@@ -50,6 +50,8 @@ import { DocumentViewer } from '@/components/DocumentViewer'
 import { InlinePdfViewer, type OcrAnnotation } from '@/components/InlinePdfViewer'
 import { EligibilityBadge } from '@/components/EligibilityBadge'
 import { CoverageBreakdown } from '@/components/CoverageBreakdown'
+import LineItemsTable from '@/components/LineItemsTable'
+import InvoiceBillingAudit from '@/components/InvoiceBillingAudit'
 import AnomalyScoreBadge from '@/components/AnomalyScoreBadge'
 import { Pagination } from '@/components/Pagination'
 import {
@@ -1676,7 +1678,7 @@ export default function Claims() {
             <div className="flex flex-1 overflow-hidden">
 
               {/* ══════ LEFT — compact details panel ══════ */}
-              <div className="w-[320px] shrink-0 flex flex-col border-r overflow-y-auto bg-background">
+              <div className="w-[360px] shrink-0 flex flex-col border-r overflow-y-auto bg-background">
 
                 {/* Incomplete banner */}
                 {selectedClaim.status === 'incomplete' && (
@@ -1889,7 +1891,17 @@ export default function Claims() {
 
                   return (
                     <TooltipProvider delayDuration={300}>
-                    <div className="px-2 py-2 space-y-2">
+                    <Tabs defaultValue="overview" className="w-full">
+                      <div className="px-2 pt-2 pb-1 sticky top-0 bg-background z-10 border-b">
+                        <TabsList className="grid w-full grid-cols-4 h-8">
+                          <TabsTrigger value="overview" className="text-[10px] font-semibold">Overview</TabsTrigger>
+                          <TabsTrigger value="clinical" className="text-[10px] font-semibold">Clinical</TabsTrigger>
+                          <TabsTrigger value="billing" className="text-[10px] font-semibold">Billing</TabsTrigger>
+                          <TabsTrigger value="info" className="text-[10px] font-semibold">Info</TabsTrigger>
+                        </TabsList>
+                      </div>
+
+                      <TabsContent value="overview" className="px-2 pb-2 space-y-2 mt-2 data-[state=inactive]:hidden">
 
                       {/* Member & Patient */}
                       <Section icon={<User className="h-3.5 w-3.5 text-blue-500" />} label="Member & Patient" color="bg-blue-500/5 border-blue-500/10">
@@ -2033,6 +2045,9 @@ export default function Claims() {
                             : <p className="text-xs text-muted-foreground/50">—</p>}
                         </div>
                       </Section>
+
+                      </TabsContent>
+                      <TabsContent value="clinical" className="px-2 pb-2 space-y-2 mt-2 data-[state=inactive]:hidden">
 
                       {/* Clinical Story — from OCR/AI extraction */}
                       {(() => {
@@ -2244,6 +2259,21 @@ export default function Claims() {
                       {/* C4: Clinical Discrepancies panel */}
                       <ClinicalDiscrepanciesPanel claimId={selectedClaim.id} />
 
+                      </TabsContent>
+                      <TabsContent value="billing" className="px-2 pb-2 mt-2 data-[state=inactive]:hidden">
+
+                      {/* Unified billing audit: receipt items + diagnosis correspondence + fraud signals */}
+                      <InvoiceBillingAudit claimId={selectedClaim.id} />
+
+                      {/* Granular per-line-item table with arithmetic + price ceiling checks */}
+                      <LineItemsTable
+                        claimId={selectedClaim.id}
+                        invoiceTotal={selectedClaim.invoiceAmount ?? undefined}
+                      />
+
+                      </TabsContent>
+                      <TabsContent value="info" className="px-2 pb-2 space-y-2 mt-2 data-[state=inactive]:hidden">
+
                       {/* Metadata */}
                       <Section icon={<Hash className="h-3.5 w-3.5 text-slate-400" />} label="Metadata" color="bg-muted/30">
                         <div className="col-span-2">
@@ -2305,7 +2335,8 @@ export default function Claims() {
                         </div>
                       )}
 
-                    </div>
+                      </TabsContent>
+                    </Tabs>
                     </TooltipProvider>
                   )
                 })()}

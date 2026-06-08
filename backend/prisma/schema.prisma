@@ -573,6 +573,12 @@ model Claim {
   structuredSource        Boolean              @default(false)
   // T2.3 — signal-lift labelling
   isLabelled              Boolean              @default(false)
+  // Billing-vs-diagnosis audit (persisted so Gemini is called once, not on every page view)
+  billingAuditStatus      String?              // "match"|"partial"|"mismatch"|"uncertain"
+  billingAuditScore       Float?               // 0-1 overall appropriateness
+  billingAuditSummary     String?              // 1-2 sentence human-readable verdict
+  billingAuditItems       Json?                // BillingItemAssessment[] — per-item results
+  billingAuditAt          DateTime?            // when the assessment was last run
   cases                   Case[]
   label                   ClaimLabel?
 
@@ -1331,6 +1337,10 @@ model InvoiceLineItem {
   fraudRiskScore     Float? // 0-1
   fraudFlags         String[]
   arithmeticValid    Boolean? // qty × unitPrice ≈ totalPrice
+  // Diagnosis-billing correspondence (AI-scored)
+  diagnosisMatch        String? // "match" | "mismatch" | "uncertain" | "unchecked"
+  diagnosisMatchReason  String?
+  diagnosisMatchScore   Float?
   rawText            String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt

@@ -9,6 +9,7 @@ import { ClaimLabelsService } from './claim-labels.service';
 import { ClaimLabelsController } from './claim-labels.controller';
 import { MlScoringService } from './ml-scoring.service';
 import { LineItemFraudService } from './line-item-fraud.service';
+import { DiagnosisBillingService } from './diagnosis-billing.service';
 import { RetrainService } from './retrain.service';
 import { ProviderFraudThresholdsService } from './provider-fraud-thresholds.service';
 import { ProviderFraudThresholdsController } from './provider-fraud-thresholds.controller';
@@ -19,6 +20,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { DocumentsModule } from '../documents/documents.module';
 import { AssignmentModule } from '../assignment/assignment.module';
 import { DocumentClassifierModule } from '../document-classifier/document-classifier.module';
+import { AssistantModule } from '../assistant/assistant.module';
 
 @Module({
   imports: [
@@ -28,13 +30,14 @@ import { DocumentClassifierModule } from '../document-classifier/document-classi
     DocumentsModule,
     AssignmentModule,
     DocumentClassifierModule,
+    AssistantModule,
   ],
   controllers: [ClaimsController, ClaimLabelsController, ProviderFraudThresholdsController, SignalLiftController],
   providers: [
     ClaimsService, ClaimsProcessor, EligibilityService, AnomalyScoringService,
-    ClaimLabelsService, MlScoringService, LineItemFraudService,
+    ClaimLabelsService, MlScoringService, LineItemFraudService, DiagnosisBillingService,
     RetrainService, ProviderFraudThresholdsService, ClaimTypeConfigService,
   ],
-  exports: [ClaimsService, ClaimLabelsService, MlScoringService, LineItemFraudService, RetrainService],
+  exports: [ClaimsService, ClaimLabelsService, MlScoringService, LineItemFraudService, DiagnosisBillingService, RetrainService],
 })
 export class ClaimsModule {}

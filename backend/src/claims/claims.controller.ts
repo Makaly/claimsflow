@@ -21,6 +21,7 @@ import * as fs from 'fs';
 import { ClaimsService } from './claims.service';
 import { AnomalyScoringService } from './anomaly-scoring.service';
 import { LineItemFraudService } from './line-item-fraud.service';
+import { DiagnosisBillingService } from './diagnosis-billing.service';
 import { CreateClaimDto } from './dto/create-claim.dto';
 import { UpdateClaimDto } from './dto/update-claim.dto';
 import { SkipThrottle } from '@nestjs/throttler';
@@ -60,6 +61,7 @@ export class ClaimsController {
     private readonly notificationsService: NotificationsService,
     private readonly anomalyScoringService: AnomalyScoringService,
     private readonly lineItemFraudService: LineItemFraudService,
+    private readonly diagnosisBillingService: DiagnosisBillingService,
   ) {}
 
   @Post()
@@ -355,6 +357,23 @@ export class ClaimsController {
       calculated_total:  parseFloat(calculatedTotal.toFixed(2)),
       discrepancy_flag:  Math.abs((claim?.invoiceAmount ?? 0) - calculatedTotal) > 0.5,
     };
+  }
+
+  /** Diagnosis-vs-billing correspondence check — works on first upload. */
+  @Get(':id/billing-validation')
+  getBillingValidation(@Param('id') id: string) {
+    return this.diagnosisBillingService.assessFromClaimData(id);
+  }
+
+  /** Inline billing validation — accepts raw data directly (no DB claim required). */
+  @Post('billing-validation/assess')
+  assessBillingInline(@Body() body: {
+    diagnosis?: string;
+    treatment?: string;
+    rawText?: string;
+    lineItems?: { description: string; procedureCode?: string }[];
+  }) {
+    return this.diagnosisBillingService.assessFromRawData(body);
   }
 
   @Get(':id/audit-trail')
