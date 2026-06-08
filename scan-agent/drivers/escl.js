@@ -13,6 +13,7 @@
 
 const http  = require('http');
 const https = require('https');
+const net   = require('net');
 const { tmpdir } = require('os');
 const { join }   = require('path');
 const { randomUUID } = require('crypto');
@@ -78,9 +79,47 @@ async function discoverEsclDevices(timeoutMs = 5000) {
 // Given a scanner base URL (e.g. http://192.168.1.100/eSCL), performs the
 // full eSCL scan workflow: capabilities → create job → fetch image → delete job.
 
+// SSRF guard. eSCL targets must be on the local machine or LAN — never a public
+// host. mDNS discovery only ever yields local addresses, but ESCL_SCANNERS can be
+// set by an operator, so we validate every URL before contacting it. This stops
+// the scan agent (which runs as a privileged local service) from being turned
+// into a request proxy to internal/cloud endpoints.
+function isPrivateScannerHost(host) {
+  if (!host) return false;
+  // URL.hostname wraps IPv6 literals in brackets (e.g. "[::1]") — strip them.
+  const h = host.toLowerCase().replace(/^\[|\]$/g, '');
+  if (h === 'localhost' || h.endsWith('.local')) return true; // mDNS / loopback name
+  if (net.isIPv4(h)) {
+    const o = h.split('.').map(Number);
+    return (
+      o[0] === 127 ||                                   // 127.0.0.0/8 loopback
+      o[0] === 10 ||                                    // 10.0.0.0/8
+      (o[0] === 192 && o[1] === 168) ||                 // 192.168.0.0/16
+      (o[0] === 172 && o[1] >= 16 && o[1] <= 31) ||     // 172.16.0.0/12
+      (o[0] === 169 && o[1] === 254)                    // 169.254.0.0/16 link-local
+    );
+  }
+  if (net.isIPv6(h)) {
+    return h === '::1' || h.startsWith('fd') || h.startsWith('fc') || h.startsWith('fe80');
+  }
+  // Bare hostname that isn't .local and isn't an IP literal → treat as public.
+  return false;
+}
+
+function assertEsclHostAllowed(url) {
+  let host;
+  try { host = new URL(url).hostname; } catch { throw new Error('Invalid scanner URL'); }
+  if (!isPrivateScannerHost(host)) {
+    throw new Error(`Refusing to contact non-local scanner host: ${host}`);
+  }
+}
+
 function fetch(url, options = {}) {
   return new Promise((resolve, reject) => {
+    assertEsclHostAllowed(url);
     const mod = url.startsWith('https') ? https : http;
+    // rejectUnauthorized:false is acceptable ONLY because the host is now proven
+    // to be loopback/LAN above; consumer scanners ship self-signed TLS certs.
     const req = mod.request(url, { ...options, rejectUnauthorized: false }, (res) => {
       const chunks = [];
       res.on('data', c => chunks.push(c));

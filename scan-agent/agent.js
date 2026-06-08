@@ -307,7 +307,10 @@ async function scanWindows(deviceId, resolution, mode, { source = 'auto', skipBl
   const scriptPath = join(tmpdir(), `cfa-wia-scan-${uid}.ps1`);
   // WIA_IPA_DATATYPE: 1=Color, 2=Grayscale, 0=Black&White
   const dataType  = mode === 'Color' ? 1 : mode === 'Gray' ? 2 : 0;
-  const safeId    = deviceId.replace(/'/g, "''");
+  // The device id is the only user-influenced value here. Rather than
+  // interpolate it into the script (and rely on quote-escaping), pass it via an
+  // environment variable the script reads as $env:CFA_DEVICE_ID — there is then
+  // no string-injection surface even if the upstream allowlist were bypassed.
   const safePath  = tmpBmp.replace(/\\/g, '\\\\');
   // WIA_IPS_DOCUMENT_HANDLING_SELECT: 1=FEEDER, 2=FLATBED
   const wiaSource = source === 'flatbed' ? 2 : (source === 'feeder' || source === 'feeder-duplex') ? 1 : 0;
@@ -318,7 +321,7 @@ $wia = New-Object -ComObject WIA.DeviceManager
 $dev = $null
 for ($i = 1; $i -le $wia.DeviceInfos.Count; $i++) {
   $di = $wia.DeviceInfos.Item($i)
-  if ($di.DeviceID -eq '${safeId}') {
+  if ($di.DeviceID -eq $env:CFA_DEVICE_ID) {
     $attempts = 0
     while ($attempts -lt 3) {
       try { $dev = $di.Connect(); break } catch {
@@ -344,7 +347,7 @@ $img.SaveFile('${safePath}')
     await execFileAsync(
       'powershell',
       ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptPath],
-      { timeout: 120_000 },
+      { timeout: 120_000, env: { ...process.env, CFA_DEVICE_ID: deviceId } },
     );
     return imageToPdf(await readFile(tmpBmp), paperSize);
   } finally {
