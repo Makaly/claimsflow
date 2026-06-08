@@ -28,7 +28,8 @@ spec:
         runAsUser: 1000
       containers:
         - name: frontend
-          image: ghcr.io/cic-insurance/claimsflow-frontend:latest
+          # Pinned to an immutable release tag — never :latest. CI rewrites per release.
+          image: ghcr.io/cic-insurance/claimsflow-frontend:v0.2.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
