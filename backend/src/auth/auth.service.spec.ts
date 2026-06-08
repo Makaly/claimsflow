@@ -5,6 +5,8 @@ import * as bcrypt from 'bcryptjs';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../notifications/email.service';
+import { EmailOtpService } from './email-otp.service';
+import { EventsGateway } from '../notifications/events.gateway';
 
 type PrismaMock = {
   user: {
@@ -37,6 +39,8 @@ describe('AuthService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: JwtService, useValue: jwt },
         { provide: EmailService, useValue: email },
+        { provide: EmailOtpService, useValue: { sendOtp: jest.fn().mockResolvedValue(undefined) } },
+        { provide: EventsGateway, useValue: { emitToUser: jest.fn(), emitToRole: jest.fn() } },
       ],
     }).compile();
 

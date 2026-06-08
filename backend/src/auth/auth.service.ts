@@ -8,6 +8,7 @@ import { LoginDto } from './dto/login.dto';
 import { EmailService } from '../notifications/email.service';
 import { EventsGateway } from '../notifications/events.gateway';
 import { EmailOtpService } from './email-otp.service';
+import { assertStrongPassword } from './password-policy';
 
 /** Login refusal when the user's email has not been verified yet. We throw
  *  a 403 (not 401) so the frontend can distinguish "wrong password" from
@@ -426,9 +427,7 @@ export class AuthService {
     if (!dto.providerId) {
       throw new BadRequestException('Please select a provider to register under.');
     }
-    if (dto.password.length < 8) {
-      throw new BadRequestException('Password must be at least 8 characters.');
-    }
+    assertStrongPassword(dto.password);
 
     // Verify the chosen provider is real and currently accepting new users.
     const provider = await this.prisma.provider.findUnique({
@@ -606,7 +605,7 @@ export class AuthService {
 
     if (!user) throw new BadRequestException('Invalid or expired reset token.');
 
-    if (newPassword.length < 8) throw new BadRequestException('Password must be at least 8 characters.');
+    assertStrongPassword(newPassword);
 
     const hashed = await bcrypt.hash(newPassword, 10);
     await this.prisma.user.update({
