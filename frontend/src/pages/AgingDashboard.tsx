@@ -134,9 +134,8 @@ export default function AgingDashboard() {
   // ── WebSocket — instant SLA breach alert ───────────────────────────────────
   useEffect(() => {
     const origin = resolveSocketOrigin()
-    const fallback = localStorage.getItem('token') || undefined
+    // Auth via the HttpOnly cookie (withCredentials); never read token from localStorage.
     const socket: Socket = io(`${origin}/events`, {
-      auth: fallback ? { token: fallback } : undefined,
       withCredentials: true,
       transports: ['polling', 'websocket'],
       reconnectionAttempts: 10,

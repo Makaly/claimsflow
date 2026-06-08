@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import * as pdfjsLib from 'pdfjs-dist'
+import { getDocumentSafe } from '@/lib/pdfSafe'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -147,7 +148,7 @@ export default function UnknownDocumentReview() {
         } else {
           // PDF rendering
           loadedImageRef.current = null
-          const pdfDocument = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise
+          const pdfDocument = await getDocumentSafe({ data: new Uint8Array(arrayBuffer) }).promise
           setPdfDoc(pdfDocument)
           setPageCount(pdfDocument.numPages)
           setCurrentPage(1)

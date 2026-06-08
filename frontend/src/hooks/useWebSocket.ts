@@ -97,10 +97,8 @@ export function useWebSocket() {
 
   useEffect(() => {
     // Auth is delivered via the HttpOnly cookie set by /api/auth/login.
-    // socket.io must use withCredentials so the browser attaches it during
-    // the handshake. We also keep auth.token as a fallback for the rare
-    // dev flow where a token was stashed in localStorage manually.
-    const fallbackToken = localStorage.getItem('token') || undefined
+    // socket.io uses withCredentials so the browser attaches it during the
+    // handshake. The token is never read from localStorage (XSS-exfiltration risk).
 
     // VITE_API_URL points at the REST API (e.g. https://host.tld/api), but
     // socket.io needs the *origin* (host without /api) and a namespace.
@@ -118,7 +116,6 @@ export function useWebSocket() {
     const socketUrl = origin || window.location.origin
 
     const socket = io(`${socketUrl}/events`, {
-      auth: fallbackToken ? { token: fallbackToken } : undefined,
       withCredentials: true,
       // Start with polling (works through every proxy / free-tier edge) and
       // upgrade to websocket once the session is established.

@@ -49,7 +49,8 @@ export default function VerifyEmail() {
     setBusy(true)
     try {
       const { data } = await api.post('/auth/verify-email-otp', { email, code })
-      if (data?.access_token) localStorage.setItem('token', data.access_token)
+      // Auth is carried by the HttpOnly cookie the server just set — never persist
+      // the token in localStorage (XSS-exfiltration risk).
       if (data?.user) login(data.user, data.access_token)
       sessionStorage.setItem('tab_auth', '1')
       toast.success('Verified. Welcome to ClaimsFlow.')

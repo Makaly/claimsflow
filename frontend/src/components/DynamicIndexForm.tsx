@@ -131,9 +131,9 @@ export function DynamicIndexForm({
 function viaBadge(via?: string) {
   if (!via || via === 'manual') return null
   const map: Record<string, { label: string; cls: string }> = {
-    lookup: { label: 'looked up', cls: 'bg-blue-100 text-blue-700' },
-    history: { label: 'from history', cls: 'bg-purple-100 text-purple-700' },
-    extraction: { label: 'extracted', cls: 'bg-green-100 text-green-700' },
+    lookup:     { label: 'looked up',    cls: 'bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400' },
+    history:    { label: 'from history', cls: 'bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-400' },
+    extraction: { label: 'extracted',    cls: 'bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-400' },
   }
   const m = map[via]
   if (!m) return null
@@ -162,7 +162,7 @@ function FieldInput({
 }) {
   const [suggestions, setSuggestions] = useState<string[]>([])
   const listId = `sugg-${setupId}-${field.key}`
-  const base = 'w-full border rounded px-3 py-1.5 text-sm mt-1'
+  const base = 'w-full border rounded px-3 py-1.5 text-sm mt-1 bg-background text-foreground border-input placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring'
 
   async function loadSuggestions(prefix: string) {
     try {
