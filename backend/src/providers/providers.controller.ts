@@ -24,6 +24,7 @@ import { extname, join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 import { ProvidersService } from './providers.service';
 import { DocumentsService } from '../documents/documents.service';
+import { assertAllowedFileSignature } from '../documents/file-signature';
 import { CreateProviderDto } from './dto/create-provider.dto';
 import { UpdateProviderDto } from './dto/update-provider.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -108,6 +109,15 @@ export class ProvidersController {
       throw new ForbiddenException('User is not associated with a provider');
     }
     return providerId;
+  }
+
+  /**
+   * Content-based validation for every provider upload. docFileFilter only
+   * checks the spoofable client MIME type; this confirms the real magic bytes
+   * match an allowed type (and deletes the file otherwise). No-op when no file.
+   */
+  private assertSafeUpload(file?: Express.Multer.File): void {
+    if (file?.path) assertAllowedFileSignature(file.path);
   }
 
   @Get('self-service/profile')
@@ -197,6 +207,7 @@ export class ProvidersController {
   ) {
     const providerId = this.ensureProviderId(req);
     if (!file) throw new NotFoundException('Proof document file is required');
+    this.assertSafeUpload(file);
     return this.providersService.update(providerId, {
       proofDocumentPath: file.path,
       proofDocumentName: file.originalname,
@@ -245,6 +256,7 @@ export class ProvidersController {
   ) {
     const providerId = this.ensureProviderId(req);
     if (!file) throw new NotFoundException('file is required');
+    this.assertSafeUpload(file);
     if (!ONBOARDING_CATEGORIES.includes(category as OnboardingCategory)) {
       throw new ForbiddenException(`Invalid category. Expected one of: ${ONBOARDING_CATEGORIES.join(', ')}`);
     }
@@ -368,6 +380,7 @@ export class ProvidersController {
     @UploadedFile() file?: Express.Multer.File,
   ) {
     if (file) {
+      this.assertSafeUpload(file);
       body.proofDocumentPath = file.path;
       body.proofDocumentName = file.originalname;
     }
@@ -436,6 +449,7 @@ export class ProvidersController {
     @UploadedFile() file?: Express.Multer.File,
   ) {
     if (file) {
+      this.assertSafeUpload(file);
       (updateProviderDto as any).proofDocumentPath = file.path;
       (updateProviderDto as any).proofDocumentName = file.originalname;
     }
@@ -635,6 +649,7 @@ export class ProvidersController {
   ) {
     const providerId = this.ensureProviderId(req);
     if (!file) throw new NotFoundException('file is required');
+    this.assertSafeUpload(file);
     return this.providersService.resubmitOnboardingDocument(providerId, docId, file, req.user?.userId);
   }
 
@@ -685,6 +700,7 @@ export class ProvidersController {
     @Body('name') name: string,
     @Request() req,
   ) {
+    this.assertSafeUpload(file);
     return this.providersService.addDocument(id, file, req.user.userId, name);
   }
 

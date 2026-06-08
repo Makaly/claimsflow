@@ -7,6 +7,7 @@ import { EoxegenIntegrationService } from '../common/services/eoxegen-integratio
 import { DocumentClassifierService } from '../document-classifier/document-classifier.service';
 import { AnomalyScoringService } from '../claims/anomaly-scoring.service';
 import { LineItemFraudService } from '../claims/line-item-fraud.service';
+import { DiagnosisBillingService } from '../claims/diagnosis-billing.service';
 import { ClaimTypeConfigService } from '../claims/claim-type-config.service';
 import { computeFraudSignals, DuplicateClaimRef, CrossProviderMatch } from '../claims/fraud-signals';
 import { AUTO_DETECT_PROVIDER_NAME } from '../common/constants/auto-detect-provider';
@@ -25,6 +26,7 @@ export class OcrProcessor extends WorkerHost {
     private classifierService: DocumentClassifierService,
     private anomalyScoringService: AnomalyScoringService,
     private lineItemFraudService: LineItemFraudService,
+    private diagnosisBillingService: DiagnosisBillingService,
     private claimTypeConfigService: ClaimTypeConfigService,
     private providerResolver: ProviderResolverService,
     private invoiceFanout: InvoiceFanoutService,
@@ -397,6 +399,12 @@ export class OcrProcessor extends WorkerHost {
                 mergedProviderName || 'Unknown',
                 allLineItems,
                 mergedInvoiceAmount ?? 0,
+              ).then(() =>
+                // Diagnosis-billing validation runs after fraud persistence so it
+                // operates on the saved InvoiceLineItem rows.
+                this.diagnosisBillingService.validateLineItems(claimId).catch(e =>
+                  this.logger.warn(`Diagnosis-billing check failed for ${claimId}: ${e.message}`)
+                )
               ).catch(e =>
                 this.logger.warn(`Line item fraud analysis failed for ${claimId}: ${e.message}`)
               );

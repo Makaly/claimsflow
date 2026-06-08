@@ -23,7 +23,7 @@ export class GeminiLlmAdapter {
 
   constructor(private config: ConfigService) {
     this.embeddingModel = config.get('ASSISTANT_EMBEDDING_MODEL', 'text-embedding-004');
-    this.llmModel = config.get('ASSISTANT_LLM_MODEL', 'gemini-1.5-flash');
+    this.llmModel = config.get('ASSISTANT_LLM_MODEL', 'gemini-flash-latest');
     this.apiKey = config.get<string>('GEMINI_API_KEY');
   }
 
