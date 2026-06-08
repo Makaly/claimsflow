@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ShieldCheck,
@@ -38,10 +38,43 @@ const PRIMARY_CTA =
 const OUTLINE_CTA =
   'border-slate-300 bg-white text-slate-700 transition-all duration-300 hover:-translate-y-0.5 hover:border-slate-400 hover:bg-slate-50 dark:border-white/15 dark:bg-white/[0.03] dark:text-slate-100 dark:hover:bg-white/[0.08] dark:hover:text-white'
 
+const GITHUB_RELEASE_API =
+  'https://api.github.com/repos/Makaly/claimsflow-mobile/releases/latest'
+const FALLBACK_APK = '/claimsflow-android.apk'
+
+function useLatestApkRelease() {
+  const [apkUrl, setApkUrl] = useState<string>(FALLBACK_APK)
+  const [version, setVersion] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(GITHUB_RELEASE_API, { headers: { Accept: 'application/vnd.github+json' } })
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return
+        const tag: string = data?.tag_name ?? ''
+        const asset = (data?.assets ?? []).find(
+          (a: { name: string; browser_download_url: string }) => a.name.endsWith('.apk'),
+        )
+        if (asset?.browser_download_url) setApkUrl(asset.browser_download_url)
+        if (tag) setVersion(tag.replace(/^v/, ''))
+      })
+      .catch(() => {
+        /* keep fallback values */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  return { apkUrl, version }
+}
+
 export default function Landing() {
   const [notifyEmail, setNotifyEmail] = useState('')
   const [notified, setNotified] = useState(false)
   const year = new Date().getFullYear()
+  const { apkUrl, version } = useLatestApkRelease()
 
   const handleNotify = (e: React.FormEvent) => {
     e.preventDefault()
@@ -273,14 +306,15 @@ export default function Landing() {
               <div className="flex flex-wrap gap-3">
                 <StoreBadge
                   line1="Download for"
-                  line2="Android"
+                  line2={version ? `Android v${version}` : 'Android'}
                   icon={Play}
-                  href="/claimsflow-android.apk"
+                  href={apkUrl}
                 />
                 <StoreBadge line1="Coming soon to the" line2="App Store" icon={Apple} />
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-500">
-                Android beta · enable &ldquo;Install unknown apps&rdquo; in Settings before installing
+                {version ? `Android v${version}` : 'Android beta'} · enable &ldquo;Install unknown
+                apps&rdquo; in Settings before installing
               </p>
             </div>
 
