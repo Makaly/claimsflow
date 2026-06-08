@@ -40,8 +40,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   // on every app boot (see AppRoutes).
   isAuthenticated: !!cachedUser,
 
-  login: (user, token) => {
-    if (token) localStorage.setItem('token', token)
+  login: (user, _token) => {
+    // SECURITY: the auth token is NOT stored in localStorage. It lives only in
+    // the HttpOnly cookie the server sets at /api/auth/login, which JavaScript
+    // (and therefore any XSS) cannot read. The `_token` arg is accepted for
+    // backwards-compatible call sites but intentionally ignored.
+    localStorage.removeItem('token') // evict any token persisted by older builds
     localStorage.removeItem('cic-claims-storage')
     localStorage.setItem('user', JSON.stringify(user))
     // Mark this tab as having gone through an explicit login flow.

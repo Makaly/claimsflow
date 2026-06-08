@@ -15,7 +15,9 @@ installFetchProxy()
 
 // Set once at app boot. Wrapped in try/catch because Firefox extensions proxy
 // pdfjs module objects via XrayWrapper and throw on property writes.
-try { pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js' } catch (_) {}
+// pdfjs-dist v4 ships an ES-module worker (.mjs); the self-hosted copy in
+// public/ was refreshed to match the upgraded package.
+try { pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs' } catch (_) {}
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

@@ -21,7 +21,10 @@ export default defineConfig({
     },
   },
   build: {
-    sourcemap: true,
+    // No source maps in production builds — they expose the original
+    // TypeScript source (and make vulnerability hunting trivial) to anyone who
+    // opens devtools on the deployed site. Re-enable locally if needed.
+    sourcemap: false,
     rollupOptions: {
       output: {
         // Split output by role group so each role downloads only its pages.

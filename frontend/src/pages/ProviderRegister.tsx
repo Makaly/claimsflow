@@ -167,8 +167,8 @@ export default function ProviderRegister() {
     setBusy(true)
     try {
       const { data } = await api.post('/auth/verify-email-otp', { email: registeredEmail, code: otpCode })
-      // Token is now set as cookie + returned in body. Persist for cross-origin.
-      if (data?.access_token) localStorage.setItem('token', data.access_token)
+      // Auth is carried by the HttpOnly cookie the server set (SameSite=None;
+      // Secure cross-origin in prod). Do not persist the token in localStorage.
       if (data?.user) login(data.user, data.access_token)
       sessionStorage.setItem('tab_auth', '1')
       toast.success("Email verified — you're signed in.")
