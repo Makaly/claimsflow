@@ -1646,18 +1646,19 @@ export default function Claims() {
           <DialogTitle className="sr-only">{selectedClaim?.claimNumber ?? 'Claim Details'}</DialogTitle>
 
           {/* ── Header bar ── */}
-          <div className="flex items-center gap-3 px-4 py-3 border-b bg-gradient-to-r from-muted/60 to-background shrink-0">
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <span className="font-black tracking-tight text-sm font-mono">{selectedClaim?.claimNumber}</span>
+          <div className="relative flex items-center gap-3 px-4 py-3 border-b bg-gradient-to-r from-violet-50 via-background to-emerald-50/40 dark:from-violet-950/30 dark:via-background dark:to-emerald-950/20 shrink-0">
+            <span className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-violet-500 to-emerald-500" />
+            <div className="flex items-center gap-2 flex-1 min-w-0 pl-1.5">
+              <span className="font-black tracking-tight text-sm font-mono text-foreground">{selectedClaim?.claimNumber}</span>
               {selectedClaim?.aiExtracted && (
-                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-violet-500/10 text-violet-500 border border-violet-500/20">
+                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-violet-500/10 text-violet-600 dark:text-violet-400 border border-violet-500/20">
                   <Sparkles className="h-2.5 w-2.5" /> AI
                 </span>
               )}
               {selectedClaim?.batchNumber && (
                 <span className="inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[10px] text-muted-foreground bg-muted border border-border">{selectedClaim.batchNumber}</span>
               )}
-              <span className="text-muted-foreground/40 hidden sm:inline">·</span>
+              <span className="w-px h-4 bg-border hidden sm:inline-block" />
               <span className="text-base font-black tabular-nums hidden sm:inline text-emerald-600 dark:text-emerald-400">{formatCurrency(selectedClaim?.invoiceAmount ?? 0)}</span>
             </div>
             <div className="flex items-center gap-1.5 shrink-0 pr-8">
@@ -1741,34 +1742,51 @@ export default function Claims() {
                   const crit = signals.filter(s => s.level === 'critical').length
                   const warn = signals.filter(s => s.level === 'warning').length
                   return (
-                    <div className="mx-2 mt-2 space-y-1.5">
-                      {/* Section label */}
-                      <div className="flex items-center gap-1.5 px-1">
-                        <AlertTriangle className="h-3 w-3 text-red-500 shrink-0" />
-                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">
-                          {crit > 0 ? `${crit} Critical` : ''}{crit > 0 && warn > 0 ? ' · ' : ''}{warn > 0 ? `${warn} Warning` : ''}{' '}Signal{signals.length !== 1 ? 's' : ''}
+                    <div className="mx-2 mt-3 space-y-2">
+                      {/* Section header */}
+                      <div className="flex items-center gap-2 px-0.5">
+                        <div className={`flex h-5 w-5 items-center justify-center rounded-full shrink-0 ${crit > 0 ? 'bg-red-500/15' : 'bg-amber-500/15'}`}>
+                          <AlertTriangle className={`h-3 w-3 ${crit > 0 ? 'text-red-500' : 'text-amber-500'}`} />
+                        </div>
+                        <span className="text-[11px] font-bold text-foreground">
+                          {crit > 0 ? <span className="text-red-500">{crit} Critical</span> : null}
+                          {crit > 0 && warn > 0 ? <span className="text-muted-foreground mx-1">·</span> : null}
+                          {warn > 0 ? <span className="text-amber-500">{warn} Warning</span> : null}
+                          <span className="text-muted-foreground font-normal ml-1">signal{signals.length !== 1 ? 's' : ''} detected</span>
                         </span>
                       </div>
                       {signals.map((s, i) => (
-                        <div key={i} className={`rounded-lg border-l-4 bg-card shadow-sm p-3 ${
+                        <div key={i} className={`rounded-xl overflow-hidden shadow-sm border ${
                           s.level === 'critical'
-                            ? 'border-l-red-500 border border-red-200 dark:border-red-800/60'
+                            ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800/50'
                             : s.level === 'warning'
-                            ? 'border-l-amber-500 border border-amber-200 dark:border-amber-800/60'
-                            : 'border-l-blue-500 border border-blue-200 dark:border-blue-800/60'
+                            ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/50'
+                            : 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800/50'
                         }`}>
-                          <div className="flex items-start gap-2">
-                            <span className={`inline-flex mt-0.5 shrink-0 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wide ${
-                              s.level === 'critical' ? 'bg-red-600 text-white' : s.level === 'warning' ? 'bg-amber-500 text-white' : 'bg-blue-500 text-white'
+                          <div className={`flex items-center gap-2 px-3 py-1.5 border-b ${
+                            s.level === 'critical' ? 'border-red-200 dark:border-red-800/40 bg-red-100/50 dark:bg-red-500/10' :
+                            s.level === 'warning'  ? 'border-amber-200 dark:border-amber-800/40 bg-amber-100/50 dark:bg-amber-500/10' :
+                                                      'border-blue-200 dark:border-blue-800/40 bg-blue-100/50 dark:bg-blue-500/10'
+                          }`}>
+                            <span className={`text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded ${
+                              s.level === 'critical' ? 'bg-red-500 text-white' :
+                              s.level === 'warning'  ? 'bg-amber-500 text-white' :
+                                                        'bg-blue-500 text-white'
                             }`}>{s.level}</span>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-bold text-foreground leading-tight">{s.title}</p>
-                              {(s as any).detectedAt && (
-                                <p className="text-[9px] text-muted-foreground mt-0.5">{formatDate((s as any).detectedAt)}</p>
-                              )}
-                              <p className="text-[11px] text-muted-foreground leading-relaxed mt-1">{s.detail}</p>
-                            </div>
+                            <p className={`text-xs font-bold flex-1 leading-tight ${
+                              s.level === 'critical' ? 'text-red-800 dark:text-red-200' :
+                              s.level === 'warning'  ? 'text-amber-800 dark:text-amber-200' :
+                                                        'text-blue-800 dark:text-blue-200'
+                            }`}>{s.title}</p>
+                            {(s as any).detectedAt && (
+                              <span className="text-[9px] text-muted-foreground/50 shrink-0">{formatDate((s as any).detectedAt)}</span>
+                            )}
                           </div>
+                          <p className={`text-[11px] leading-relaxed px-3 py-2 ${
+                            s.level === 'critical' ? 'text-red-700/90 dark:text-red-200/80' :
+                            s.level === 'warning'  ? 'text-amber-700/90 dark:text-amber-200/80' :
+                                                      'text-blue-700/90 dark:text-blue-200/80'
+                          }`}>{s.detail}</p>
                         </div>
                       ))}
                     </div>
@@ -1841,18 +1859,18 @@ export default function Claims() {
                               value={editValue}
                               onChange={e => setEditValue(e.target.value)}
                               onKeyDown={e => { if (e.key === 'Enter') saveFieldEdit(fieldKey!); if (e.key === 'Escape') cancelFieldEdit() }}
-                              className="flex-1 text-xs border rounded px-1.5 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              className="flex-1 text-xs border rounded-md px-2 py-1 bg-background focus:outline-none focus:ring-2 focus:ring-blue-500/40"
                             />
                             <button type="button" onClick={() => saveFieldEdit(fieldKey!)} disabled={!!savingField}
-                              className="p-0.5 rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50">
+                              className="p-1 rounded-md bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50">
                               {savingField === fieldKey ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
                             </button>
-                            <button type="button" onClick={cancelFieldEdit} className="p-0.5 rounded hover:bg-muted text-muted-foreground">
+                            <button type="button" onClick={cancelFieldEdit} className="p-1 rounded-md hover:bg-muted text-muted-foreground">
                               <Undo2 className="h-3 w-3" />
                             </button>
                           </div>
                         ) : (
-                          <p className={`${large ? 'text-base font-extrabold' : 'text-xs font-semibold'} ${mono ? 'font-mono' : ''} text-foreground break-words leading-snug`}>{value}</p>
+                          <p className={`${large ? 'text-base font-extrabold' : 'text-[13px] font-semibold'} ${mono ? 'font-mono tracking-tight' : ''} text-foreground break-words leading-snug`}>{value}</p>
                         )}
                         {isShowingHistory && (
                           <div className="mt-1 rounded border bg-muted/40 divide-y text-[10px]">
@@ -1878,12 +1896,12 @@ export default function Claims() {
                     )
                   }
                   const Section = ({ icon, label, color, children }: { icon: React.ReactNode; label: string; color: string; children: React.ReactNode }) => (
-                    <div className="rounded-lg border bg-card overflow-hidden">
-                      <div className={`flex items-center gap-1.5 px-2.5 py-1.5 border-b ${color}`}>
-                        <span className="opacity-70">{icon}</span>
-                        <span className="text-[9px] font-bold uppercase tracking-widest opacity-80">{label}</span>
+                    <div className="rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm overflow-hidden shadow-sm">
+                      <div className={`flex items-center gap-2 px-3 py-2 border-b border-border/60 ${color}`}>
+                        <span className="opacity-80">{icon}</span>
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-foreground/70">{label}</span>
                       </div>
-                      <div className="px-2.5 py-2 grid grid-cols-2 gap-x-3 gap-y-2">
+                      <div className="px-3 py-2.5 grid grid-cols-2 gap-x-4 gap-y-2.5">
                         {children}
                       </div>
                     </div>
@@ -1892,16 +1910,16 @@ export default function Claims() {
                   return (
                     <TooltipProvider delayDuration={300}>
                     <Tabs defaultValue="overview" className="w-full">
-                      <div className="px-2 pt-2 pb-1 sticky top-0 bg-background z-10 border-b">
-                        <TabsList className="grid w-full grid-cols-4 h-8">
-                          <TabsTrigger value="overview" className="text-[10px] font-semibold">Overview</TabsTrigger>
-                          <TabsTrigger value="clinical" className="text-[10px] font-semibold">Clinical</TabsTrigger>
-                          <TabsTrigger value="billing" className="text-[10px] font-semibold">Billing</TabsTrigger>
-                          <TabsTrigger value="info" className="text-[10px] font-semibold">Info</TabsTrigger>
+                      <div className="px-2 pt-2.5 pb-0 sticky top-0 bg-background/95 backdrop-blur-sm z-10 border-b border-border/60">
+                        <TabsList className="grid w-full grid-cols-4 h-9 bg-muted/50 rounded-lg p-0.5">
+                          <TabsTrigger value="overview" className="text-[11px] font-semibold rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-foreground text-muted-foreground">Overview</TabsTrigger>
+                          <TabsTrigger value="clinical" className="text-[11px] font-semibold rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-foreground text-muted-foreground">Clinical</TabsTrigger>
+                          <TabsTrigger value="billing" className="text-[11px] font-semibold rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-foreground text-muted-foreground">Billing</TabsTrigger>
+                          <TabsTrigger value="info" className="text-[11px] font-semibold rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-foreground text-muted-foreground">Info</TabsTrigger>
                         </TabsList>
                       </div>
 
-                      <TabsContent value="overview" className="px-2 pb-2 space-y-2 mt-2 data-[state=inactive]:hidden">
+                      <TabsContent value="overview" className="px-2.5 pb-3 space-y-2.5 mt-2.5 data-[state=inactive]:hidden">
 
                       {/* Member & Patient */}
                       <Section icon={<User className="h-3.5 w-3.5 text-blue-500" />} label="Member & Patient" color="bg-blue-500/5 border-blue-500/10">
@@ -2260,19 +2278,22 @@ export default function Claims() {
                       <ClinicalDiscrepanciesPanel claimId={selectedClaim.id} />
 
                       </TabsContent>
-                      <TabsContent value="billing" className="px-2 pb-2 mt-2 data-[state=inactive]:hidden">
+                      <TabsContent value="billing" className="px-2.5 pb-3 mt-2.5 data-[state=inactive]:hidden space-y-3">
 
                       {/* Unified billing audit: receipt items + diagnosis correspondence + fraud signals */}
                       <InvoiceBillingAudit claimId={selectedClaim.id} />
 
-                      {/* Granular per-line-item table with arithmetic + price ceiling checks */}
+                      {/* Granular per-line-item table with arithmetic + price ceiling checks.
+                          hideWhenEmpty: the billing audit above already lists the items, so an
+                          empty "no line items" card here would contradict it. */}
                       <LineItemsTable
                         claimId={selectedClaim.id}
                         invoiceTotal={selectedClaim.invoiceAmount ?? undefined}
+                        hideWhenEmpty
                       />
 
                       </TabsContent>
-                      <TabsContent value="info" className="px-2 pb-2 space-y-2 mt-2 data-[state=inactive]:hidden">
+                      <TabsContent value="info" className="px-2.5 pb-3 space-y-2.5 mt-2.5 data-[state=inactive]:hidden">
 
                       {/* Metadata */}
                       <Section icon={<Hash className="h-3.5 w-3.5 text-slate-400" />} label="Metadata" color="bg-muted/30">
