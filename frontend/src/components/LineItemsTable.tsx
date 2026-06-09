@@ -51,6 +51,10 @@ interface Props {
   // Defaults to 0.60 if not supplied; matches system-config key
   // ocr_line_item_confidence_threshold.
   confidenceThreshold?: number
+  // When true, render nothing if there are no structured line items. Use this
+  // where another component (e.g. InvoiceBillingAudit) already lists the items,
+  // so an empty "no line items" card doesn't contradict the audit above it.
+  hideWhenEmpty?: boolean
 }
 
 const RISK_CONFIG = {
@@ -125,7 +129,7 @@ function DxMatchBadge({ match, reason }: { match: string | null; reason: string 
 // Rows below this confidence are highlighted as needing manual review.
 const LOW_CONF_DEFAULT = 0.60
 
-export default function LineItemsTable({ claimId, invoiceTotal, confidenceThreshold }: Props) {
+export default function LineItemsTable({ claimId, invoiceTotal, confidenceThreshold, hideWhenEmpty }: Props) {
   const threshold = confidenceThreshold ?? LOW_CONF_DEFAULT
   const [data, setData]         = useState<LineItemsResponse | null>(null)
   const [loading, setLoading]   = useState(true)
@@ -154,13 +158,18 @@ export default function LineItemsTable({ claimId, invoiceTotal, confidenceThresh
     </Card>
   )
 
-  if (!data || data.line_items.length === 0) return (
-    <Card>
-      <CardContent className="py-6 text-center text-muted-foreground text-sm">
-        No line items extracted for this invoice.
-      </CardContent>
-    </Card>
-  )
+  if (!data || data.line_items.length === 0) {
+    // When another component already lists the invoice items (the billing audit),
+    // suppress this card entirely so it doesn't read as "no items" alongside it.
+    if (hideWhenEmpty) return null
+    return (
+      <Card>
+        <CardContent className="py-6 text-center text-muted-foreground text-sm">
+          No itemized line-item breakdown available for this invoice.
+        </CardContent>
+      </Card>
+    )
+  }
 
   const items          = data.line_items
   const highCount      = items.filter(i => i.fraudRisk === 'high').length
