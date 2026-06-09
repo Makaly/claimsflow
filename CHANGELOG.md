@@ -9,6 +9,35 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **Job Setups: full capture → separate → index → validate → output pipeline**
+  (`backend/prisma/schema.prisma`,
+  `backend/prisma/migrations/20260609130000_add_jobsetup_capture_index_fields/`,
+  `backend/prisma/migrations/20260609131000_add_jobsetup_pipeline_config/`,
+  `backend/src/job-setup/`, `backend/src/ocr/`, `backend/src/batch-submission/`,
+  `frontend/src/pages/JobSetups.tsx`, `frontend/src/components/DynamicIndexForm.tsx`) —
+  a Job Setup is now a complete document-capture profile, configured from a tabbed
+  editor (General · Capture · Separation · Index Fields · OCR Zones · Output):
+  - **Field validation is enforced** (previously stored but ignored): required,
+    regex, numeric/date range, min/max length, and input masks (`#` digit, `A`
+    letter, `*` any) — the same rules run client-side before submit and server-side
+    via `POST /job-setups/:id/validate`.
+  - **New field sources** — `system` (current date/time, batch/document counters,
+    page count, operator), `barcode`, and `ocrZone`; plus per-field default values
+    and **double-key (blind re-key) verification**.
+  - **OCR Zones** — bind an index field to a page region by drawing a box on a
+    sample page; values are read at extraction time and written to
+    `OcrExtraction.customFields`.
+  - **Document separation** — split a multi-page upload into separate claims by
+    fixed page count, blank page, or header phrase.
+  - **Output/Export** — `GET /batch-submissions/:id/export` streams a zip of
+    CSV / XML / JSON index files plus optional searchable-PDF renders, with
+    configurable file-name patterns (`{batchName}`, `{date}`, `{docCounter}`,
+    `{field:KEY}`) and per-field subfoldering.
+  - **Capture settings** — deskew, auto-crop, grayscale, despeckle, and DPI
+    normalization applied to image uploads before extraction.
+  - Atomic per-setup sequence counters (`JobSetupCounter`) back the counter system
+    values and document naming. See `backend/docs/JOB_SETUPS.md`.
+
 - **Per-page document categories in the full DocumentViewer**
   (`backend/prisma/schema.prisma`,
   `backend/prisma/migrations/20260609120000_add_documentpages_to_ocr_extraction/`,
