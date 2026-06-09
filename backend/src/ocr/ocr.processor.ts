@@ -13,6 +13,9 @@ import { computeFraudSignals, DuplicateClaimRef, CrossProviderMatch } from '../c
 import { AUTO_DETECT_PROVIDER_NAME } from '../common/constants/auto-detect-provider';
 import { ProviderResolverService } from '../common/services/provider-resolver.service';
 import { InvoiceFanoutService } from './invoice-fanout.service';
+import { DocumentSeparationService } from './document-separation.service';
+import { ImagePreprocessorService, PreprocessOptions } from './image-preprocessor.service';
+import * as fs from 'fs';
 
 // concurrency: 2 — OCR is CPU-bound via Tesseract; more than 2 saturates the process
 @Processor({ name: 'ocr' }, { concurrency: 2 })
@@ -30,8 +33,55 @@ export class OcrProcessor extends WorkerHost {
     private claimTypeConfigService: ClaimTypeConfigService,
     private providerResolver: ProviderResolverService,
     private invoiceFanout: InvoiceFanoutService,
+    private documentSeparation: DocumentSeparationService,
+    private imagePreprocessor: ImagePreprocessorService,
   ) {
     super();
+  }
+
+  /** Map a Job Setup's captureSettings to image-preprocessor options. */
+  private mapCaptureOptions(c: any): PreprocessOptions {
+    const opts: PreprocessOptions = {};
+    if (c?.deskew) opts.deskew = true;
+    if (c?.autoCrop) opts.cropToPage = true;
+    if (c?.despeckle) opts.denoise = true;
+    if (c?.colorMode === 'gray' || c?.colorMode === 'bw') opts.grayscale = true;
+    if (c?.dpi) opts.targetDpi = Number(c.dpi);
+    return opts;
+  }
+
+  /**
+   * Apply a Job Setup's capture settings (deskew / auto-crop / grayscale /
+   * despeckle / DPI) to an uploaded image before extraction, via the ML sidecar.
+   * Returns the path to use for OCR — the preprocessed image when produced, else
+   * the original. PDFs and the no-sidecar case pass through unchanged.
+   */
+  private async applyCaptureSettings(documentId: string, filePath: string, mimetype: string): Promise<string> {
+    if (!this.imagePreprocessor.isEnabled()) return filePath;
+    if (!/^image\//i.test(mimetype)) return filePath; // PDFs are rendered per-page elsewhere
+
+    // Resolve the batch's Job Setup captureSettings (best-effort).
+    const claimId = (await this.prisma.document.findUnique({ where: { id: documentId }, select: { claimId: true } }))?.claimId;
+    if (!claimId) return filePath;
+    const batchId = (await this.prisma.claim.findUnique({ where: { id: claimId }, select: { batchId: true } }))?.batchId;
+    if (!batchId) return filePath;
+    const jobSetupId = (await this.prisma.batchSubmission.findUnique({ where: { id: batchId }, select: { jobSetupId: true } }))?.jobSetupId;
+    if (!jobSetupId) return filePath;
+    const capture = (await this.prisma.jobSetup.findUnique({ where: { id: jobSetupId }, select: { captureSettings: true } }))?.captureSettings as any;
+
+    const opts = this.mapCaptureOptions(capture);
+    if (!Object.keys(opts).length) return filePath;
+
+    try {
+      const res = await this.imagePreprocessor.preprocess(documentId, filePath, mimetype, { ...opts, force: true });
+      if (res?.outputPath && fs.existsSync(res.outputPath)) {
+        this.logger.log(`Capture settings applied (${res.stepsApplied.join(', ')}) for document ${documentId}`);
+        return res.outputPath;
+      }
+    } catch (e: any) {
+      this.logger.warn(`Capture preprocessing failed for document ${documentId}: ${e?.message ?? e}`);
+    }
+    return filePath;
   }
 
   async process(job: Job<any, any, string>): Promise<any> {
@@ -61,10 +111,16 @@ export class OcrProcessor extends WorkerHost {
         select: { claimId: true, originalName: true },
       }).catch(() => null);
 
+      // ── Step 0: Apply Job Setup capture settings to image uploads ─────────
+      // Deskew / auto-crop / grayscale / DPI normalize before extraction when
+      // the setup configures it and the ML sidecar is available. No-op for PDFs
+      // and when no sidecar is configured.
+      const workPath = await this.applyCaptureSettings(documentId, filePath, mimetype);
+
       // ── Step 1: AI document classifier (zone-guided — highest accuracy) ────
       let classifierResult: Awaited<ReturnType<typeof this.classifierService.classifyAndExtract>> | null = null;
       try {
-        classifierResult = await this.classifierService.classifyAndExtract(filePath, mimetype, {
+        classifierResult = await this.classifierService.classifyAndExtract(workPath, mimetype, {
           documentId,
           claimId:  earlyDoc?.claimId  ?? undefined,
           fileName: earlyDoc?.originalName ?? undefined,
@@ -83,7 +139,7 @@ export class OcrProcessor extends WorkerHost {
 
       // ── Step 2: Tesseract/Ollama — fills any gaps the classifier missed ────
       // Route through the batch's chosen vision model when one was supplied.
-      const { invoices, pageCount } = await this.ocrService.extractAndParseInvoice(filePath, mimetype, model);
+      const { invoices, pageCount } = await this.ocrService.extractAndParseInvoice(workPath, mimetype, model);
       const primary = invoices[0];
 
       // ── Step 3: Merge — classifier claimFieldMap takes priority ────────────
@@ -207,6 +263,82 @@ export class OcrProcessor extends WorkerHost {
             documentPages:     perDocumentPages as any ?? undefined,
           },
         });
+
+        // ── Job-setup custom index fields ──────────────────────────────────
+        // When the batch was uploaded under a Job Setup, copy its extraction-
+        // sourced index fields (JobSetupField.extractionKey → OCR value) into
+        // OcrExtraction.customFields so the index form and downstream export see
+        // server-authoritative values. Best-effort — never blocks indexing.
+        // separationRules are captured here for the document-separation step below.
+        let setupSeparationRules: any = null;
+        try {
+          const batchId = (await this.prisma.claim.findUnique({
+            where: { id: claimId },
+            select: { batchId: true },
+          }))?.batchId ?? null;
+          const jobSetupId = batchId
+            ? (await this.prisma.batchSubmission.findUnique({
+                where: { id: batchId },
+                select: { jobSetupId: true },
+              }))?.jobSetupId ?? null
+            : null;
+          if (jobSetupId) {
+            const setup = await this.prisma.jobSetup.findUnique({
+              where: { id: jobSetupId },
+              include: { fields: { where: { source: { in: ['extraction', 'ocrZone'] } } } },
+            });
+            setupSeparationRules = (setup as any)?.separationRules ?? null;
+            if (setup?.fields.length) {
+              // Map both canonical keys and raw classifier keys so a setup can
+              // bind to either "invoiceNumber" or "invoice_number".
+              const extractedMap: Record<string, any> = {
+                patientName: mergedPatientName,
+                patientId: mergedPatientId,
+                memberNumber: mergedMemberNumber,
+                membershipNumber: mergedMemberNumber,
+                providerName: mergedProviderName,
+                invoiceNumber: mergedInvoiceNumber,
+                invoiceAmount: mergedInvoiceAmount,
+                invoiceDate: safeInvoiceDate ? safeInvoiceDate.toISOString().slice(0, 10) : null,
+                diagnosis: mergedDiagnosis,
+                ...cf,
+                ...cmap,
+              };
+              const custom: Record<string, any> = {};
+              for (const f of setup.fields) {
+                if (f.source !== 'extraction' || !f.extractionKey) continue;
+                const v = extractedMap[f.extractionKey];
+                if (v != null && String(v).trim() !== '') custom[f.key] = v;
+              }
+
+              // OCR-zone fields: extract from their bound page regions in one pass.
+              const zoneSpecs = setup.fields
+                .filter((f) => f.source === 'ocrZone' && f.zone)
+                .map((f) => {
+                  const z = f.zone as any;
+                  return {
+                    key: f.key, label: f.label,
+                    xPercent: Number(z.xPercent) || 0, yPercent: Number(z.yPercent) || 0,
+                    widthPercent: Number(z.widthPercent) || 0, heightPercent: Number(z.heightPercent) || 0,
+                    page: z.page ? Number(z.page) : undefined,
+                    searchPhrase: z.searchPhrase || undefined,
+                  };
+                })
+                .filter((z) => z.widthPercent > 0 && z.heightPercent > 0);
+              if (zoneSpecs.length) {
+                const zoneVals = await this.classifierService.extractZones(filePath, mimetype, zoneSpecs);
+                for (const [k, r] of Object.entries(zoneVals)) custom[k] = r.value;
+              }
+
+              await this.prisma.ocrExtraction.update({
+                where: { claimId },
+                data: { jobSetupId, ...(Object.keys(custom).length ? { customFields: custom } : {}) },
+              });
+            }
+          }
+        } catch (cfErr: any) {
+          this.logger.warn(`Job-setup custom-field mapping failed for claim ${claimId}: ${cfErr?.message ?? cfErr}`);
+        }
 
         // A claim is complete as long as it has an invoice — claim form and
         // authorization letter are optional supporting documents. Proceed without
@@ -436,17 +568,28 @@ export class OcrProcessor extends WorkerHost {
           `status: ${finalStatus}`
         );
 
-        // ── Multi-invoice fan-out ──────────────────────────────────────────
-        // When OCR detected more than one invoice on this document, spin off a
-        // sibling claim (split + barcoded + re-OCR'd) per EXTRA invoice. The
-        // primary invoice stays on this claim untouched. Flag-gated, skipped for
-        // fan-out children (no recursion), best-effort — never blocks indexing.
-        if (!fanoutChild && InvoiceFanoutService.isEnabled() && invoices.length > 1) {
-          await this.invoiceFanout
-            .fanOut({ parentClaimId: claimId, sourcePdfPath: filePath, mimetype, invoices, model })
-            .catch((e: any) =>
-              this.logger.warn(`Invoice fan-out failed for claim ${claimId}: ${e?.message ?? e}`),
-            );
+        // ── Document separation / multi-invoice fan-out ────────────────────
+        // Skipped for fan-out children (no recursion), best-effort — never
+        // blocks indexing. Precedence:
+        //   1. The Job Setup's explicit separationRules (blank page / fixed
+        //      count / OCR phrase…) split the document into sibling claims.
+        //   2. Otherwise the legacy invoice-count heuristic fans out one sibling
+        //      per EXTRA detected invoice (flag-gated by ENABLE_INVOICE_FANOUT).
+        if (!fanoutChild) {
+          const rules = setupSeparationRules;
+          if (rules?.method && rules.method !== 'none') {
+            await this.documentSeparation
+              .separate({ parentClaimId: claimId, sourcePdfPath: filePath, mimetype, rules, model })
+              .catch((e: any) =>
+                this.logger.warn(`Document separation failed for claim ${claimId}: ${e?.message ?? e}`),
+              );
+          } else if (InvoiceFanoutService.isEnabled() && invoices.length > 1) {
+            await this.invoiceFanout
+              .fanOut({ parentClaimId: claimId, sourcePdfPath: filePath, mimetype, invoices, model })
+              .catch((e: any) =>
+                this.logger.warn(`Invoice fan-out failed for claim ${claimId}: ${e?.message ?? e}`),
+              );
+          }
         }
       }
 

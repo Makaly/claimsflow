@@ -60,6 +60,11 @@ export class ImagePreprocessorService {
     }
   }
 
+  /** True when the ML sidecar is configured (ML_SIDECAR_URL set). */
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
   outputPath(documentId: string): string {
     return path.join(process.cwd(), 'uploads', 'preprocessed', `${documentId}.png`);
   }

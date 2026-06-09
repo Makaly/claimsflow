@@ -341,6 +341,104 @@ Return the raw value only (no labels). Score your confidence honestly.`;
     return { text, confidence, reasoning };
   }
 
+  // ── Ad-hoc zone extraction (Job Setup ocrZone fields) ─────────────────────────
+
+  /**
+   * Extract values from arbitrary page regions that are NOT tied to an
+   * OcrTemplate — used by Job Setup fields whose source is `ocrZone`. Reuses the
+   * same vision engine as template zones: a single combined Anthropic call, or
+   * per-zone Gemini calls. Returns { fieldKey: { value, confidence } } for every
+   * zone that yielded a non-empty value.
+   */
+  async extractZones(
+    filePath: string,
+    mimetype: string,
+    zones: Array<{
+      key: string; label: string;
+      xPercent: number; yPercent: number; widthPercent: number; heightPercent: number;
+      page?: number; searchPhrase?: string;
+    }>,
+  ): Promise<Record<string, { value: string; confidence: number }>> {
+    const out: Record<string, { value: string; confidence: number }> = {};
+    if (!zones.length) return out;
+
+    // Gemini: one call per zone (its ocrZone API is single-region).
+    if (this.getActiveProvider() === 'gemini') {
+      for (const z of zones) {
+        try {
+          const r = await this.gemini.ocrZone({
+            filePath, fieldLabel: z.label,
+            xPercent: z.xPercent, yPercent: z.yPercent,
+            widthPercent: z.widthPercent, heightPercent: z.heightPercent,
+            searchPhrase: z.searchPhrase,
+          });
+          const val = String(r?.text ?? '').trim();
+          if (val) out[z.key] = { value: val, confidence: Math.min(1, Math.max(0, r?.confidence ?? 0.5)) };
+        } catch (e) {
+          this.logger.warn(`Job-setup zone "${z.label}" (gemini) failed: ${(e as any)?.message ?? e}`);
+        }
+      }
+      return out;
+    }
+
+    // Anthropic: one combined extraction call for all zones.
+    const client = this.getClient();
+    if (!client) return out;
+    let docBlock: Anthropic.ContentBlockParam;
+    try {
+      docBlock = this.buildDocBlock(filePath, mimetype);
+    } catch {
+      return out;
+    }
+    const model = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
+
+    const schema: Record<string, any> = {};
+    for (const z of zones) {
+      schema[z.key] = {
+        type: 'object',
+        properties: {
+          value:      { type: 'string', description: 'Extracted text exactly as it appears' },
+          confidence: { type: 'number', description: 'Confidence 0.0-1.0' },
+        },
+        required: ['value', 'confidence'],
+      };
+    }
+    const tool: Anthropic.Tool = {
+      name: 'extract_zone_fields',
+      description: 'Extract each field from its specified page region with a confidence score.',
+      input_schema: { type: 'object' as const, properties: schema, required: [] },
+    };
+    const desc = zones.map((z) =>
+      `- ${z.label} (${z.key}): region ~${z.xPercent.toFixed(0)}% left, ${z.yPercent.toFixed(0)}% top, ` +
+      `${z.widthPercent.toFixed(0)}%×${z.heightPercent.toFixed(0)}%${z.page ? ` on page ${z.page}` : ''}` +
+      `${z.searchPhrase ? ` — look near "${z.searchPhrase}"` : ''}`,
+    ).join('\n');
+
+    try {
+      const resp = await client.messages.create({
+        model, max_tokens: 1024, tools: [tool],
+        tool_choice: { type: 'tool', name: 'extract_zone_fields' },
+        messages: [{
+          role: 'user',
+          content: [docBlock, { type: 'text', text:
+            `Extract these fields from the specified page regions of this document. ` +
+            `Copy values exactly as printed. Empty string + confidence 0 if not found.\n\n${desc}` }],
+        }],
+      });
+      const input = (resp.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')?.input ?? {}) as Record<string, any>;
+      for (const z of zones) {
+        const v = input[z.key];
+        if (v && typeof v === 'object') {
+          const val = String(v.value ?? '').trim();
+          if (val) out[z.key] = { value: val, confidence: Math.min(1, Math.max(0, Number(v.confidence ?? 0))) };
+        }
+      }
+    } catch (e) {
+      this.logger.warn(`Job-setup zone extraction (anthropic) failed: ${(e as any)?.message ?? e}`);
+    }
+    return out;
+  }
+
   // ── Auto-suggest zones from sample document ───────────────────────────────────
 
   async suggestZones(templateId: string): Promise<Array<{
