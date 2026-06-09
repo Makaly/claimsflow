@@ -549,6 +549,11 @@ export class BatchSubmissionService {
       annotations:  c.annotations  ?? [],
       lineItems:    c.lineItems    ?? [],
       documentPages:c.documentPages?? [],
+      // Persist OCR text + field-source data so the billing audit and the
+      // Kodak-style overlay survive a draft reload (previously dropped here).
+      rawText:          c.rawText          ?? null,
+      fieldAnnotations: c.fieldAnnotations ?? undefined,
+      fieldConfidences: c.fieldConfidences ?? undefined,
     };
   }
 

@@ -13,14 +13,17 @@ import { ImagePreprocessService } from './image-preprocess.service';
 import { AnomalyScoringService } from '../claims/anomaly-scoring.service';
 import { ProviderFraudThresholdsService } from '../claims/provider-fraud-thresholds.service';
 import { LineItemFraudService } from '../claims/line-item-fraud.service';
+import { DiagnosisBillingService } from '../claims/diagnosis-billing.service';
 import { ClaimTypeConfigService } from '../claims/claim-type-config.service';
 import { InvoiceFanoutService } from './invoice-fanout.service';
+import { AssistantModule } from '../assistant/assistant.module';
 
 @Module({
   imports: [
     BullModule.registerQueue({ name: 'ocr' }),
     DocumentClassifierModule,
     PrismaModule,
+    AssistantModule,
   ],
   controllers: [OcrController],
   providers: [
@@ -34,6 +37,7 @@ import { InvoiceFanoutService } from './invoice-fanout.service';
     AnomalyScoringService,
     ProviderFraudThresholdsService,
     LineItemFraudService,
+    DiagnosisBillingService,
     ClaimTypeConfigService,
     InvoiceFanoutService,
   ],

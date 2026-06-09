@@ -11,8 +11,10 @@ FastAPI microservice providing:
 """
 import base64
 import hashlib
+import hmac
 import io
 import json
+import math
 import os
 import pickle
 from datetime import datetime, timezone
@@ -20,8 +22,8 @@ from pathlib import Path
 from typing import Any, Optional
 
 import numpy as np
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, Header, Depends, status, Request
+from pydantic import BaseModel, field_validator
 
 # ── Optional heavy imports — graceful degradation ─────────────────────────────
 try:
@@ -53,10 +55,92 @@ try:
 except ImportError:
     CV2_AVAILABLE = False
 
-app = FastAPI(title="ClaimsFlow ML Sidecar", version="2.0.0")
+# Auto-generated docs (/docs, /redoc, /openapi.json) expose the full endpoint
+# and schema surface. Disable them unless explicitly running in debug.
+_DEBUG = os.getenv("ML_SIDECAR_DEBUG", "").lower() in ("1", "true", "yes")
+app = FastAPI(
+    title="ClaimsFlow ML Sidecar",
+    version="2.0.0",
+    docs_url="/docs" if _DEBUG else None,
+    redoc_url="/redoc" if _DEBUG else None,
+    openapi_url="/openapi.json" if _DEBUG else None,
+)
 
-MODEL_PATH      = Path(os.getenv("MODEL_PATH",      "/tmp/fraud_model.pkl"))
-IFOREST_PATH    = Path(os.getenv("IFOREST_PATH",    "/tmp/iforest_model.pkl"))
+# ── API-key authentication ────────────────────────────────────────────────────
+# This service trains/serves fraud models over claim + PII data. Every non-health
+# endpoint requires the shared secret the backend sends in the X-API-Key header.
+# When ML_SIDECAR_API_KEY is set the key is ENFORCED; when unset we warn loudly
+# and allow requests (local dev / CI only). The compose / render / k8s configs
+# all require the key, so real deployments are always authenticated.
+_API_KEY = os.getenv("ML_SIDECAR_API_KEY", "").strip()
+if not _API_KEY:
+    print(
+        "[ml-sidecar] WARNING: ML_SIDECAR_API_KEY is not set — endpoints are "
+        "UNAUTHENTICATED. Set it in every non-dev deployment.",
+        flush=True,
+    )
+
+
+def require_api_key(x_api_key: str = Header(default="")) -> None:
+    if not _API_KEY:
+        return  # dev/CI: no key configured (warned at startup)
+    if not hmac.compare_digest(x_api_key or "", _API_KEY):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API key",
+        )
+
+
+# ── Rate limiting ─────────────────────────────────────────────────────────────
+# Per-client limits on the compute-heavy endpoints (model training and anomaly
+# fitting) so a caller can't exhaust CPU/RAM. Degrades gracefully to a no-op when
+# slowapi is not installed (local dev); production gets it via requirements.txt.
+try:
+    from slowapi import Limiter, _rate_limit_exceeded_handler
+    from slowapi.util import get_remote_address
+    from slowapi.errors import RateLimitExceeded
+
+    limiter = Limiter(key_func=get_remote_address)
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+except Exception:  # slowapi missing — no-op limiter keeps the service runnable
+    print("[ml-sidecar] slowapi not installed — rate limiting disabled.", flush=True)
+
+    class _NoopLimiter:
+        def limit(self, *_a, **_k):
+            def deco(fn):
+                return fn
+            return deco
+
+    limiter = _NoopLimiter()
+
+
+# Models are loaded via pickle, so their directory must be trusted and NOT
+# world-writable. /tmp let any local user plant a malicious pickle that would
+# execute on load (RCE). Default to a service-owned dir; override in deployment.
+_DEFAULT_MODEL_DIR = Path(
+    os.getenv("MODEL_DIR", str(Path(__file__).resolve().parent / "models"))
+)
+try:
+    _DEFAULT_MODEL_DIR.mkdir(parents=True, exist_ok=True)
+except Exception:
+    pass
+MODEL_PATH      = Path(os.getenv("MODEL_PATH",   str(_DEFAULT_MODEL_DIR / "fraud_model.pkl")))
+IFOREST_PATH    = Path(os.getenv("IFOREST_PATH", str(_DEFAULT_MODEL_DIR / "iforest_model.pkl")))
+
+# ── Resource limits (DoS / decompression-bomb protection) ─────────────────────
+# Cap the encoded payload and the decoded pixel count so a tiny request can't
+# expand into multi-GB allocations.
+MAX_IMAGE_B64_CHARS = int(os.getenv("ML_MAX_IMAGE_B64_CHARS", str(28 * 1024 * 1024)))  # ~20 MB binary
+MAX_IMAGE_PIXELS    = int(os.getenv("ML_MAX_IMAGE_PIXELS", str(40_000_000)))           # 40 MP
+if PIL_AVAILABLE:
+    # Pillow raises DecompressionBombError above this threshold.
+    Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
+
+
+def _check_b64_size(b64: str) -> None:
+    if not b64 or len(b64) > MAX_IMAGE_B64_CHARS:
+        raise HTTPException(413, "Image payload too large or empty")
 
 # ── Claim-level feature names (used in fraud scoring model) ──────────────────
 CLAIM_FEATURES = [
@@ -139,6 +223,18 @@ class ClaimFeatures(BaseModel):
     highRiskItemCount:    int   = 0
     maxItemPriceDeviation: float = 0.0
     itemPriceStdDev:      float = 0.0
+
+    @field_validator(
+        "invoiceAmount", "ocrConfidence", "anomalyScore",
+        "maxItemPriceDeviation", "itemPriceStdDev",
+    )
+    @classmethod
+    def _finite(cls, v: float) -> float:
+        # Reject NaN/Infinity — they silently break scaling/scoring and could be
+        # used to skew model output. Bounds are validated by the consumer.
+        if v is not None and not math.isfinite(v):
+            raise ValueError("must be a finite number")
+        return v
 
 
 class TrainingRow(BaseModel):
@@ -354,8 +450,9 @@ def health():
     }
 
 
-@app.post("/train")
-def train(req: TrainRequest):
+@app.post("/train", dependencies=[Depends(require_api_key)])
+@limiter.limit("10/minute")
+def train(request: Request, req: TrainRequest):
     if not SKLEARN_AVAILABLE:
         raise HTTPException(503, "scikit-learn not installed")
     if len(req.data) < 20:
@@ -426,8 +523,9 @@ def train(req: TrainRequest):
     return {"success": True, **meta}
 
 
-@app.post("/score")
-def score(req: ScoreRequest):
+@app.post("/score", dependencies=[Depends(require_api_key)])
+@limiter.limit("120/minute")
+def score(request: Request, req: ScoreRequest):
     if _model is None:
         # Heuristic fallback — includes line-item signals
         f = req.features
@@ -467,8 +565,9 @@ def score(req: ScoreRequest):
     }
 
 
-@app.post("/score-line-items")
-def score_line_items(req: LineItemsRequest):
+@app.post("/score-line-items", dependencies=[Depends(require_api_key)])
+@limiter.limit("60/minute")
+def score_line_items(request: Request, req: LineItemsRequest):
     """
     Analyse invoice line items for statistical anomalies.
     Returns per-item anomaly scores and an aggregate invoice fraud risk.
@@ -594,8 +693,9 @@ def score_line_items(req: LineItemsRequest):
     }
 
 
-@app.post("/image-quality")
-def image_quality(req: ImageQualityRequest):
+@app.post("/image-quality", dependencies=[Depends(require_api_key)])
+@limiter.limit("60/minute")
+def image_quality(request: Request, req: ImageQualityRequest):
     """
     Analyse a base64-encoded document image and return quality scores with
     preprocessing recommendations.
@@ -603,11 +703,18 @@ def image_quality(req: ImageQualityRequest):
     if not PIL_AVAILABLE:
         raise HTTPException(503, "Pillow not installed — run: pip install Pillow")
 
+    _check_b64_size(req.imageBase64)
     try:
         image_bytes = base64.b64decode(req.imageBase64)
         img = Image.open(io.BytesIO(image_bytes))
+        img.load()  # force decode now so a decompression bomb trips the guard here
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(400, f"Could not decode image: {e}")
+        # Pillow raises DecompressionBombError (capped via Image.MAX_IMAGE_PIXELS)
+        # and decode errors here; log the detail, return a generic message.
+        print(f"[ml-sidecar] image decode failed: {e}", flush=True)
+        raise HTTPException(400, "Could not decode image")
 
     quality = _score_image_quality(img)
     quality["filename"] = req.filename
@@ -638,16 +745,23 @@ def image_quality(req: ImageQualityRequest):
 
 def _decode_image_cv(b64: str):
     """Decode a base64 string into an OpenCV BGR image."""
+    _check_b64_size(b64)
     try:
         raw = base64.b64decode(b64)
     except Exception as e:
-        raise HTTPException(400, f"Invalid base64 image data: {e}")
+        # Don't echo the exception text back to the caller (info leak).
+        print(f"[ml-sidecar] base64 decode failed: {e}", flush=True)
+        raise HTTPException(400, "Invalid base64 image data")
     arr = np.frombuffer(raw, dtype=np.uint8)
     if arr.size == 0:
         raise HTTPException(400, "Empty image payload")
     img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
     if img is None:
-        raise HTTPException(400, "Could not decode image (cv2.imdecode returned None)")
+        raise HTTPException(400, "Could not decode image")
+    # Decompression-bomb guard: reject images whose pixel count is implausible.
+    h, w = img.shape[:2]
+    if h * w > MAX_IMAGE_PIXELS:
+        raise HTTPException(413, "Image exceeds maximum allowed dimensions")
     return img
 
 
@@ -756,8 +870,9 @@ def _encode_png_b64(img) -> str:
     return base64.b64encode(buf.tobytes()).decode("ascii")
 
 
-@app.post("/preprocess-image")
-def preprocess_image(req: PreprocessRequest):
+@app.post("/preprocess-image", dependencies=[Depends(require_api_key)])
+@limiter.limit("30/minute")
+def preprocess_image(request: Request, req: PreprocessRequest):
     """
     Run the OCR preprocessing pipeline on a base64-encoded image. Returns the
     preprocessed image (also base64) plus per-step metadata so callers can log
@@ -831,7 +946,7 @@ def preprocess_image(req: PreprocessRequest):
     }
 
 
-@app.get("/weights")
+@app.get("/weights", dependencies=[Depends(require_api_key)])
 def weights():
     if _model is None:
         return {"modelLoaded": False, "featureImportances": {}}

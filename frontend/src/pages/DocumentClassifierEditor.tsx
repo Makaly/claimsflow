@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState, useCallback, type JSX } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import * as pdfjsLib from 'pdfjs-dist'
+import { getDocumentSafe } from '@/lib/pdfSafe'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -609,7 +610,7 @@ export default function DocumentClassifierEditor() {
         setPageCount(1)
       } else {
         loadedImageRef.current = null
-        const doc = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise
+        const doc = await getDocumentSafe({ data: new Uint8Array(arrayBuffer) }).promise
         setPdfDoc(doc)
         setPageCount(doc.numPages)
         setCurrentPage(1)

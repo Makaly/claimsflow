@@ -47,6 +47,7 @@ import { DynamicIndexForm } from '@/components/DynamicIndexForm'
 import { jobSetupApi, type JobSetup } from '@/services/jobSetupService'
 import { useScanMetering } from '@/hooks/useScanMetering'
 import { getDeviceInfo as getDeviceInfoForScan } from '@/lib/deviceInfo'
+import InvoiceBillingAudit from '@/components/InvoiceBillingAudit'
 
 // Worker configured globally in main.tsx
 
@@ -102,8 +103,21 @@ interface ExtractedClaim {
   }>
   /** Structural warnings from the backend extraction validator. */
   validationWarnings?: string[]
+  /** Raw OCR text from the invoice — used for billing audit extraction when line items aren't pre-structured */
+  rawText?: string
   dbId?: string            // backend claim UUID (set after publish)
   annotations?: Annotation[] // persisted PDF annotations
+  /** Per-field source bboxes + confidence from the document classifier zones. */
+  fieldAnnotations?: Array<{
+    fieldName: string
+    label: string
+    value: string
+    confidence: number
+    page: number
+    bbox: { x: number; y: number; w: number; h: number }
+  }>
+  /** Per-field confidence map (fieldName → 0-1) from the classifier. */
+  fieldConfidences?: Record<string, number>
 }
 
 // ---- Barcode Generator ----
@@ -318,10 +332,11 @@ function DPField({ label, value, bold, mono, accent }: { label: string; value: R
 }
 
 // ---- Editable field (inline input, styled to match the dark panel) ----
-function EF({ label, value, onChange, bold, mono, accent, required, copy }: {
+function EF({ label, value, onChange, bold, mono, accent, required, copy, confidence }: {
   label: string; value: string
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   bold?: boolean; mono?: boolean; accent?: string; required?: boolean; copy?: boolean
+  confidence?: number
 }) {
   const [copied, setCopied] = useState(false)
   const isEmpty = required && !value.trim()
@@ -335,11 +350,20 @@ function EF({ label, value, onChange, bold, mono, accent, required, copy }: {
         <p className={`text-[9px] uppercase tracking-wider flex items-center gap-1 ${isEmpty ? 'text-amber-500/80' : 'text-gray-500'}`}>
           {label}{isEmpty && <span className="text-amber-500">*</span>}
         </p>
-        {copy && value && (
-          <button onClick={handleCopy} title="Copy" className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 dark:text-gray-600 hover:text-violet-400">
-            {copied ? <Check className="h-2.5 w-2.5 text-emerald-400" /> : <Copy className="h-2.5 w-2.5" />}
-          </button>
-        )}
+        <div className="flex items-center gap-1">
+          {confidence !== undefined && (
+            <span title={`Extraction confidence: ${Math.round(confidence * 100)}%`} className={`text-[9px] font-semibold tabular-nums rounded px-1 py-0.5 ${
+              confidence >= 0.85 ? 'text-emerald-400 bg-emerald-950/30' :
+              confidence >= 0.60 ? 'text-amber-400 bg-amber-950/30' :
+              'text-red-400 bg-red-950/30'
+            }`}>{Math.round(confidence * 100)}%</span>
+          )}
+          {copy && value && (
+            <button onClick={handleCopy} title="Copy" className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 dark:text-gray-600 hover:text-violet-400">
+              {copied ? <Check className="h-2.5 w-2.5 text-emerald-400" /> : <Copy className="h-2.5 w-2.5" />}
+            </button>
+          )}
+        </div>
       </div>
       <input
         value={value}
@@ -523,6 +547,14 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId, jobSetup }: {
   const setField = (field: keyof typeof edit) => (val: string) =>
     setEdit(prev => ({ ...prev, [field]: val }))
 
+  // Build a label→confidence lookup from fieldAnnotations (keyed by classifier fieldName)
+  const fieldConf = (fieldName: string): number | undefined => {
+    const fc = doc.fieldConfidences
+    if (fc && fc[fieldName] !== undefined) return fc[fieldName]
+    const fa = doc.fieldAnnotations?.find(a => a.fieldName === fieldName)
+    return fa?.confidence
+  }
+
   const autoFillFromOcr = async () => {
     setOcrFilling(true)
     try {
@@ -585,7 +617,9 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId, jobSetup }: {
           treatment:     inv.treatment                        || prev.treatment,
         }))
 
-        // Update confidence on parent doc
+        // Update confidence on parent doc. IMPORTANT: persist rawText (+ field
+        // annotations) so the billing audit has invoice text to extract items
+        // from — without this the audit shows "No invoice text available".
         onSave({
           ...doc,
           aiConfidence:  inv.confidence || 0.8,
@@ -600,6 +634,9 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId, jobSetup }: {
           procedureCode: inv.procedureCode || doc.procedureCode,
           treatment:     inv.treatment || doc.treatment,
           lineItems:     inv.lineItems?.length ? inv.lineItems : doc.lineItems,
+          rawText:       inv.rawText || doc.rawText,
+          fieldAnnotations: inv.fieldAnnotations || doc.fieldAnnotations,
+          fieldConfidences: inv.fieldConfidences || doc.fieldConfidences,
         })
       }
     } catch (err) {
@@ -653,6 +690,7 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId, jobSetup }: {
   const [numPages, setNumPages] = useState(0)
   const [zoom, setZoom]         = useState(1.0)
   const [rotation, setRotation] = useState(0)
+  const [canvasDims, setCanvasDims] = useState<{ w: number; h: number } | null>(null)
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState<string | null>(null)
   const [thumbs, setThumbs]     = useState<string[]>([])
@@ -753,6 +791,7 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId, jobSetup }: {
         if (myId !== renderIdRef.current) return
         c.width  = vp.width; c.height = vp.height
         if (overlayRef.current) { overlayRef.current.width = vp.width; overlayRef.current.height = vp.height }
+        setCanvasDims({ w: vp.width, h: vp.height })
         const task = pg.render({ canvasContext: c.getContext('2d')!, viewport: vp })
         renderRef.current = task
         await task.promise
@@ -1444,6 +1483,37 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId, jobSetup }: {
                   onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp}
                   onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
                 />
+                {/* OCR field source overlay — colored dashed bboxes from classifier zones */}
+                {showAnnotations && doc.fieldAnnotations && canvasDims && (() => {
+                  const cw = canvasDims.w
+                  const ch = canvasDims.h
+                  const pageFields = doc.fieldAnnotations.filter(a => (a.page || 1) === pageNum)
+                  if (!pageFields.length) return null
+                  const COLORS = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#06b6d4','#ec4899']
+                  return (
+                    <svg style={{ position: 'absolute', top: 0, left: 0, width: cw, height: ch, pointerEvents: 'none', overflow: 'visible' }}>
+                      {pageFields.map((a, i) => {
+                        const color = COLORS[i % COLORS.length]
+                        const bx = a.bbox.x * cw; const by = a.bbox.y * ch
+                        const bw = a.bbox.w * cw; const bh = a.bbox.h * ch
+                        const confPct = Math.round(a.confidence * 100)
+                        const labelW = a.label.length * 5.5 + 36
+                        const labelY = by > 16 ? by - 14 : by + bh + 2
+                        return (
+                          <g key={i}>
+                            <rect x={bx} y={by} width={bw} height={bh}
+                              fill={color} fillOpacity={0.1} stroke={color} strokeWidth={1.5}
+                              strokeDasharray="4 3" rx="2" />
+                            <rect x={bx} y={labelY} width={Math.max(labelW, 40)} height={13} fill={color} rx="2" />
+                            <text x={bx + 4} y={labelY + 9} fontSize="8" fill="white" fontFamily="ui-sans-serif,system-ui,sans-serif" fontWeight="600">
+                              {a.label} · {confPct}%
+                            </text>
+                          </g>
+                        )
+                      })}
+                    </svg>
+                  )
+                })()}
                 {/* Note creation popup */}
                 {notePopup && (
                   <div className="absolute z-20 bg-gray-50 dark:bg-gray-900 border border-blue-500/40 rounded-xl p-3 shadow-2xl w-56"
@@ -1623,16 +1693,16 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId, jobSetup }: {
 
             {/* Patient — editable */}
             <DPSection icon={<User className="h-3.5 w-3.5 text-blue-400" />} label="Patient">
-              <EF label="Full Name"        value={edit.patientName}  onChange={ef('patientName')} bold required />
-              <EF label="Patient ID"       value={edit.patientId}    onChange={ef('patientId')}   mono />
-              <EF label="AK / Member No."  value={edit.memberNumber} onChange={ef('memberNumber')} mono accent="text-blue-400 font-bold" required copy />
+              <EF label="Full Name"        value={edit.patientName}  onChange={ef('patientName')} bold required confidence={fieldConf('patient_name')} />
+              <EF label="Patient ID"       value={edit.patientId}    onChange={ef('patientId')}   mono confidence={fieldConf('patient_id')} />
+              <EF label="AK / Member No."  value={edit.memberNumber} onChange={ef('memberNumber')} mono accent="text-blue-400 font-bold" required copy confidence={fieldConf('membership_number')} />
             </DPSection>
 
             {/* Invoice — editable */}
             <DPSection icon={<Receipt className="h-3.5 w-3.5 text-emerald-400" />} label="Invoice">
-              <EF label="Provider"     value={edit.providerName}  onChange={ef('providerName')} required />
+              <EF label="Provider"     value={edit.providerName}  onChange={ef('providerName')} required confidence={fieldConf('provider_name')} />
               <div className="px-3 py-1 flex gap-3">
-                <div className="flex-1"><EF label="Invoice #" value={edit.invoiceNumber} onChange={ef('invoiceNumber')} mono required copy /></div>
+                <div className="flex-1"><EF label="Invoice #" value={edit.invoiceNumber} onChange={ef('invoiceNumber')} mono required copy confidence={fieldConf('invoice_number')} /></div>
                 <div className="flex-1"><DateEF label="Date" value={edit.invoiceDate} onChange={setField('invoiceDate')} required /></div>
               </div>
               <div className="px-3 py-2 bg-gradient-to-r from-emerald-950/40 to-transparent">
@@ -1649,72 +1719,38 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId, jobSetup }: {
               <DateEF label="Service Date" value={edit.serviceDate} onChange={setField('serviceDate')} />
             </DPSection>
 
-            {/* Billing — line items extracted by AI */}
-            {doc.lineItems && doc.lineItems.length > 0 && (() => {
-              const items = doc.lineItems!
+            {/* Billing — invoice items + diagnosis correspondence audit */}
+            {(doc.lineItems && doc.lineItems.length > 0 || edit.diagnosis || edit.treatment) && (() => {
+              const items = doc.lineItems ?? []
               const calcTotal = items.reduce((s, i) => s + (i.totalPrice ?? 0), 0)
               const invoiceAmt = parseFloat(edit.invoiceAmount) || 0
-              const discrepancy = invoiceAmt > 0 ? Math.abs(invoiceAmt - calcTotal) > 0.5 : false
+              const discrepancy = invoiceAmt > 0 && items.length > 0 ? Math.abs(invoiceAmt - calcTotal) > 0.5 : false
               return (
-                <DPSection icon={<ListOrdered className="h-3.5 w-3.5 text-sky-400" />} label={`Billing · ${items.length} item${items.length !== 1 ? 's' : ''}`}>
-                  {/* Total reconciliation */}
-                  <div className={`mx-3 mb-2 rounded-lg px-3 py-2 flex items-center justify-between text-xs ${discrepancy ? 'bg-red-950/40 border border-red-500/25' : 'bg-emerald-950/30 border border-emerald-500/20'}`}>
-                    <span className="text-gray-400">Σ items</span>
-                    <span className={`font-mono font-semibold ${discrepancy ? 'text-red-400' : 'text-emerald-400'}`}>
-                      {formatCurrency(calcTotal)}
-                    </span>
-                    {discrepancy
-                      ? <XCircle className="h-3.5 w-3.5 text-red-400 shrink-0" />
-                      : <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />}
-                  </div>
-                  {/* Line item rows */}
-                  <div className="mx-3 space-y-1 max-h-64 overflow-y-auto pr-0.5">
-                    {items.map((item, i) => {
-                      const hasArithErr = item.quantity != null && item.unitPrice != null && item.totalPrice != null
-                        && Math.abs(item.quantity * item.unitPrice - item.totalPrice) > 0.5
-                      const conf = item.ocrConfidence ?? 0.85
-                      const confColor = conf >= 0.8 ? 'text-emerald-400' : conf >= 0.55 ? 'text-amber-400' : 'text-red-400'
-                      return (
-                        <div key={i} className={`rounded-lg border px-2.5 py-2 text-xs ${hasArithErr ? 'border-red-500/30 bg-red-950/20' : 'border-gray-700/50 bg-gray-800/30'}`}>
-                          {/* Description + confidence */}
-                          <div className="flex items-start justify-between gap-1 mb-1">
-                            <span className="font-medium text-gray-200 leading-tight flex-1">{item.description}</span>
-                            <span className={`font-mono text-[10px] shrink-0 ${confColor}`}>{Math.round(conf * 100)}%</span>
-                          </div>
-                          {/* Qty × Rate = Total */}
-                          <div className="flex items-center gap-1.5 text-[11px] text-gray-400 flex-wrap">
-                            {item.quantity != null && item.unitPrice != null ? (
-                              <>
-                                <span className="font-mono">{item.quantity}</span>
-                                <span>×</span>
-                                <span className="font-mono">{formatCurrency(item.unitPrice)}</span>
-                                <span>=</span>
-                              </>
-                            ) : null}
-                            <span className={`font-mono font-bold ${hasArithErr ? 'text-red-400' : 'text-sky-300'}`}>
-                              {item.totalPrice != null ? formatCurrency(item.totalPrice) : '—'}
-                            </span>
-                            {hasArithErr && (
-                              <span title="Arithmetic mismatch">
-                                <AlertTriangle className="h-3 w-3 text-red-400" />
-                              </span>
-                            )}
-                          </div>
-                          {/* Optional metadata */}
-                          {(item.serviceDate || item.procedureCode) && (
-                            <div className="mt-1 flex gap-2 text-[10px] text-gray-500">
-                              {item.serviceDate && <span>{item.serviceDate}</span>}
-                              {item.procedureCode && <span className="font-mono">{item.procedureCode}</span>}
-                            </div>
-                          )}
-                          {item.taxAmount != null && item.taxAmount > 0 && (
-                            <div className="mt-0.5 text-[10px] text-gray-500">
-                              VAT: <span className="font-mono">{formatCurrency(item.taxAmount)}</span>
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
+                <DPSection icon={<ListOrdered className="h-3.5 w-3.5 text-sky-400" />} label={items.length > 0 ? `Billing & Diagnosis Check · ${items.length} item${items.length !== 1 ? 's' : ''}` : 'Billing & Diagnosis Check'}>
+                  {/* Total reconciliation — only when we have items */}
+                  {items.length > 0 && (
+                    <div className={`mx-3 mb-2 rounded-lg px-3 py-2 flex items-center justify-between text-xs ${discrepancy ? 'bg-red-950/40 border border-red-500/25' : 'bg-emerald-950/30 border border-emerald-500/20'}`}>
+                      <span className="text-gray-400">Invoice total (Σ items)</span>
+                      <span className={`font-mono font-semibold ${discrepancy ? 'text-red-400' : 'text-emerald-400'}`}>
+                        {formatCurrency(calcTotal)}
+                      </span>
+                      {discrepancy
+                        ? <span className="flex items-center gap-1 text-red-400 text-[10px]"><XCircle className="h-3.5 w-3.5" />Discrepancy</span>
+                        : <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />}
+                    </div>
+                  )}
+                  {/* Unified audit: each receipt item + diagnosis match */}
+                  <div className="mx-3">
+                    {doc.dbId
+                      ? <InvoiceBillingAudit claimId={doc.dbId} />
+                      : <InvoiceBillingAudit
+                          diagnosis={edit.diagnosis}
+                          treatment={edit.treatment}
+                          lineItems={items}
+                          rawText={doc.rawText}
+                          fileUrl={doc.fileUrl}
+                        />
+                    }
                   </div>
                 </DPSection>
               )
@@ -1722,12 +1758,12 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId, jobSetup }: {
 
             {/* Medical — editable */}
             <DPSection icon={<Stethoscope className="h-3.5 w-3.5 text-amber-400" />} label="Medical">
-              <EF label="Diagnosis"     value={edit.diagnosis}     onChange={ef('diagnosis')} />
+              <EF label="Diagnosis"     value={edit.diagnosis}     onChange={ef('diagnosis')} confidence={fieldConf('diagnosis')} />
               <div className="px-3 py-1 flex gap-3">
-                <div className="flex-1"><EF label="ICD Code"   value={edit.diagnosisCode} onChange={ef('diagnosisCode')} mono /></div>
-                <div className="flex-1"><EF label="Procedure"  value={edit.procedureCode} onChange={ef('procedureCode')} mono /></div>
+                <div className="flex-1"><EF label="ICD Code"   value={edit.diagnosisCode} onChange={ef('diagnosisCode')} mono confidence={fieldConf('diagnosis_code')} /></div>
+                <div className="flex-1"><EF label="Procedure"  value={edit.procedureCode} onChange={ef('procedureCode')} mono confidence={fieldConf('procedure_code')} /></div>
               </div>
-              <EF label="Treatment" value={edit.treatment} onChange={ef('treatment')} />
+              <EF label="Treatment" value={edit.treatment} onChange={ef('treatment')} confidence={fieldConf('treatment')} />
             </DPSection>
 
             {/* AI Confidence */}
@@ -1869,6 +1905,8 @@ function mergeInvoice(ocr: ExtractedInvoiceData, ai: ExtractedInvoiceData): Extr
     documentPages:    ai.documentPages             || ocr.documentPages,
     lineItems:        ai.lineItems?.length ? ai.lineItems : ocr.lineItems,
     confidence:       0,
+    fieldAnnotations: ai.fieldAnnotations          || ocr.fieldAnnotations,
+    fieldConfidences: ai.fieldConfidences          || ocr.fieldConfidences,
   }
 
   // Boost confidence when merge fills gaps that neither alone had
@@ -2968,7 +3006,7 @@ export default function BatchUpload() {
       const isImage = file.type.startsWith('image/')
 
       // REAL extraction from PDF text
-      type InvoiceRow = { patientName: string; patientId: string; memberNumber: string; providerName: string; invoiceNumber: string; invoiceDate: string; invoiceAmount: number; serviceDate: string; diagnosis: string; diagnosisCode: string; procedureCode: string; treatment: string; aiConfidence: number; pageRange: string; documentPages?: Array<{ pageNumber: number; category: string; categoryLabel: string; confidence: number; summary: string }>; lineItems?: Array<{ description: string; quantity?: number; unitPrice?: number; totalPrice?: number; taxAmount?: number; discount?: number; serviceDate?: string; procedureCode?: string; ocrConfidence?: number; lineNumber?: number }>; validationWarnings?: string[] }
+      type InvoiceRow = { patientName: string; patientId: string; memberNumber: string; providerName: string; invoiceNumber: string; invoiceDate: string; invoiceAmount: number; serviceDate: string; diagnosis: string; diagnosisCode: string; procedureCode: string; treatment: string; aiConfidence: number; pageRange: string; rawText?: string; documentPages?: Array<{ pageNumber: number; category: string; categoryLabel: string; confidence: number; summary: string }>; lineItems?: Array<{ description: string; quantity?: number; unitPrice?: number; totalPrice?: number; taxAmount?: number; discount?: number; serviceDate?: string; procedureCode?: string; ocrConfidence?: number; lineNumber?: number }>; validationWarnings?: string[]; fieldAnnotations?: Array<{ fieldName: string; label: string; value: string; confidence: number; page: number; bbox: { x: number; y: number; w: number; h: number } }>; fieldConfidences?: Record<string, number> }
       let result: { invoices: Array<InvoiceRow> }
 
       if (isPdf) {
@@ -3023,6 +3061,9 @@ export default function BatchUpload() {
                 documentPages: inv.documentPages,
                 lineItems: inv.lineItems,
                 validationWarnings: inv.validationWarnings,
+                rawText: inv.rawText,
+                fieldAnnotations: inv.fieldAnnotations,
+                fieldConfidences: inv.fieldConfidences,
               }
             })
           }
@@ -3056,6 +3097,9 @@ export default function BatchUpload() {
               documentPages: inv.documentPages,
               lineItems:     inv.lineItems,
               validationWarnings: inv.validationWarnings,
+              rawText:       inv.rawText,
+              fieldAnnotations: inv.fieldAnnotations,
+              fieldConfidences: inv.fieldConfidences,
             }))
           }
           // Backend returned no invoices — surface an empty extraction rather
@@ -3167,6 +3211,9 @@ export default function BatchUpload() {
           documentPages: inv.documentPages,
           lineItems: inv.lineItems,
           validationWarnings: inv.validationWarnings,
+          rawText: inv.rawText,
+          fieldAnnotations: inv.fieldAnnotations,
+          fieldConfidences: inv.fieldConfidences,
         })
       }
       perFileResults[i] = extracted

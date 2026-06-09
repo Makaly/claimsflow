@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
+import { getDocumentSafe } from '@/lib/pdfSafe'
 import {
   Search, FileText, Eye, Download, Merge,
   Scissors, CheckCircle2, XCircle,
@@ -120,7 +121,7 @@ export default function Documents() {
     try {
       const res = await api.get(`/documents/${doc.id}/download`, { responseType: 'arraybuffer' })
       const arrayBuffer = res.data as ArrayBuffer
-      const pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise
+      const pdfDoc = await getDocumentSafe({ data: new Uint8Array(arrayBuffer) }).promise
       splitPdfDocRef.current = pdfDoc
       const total = pdfDoc.numPages
       const thumbs: string[] = []

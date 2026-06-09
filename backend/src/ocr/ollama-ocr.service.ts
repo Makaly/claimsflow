@@ -4,10 +4,10 @@ import * as path from 'path';
 import { spawnSync } from 'child_process';
 import { ParsedInvoice } from './ocr.service';
 import {
-  INVOICE_NUMBER_PATTERNS, INVOICE_DATE_PATTERNS, TOTAL_AMOUNT_PATTERNS,
+  INVOICE_NUMBER_PATTERNS, INVOICE_DATE_PATTERNS,
   PATIENT_NAME_PATTERNS, PATIENT_ID_PATTERNS, MEMBERSHIP_PATTERNS,
   PROVIDER_PATTERNS, DIAGNOSIS_PATTERNS, SERVICE_DATE_PATTERNS,
-  extractMedicalCodes, restoreOcrAmounts,
+  extractMedicalCodes, selectInvoiceTotal,
 } from './invoice-patterns';
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
@@ -296,24 +296,12 @@ Return ONLY valid JSON with no extra text:
 
       const invoiceNumber = first(INVOICE_NUMBER_PATTERNS);
 
-      // Amount: try each pattern; pick the largest value found (guards against
-      // picking up a line-item sub-total smaller than the grand total).
-      //
-      // Run amount extraction against a digit-restored copy of the text so
-      // Aga Khan IP bills (where scanned text turns `4`→`\`, `8`→`E`, `0`→`o`
-      // etc. inside the Sponsor Coverage / Total Charges figures) actually
-      // produce a number. The restoration is scoped to a 300-char window
-      // after amount-bearing labels, so other fields (dates, IDs, names)
-      // continue to read from the un-mutated `text` below.
-      const amountText = restoreOcrAmounts(text);
-      let invoiceAmount = 0;
-      for (const p of TOTAL_AMOUNT_PATTERNS) {
-        const m = amountText.match(p);
-        if (m?.[1]) {
-          const v = parseFloat(m[1].replace(/,/g, ''));
-          if (!isNaN(v) && v > invoiceAmount) invoiceAmount = v;
-        }
-      }
+      // Amount: credit-aware total selection. selectInvoiceTotal() digit-
+      // restores Aga Khan IP figures (`4`→`\`, `8`→`E`, `0`→`o`), excludes
+      // negative / payment / rebate figures (the M-pesa "Less Payments" line
+      // that used to be misread as the total), and takes the largest legitimate
+      // figure in each total label's window. See invoice-patterns.ts.
+      const invoiceAmount = selectInvoiceTotal(text);
 
       const invoiceDate  = first(INVOICE_DATE_PATTERNS);
       const serviceDate  = first(SERVICE_DATE_PATTERNS) || invoiceDate;

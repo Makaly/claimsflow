@@ -141,6 +141,42 @@ services:
       - path: /*
         name: Cache-Control
         value: no-cache
+      # ── Security headers ──────────────────────────────────────────────────
+      # Clickjacking, MIME-sniffing, transport, and referrer protections.
+      # These are safe to enforce immediately (no impact on app behaviour).
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Strict-Transport-Security
+        value: max-age=63072000; includeSubDomains; preload
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: Permissions-Policy
+        value: camera=(self), microphone=(), geolocation=()
+      # Content-Security-Policy — now ENFORCING (v2). The pdf.js worker is
+      # self-hosted (no cdnjs needed); jsdelivr/unpkg remain only for tesseract.js
+      # OCR worker/WASM (blob:/wasm-unsafe-eval), and the loopback scan-agent is
+      # allowed for connect. If a future asset is blocked, add its origin here.
+      - path: /*
+        name: Content-Security-Policy
+        value: >-
+          default-src 'self';
+          script-src 'self' 'wasm-unsafe-eval' blob: https://cdn.jsdelivr.net https://unpkg.com;
+          worker-src 'self' blob:;
+          style-src 'self' 'unsafe-inline';
+          img-src 'self' data: blob:;
+          font-src 'self' data:;
+          connect-src 'self' https://claimsflow-backend.onrender.com wss://claimsflow-backend.onrender.com http://127.0.0.1:7420 http://localhost:7420 https://cdn.jsdelivr.net https://unpkg.com;
+          object-src 'none';
+          base-uri 'self';
+          form-action 'self';
+          frame-ancestors 'none'
       - path: /assets/*
         name: Cache-Control
         value: public, max-age=31536000, immutable

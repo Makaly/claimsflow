@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertSafeOutboundUrl } from '../common/security/ssrf-guard';
 import axios from 'axios';
 import * as fs from 'fs';
 import * as ExcelJS from 'exceljs';
@@ -329,6 +330,9 @@ export class LookupService {
 
   private async queryRestApi(key: string, config: any): Promise<LookupResult> {
     if (!config?.url) return null;
+    // SSRF guard: lookup-source URLs are admin-configured but still untrusted —
+    // block loopback/private/link-local/metadata targets.
+    assertSafeOutboundUrl(config.url);
     try {
       const keyParam = config.keyParam || 'q';
       const res = await axios.get(config.url, {

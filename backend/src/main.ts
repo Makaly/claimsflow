@@ -10,6 +10,7 @@ import helmet from 'helmet';
 import * as cookieParser from 'cookie-parser';
 import * as fs from 'fs';
 import { AppModule } from './app.module';
+import { validateEnv } from './config/validate-env';
 
 // Allow BigInt values in JSON responses (Prisma returns BigInt for size fields).
 // Serialise as a string, not Number — Number silently truncates anything above
@@ -18,6 +19,8 @@ import { AppModule } from './app.module';
 ;(BigInt.prototype as any).toJSON = function () { return this.toString() }
 
 async function bootstrap() {
+  // Fail fast on missing/insecure security-critical secrets before anything boots.
+  validateEnv();
   console.log('[bootstrap] creating Nest application…');
   const app = await NestFactory.create(AppModule, {
     // Pipe Nest's logger through console so Render captures it the same way

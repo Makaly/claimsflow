@@ -416,3 +416,88 @@ export function restoreOcrAmounts(text: string): string {
   out += text.slice(lastEnd);
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Invoice total selection (credit-aware, window-max)
+// ---------------------------------------------------------------------------
+//
+// Aga Khan multi-page inpatient bills defeat a naive "first figure after the
+// label" match. The PDF text layer renders the bill summary as a column where
+// every LABEL stacks first and every FIGURE follows in a separate block:
+//
+//   Total Charges:
+//   NHIF Rebate:
+//   Less Payments:
+//   M-pesa Self Payment.
+//   Sponsor Coverage:
+//   AGRICULTURE AND FOOD AUTHORITY
+//        -2,608.00          ← M-pesa self-payment (a CREDIT, shown negative)
+//        567,599.82         ← the real gross total
+//        12,000.00          ← NHIF rebate (a CREDIT)
+//        552,991.82         ← sponsor coverage
+//        0.00               ← amount due
+//
+// A `Sponsor Coverage[\s\S]{0,400}?(figure)` regex grabs the FIRST decimal in
+// the window — here the −2,608.00 self-payment — and reports it as the claim
+// amount. That is the `Ksh 2,608.00` / `Ksh 236.00` bug seen in the review UI.
+//
+// `selectInvoiceTotal` fixes this by:
+//   1. Restoring OCR-garbled digits (via restoreOcrAmounts) so the gross total
+//      is shaped like a number at all.
+//   2. Building a CREDIT set — every negative amount, plus every figure sitting
+//      on a payment / rebate / co-pay / discount line — which can never be the
+//      invoice total.
+//   3. For each total-bearing label, taking the LARGEST non-credit figure in
+//      the forward window (not the first), then returning the max across all
+//      labels. Scoping to label windows (rather than a document-wide max) keeps
+//      policy-limit figures from pre-authorisation letters out of the result.
+
+// Labels whose following figure is a candidate for the invoice total.
+const TOTAL_LABEL_RE =
+  /(?:Total\s+Charges?|Gross\s+(?:Total|Amount|Bill)|Grand\s+Total|Total\s+Amount|Total\s+Bill(?:\s+Amount)?|Sponsor\s+Coverage|Sponsor\s+Amount\s+Payable|Net\s+Amount\s+Payable(?:\s+to\s+Hospital)?|Net\s+Payable(?:\s+to\s+Hospital)?|Sponsor\s+Settlement|Amount\s+Payable\s+by\s+Sponsor|Amount\s+Receivable|Balance\s+Due|Net\s+(?:Amount|Total|Payable)|Amount\s+(?:Due|Payable)|Total\s+(?:Due|Payable|Bill))/gi;
+
+// Keywords that mark a figure as a credit / deduction — never the total.
+const CREDIT_LABEL_RE =
+  /(?:Less\s+Pa[yl]ments?|M[\-\s]?pesa|Mobile\s+Money|Self\s+Payment|Cash(?:\s+Payment)?|Card\s+Payment|Amount\s+Paid|Paid\s+(?:Amount|Up)|Deposit|NHIF\s+Rebate|Rebate|Co[\-\s]?pay(?:ment)?|Discount|Refund|Credit\s+Note)/gi;
+
+// A money token, optionally preceded by a minus sign.
+const SIGNED_MONEY_RE = /(-)?\s*([\d,]{3,}(?:\.\d{1,2})?)/g;
+
+export function selectInvoiceTotal(rawText: string): number {
+  const text = restoreOcrAmounts(rawText);
+  const parse = (s: string) => parseFloat(s.replace(/,/g, ''));
+  const inRange = (v: number) => v > 0 && v < 100_000_000;
+
+  // 1. Credits: negative amounts + figures on a payment/rebate/co-pay line.
+  const credits = new Set<number>();
+  for (const m of text.matchAll(new RegExp(SIGNED_MONEY_RE.source, 'g'))) {
+    if (m[1]) { const v = parse(m[2]); if (inRange(v)) credits.add(v); }
+  }
+  for (const m of text.matchAll(new RegExp(CREDIT_LABEL_RE.source, 'gi'))) {
+    // Same line only — a wider window bleeds into the next row's figure (e.g.
+    // a "Self Payment." line whose window reaches the Sponsor Coverage total,
+    // or "Total Copay: 0.00" reaching the "Amount Receivable" figure below it).
+    // Off-line payment figures are already caught by the negative-sign scan.
+    const lineEnd = text.indexOf('\n', m.index!);
+    const win = text.slice(m.index!, lineEnd === -1 ? text.length : lineEnd);
+    const a = win.match(/(-)?\s*([\d,]{3,}(?:\.\d{1,2})?)/);
+    if (a) { const v = parse(a[2]); if (inRange(v)) credits.add(v); }
+  }
+
+  // 2. For each total label, take the largest non-credit, non-negative figure
+  //    in the 400-char forward window.
+  const candidates: number[] = [];
+  for (const m of text.matchAll(new RegExp(TOTAL_LABEL_RE.source, 'gi'))) {
+    const winStart = m.index! + m[0].length;
+    const win = text.slice(winStart, winStart + 400);
+    let best = 0;
+    for (const a of win.matchAll(new RegExp(SIGNED_MONEY_RE.source, 'g'))) {
+      if (a[1]) continue;                 // skip negative amounts
+      const v = parse(a[2]);
+      if (inRange(v) && !credits.has(v) && v > best) best = v;
+    }
+    if (best > 0) candidates.push(best);
+  }
+
+  return candidates.length ? Math.max(...candidates) : 0;
+}

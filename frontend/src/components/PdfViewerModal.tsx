@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
+import { getDocumentSafe } from '@/lib/pdfSafe'
 import {
   X, ZoomIn, ZoomOut, RotateCw, ChevronLeft, ChevronRight,
   Search, Download, Maximize2, Minimize2, SplitSquareHorizontal,
@@ -75,7 +76,7 @@ export function PdfViewerModal({ open, onClose, url, filename = 'document.pdf', 
           )
         }
       }
-      const loadingTask = pdfjsLib.getDocument(docSource)
+      const loadingTask = getDocumentSafe(docSource)
       const pdfDoc = await loadingTask.promise
       const tabId = `tab-${Date.now()}`
       const newTab: PdfTab = {

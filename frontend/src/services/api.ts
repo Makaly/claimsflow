@@ -12,16 +12,10 @@ const api = axios.create({
   withCredentials: true,
 })
 
-// Attach the Bearer token from localStorage on every request so auth works
-// on mobile browsers and any browser with strict SameSite cookie policies
-// that block cross-origin cookies (cookie alone is not reliable cross-origin).
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token')
-  if (token && !config.headers['Authorization']) {
-    config.headers['Authorization'] = `Bearer ${token}`
-  }
-  return config
-})
+// Auth is carried solely by the HttpOnly cookie (withCredentials above). We no
+// longer read a Bearer token from localStorage: storing it there exposed it to
+// XSS exfiltration. The backend issues the cookie with SameSite=None; Secure in
+// production, so it is sent on cross-origin API calls as well.
 
 // Tag every request with upload-source headers so the backend records which
 // channel (web), build, and device produced a claim/batch — mirrors the

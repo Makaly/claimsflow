@@ -3,11 +3,33 @@ import {
   UseGuards, Request, ForbiddenException, NotFoundException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
+import * as crypto from 'crypto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { Roles } from './decorators/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../notifications/email.service';
+
+/**
+ * Generate a strong temporary password using the CSPRNG. Math.random() is
+ * predictable and must never seed credentials. Produces 16 unbiased base-62
+ * characters plus guaranteed upper/lower/digit/symbol to satisfy policy.
+ */
+function generateTempPassword(): string {
+  const ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const max = 256 - (256 % ALPHA.length);
+  let body = '';
+  while (body.length < 16) {
+    for (const byte of crypto.randomBytes(16)) {
+      if (byte < max) {
+        body += ALPHA[byte % ALPHA.length];
+        if (body.length === 16) break;
+      }
+    }
+  }
+  // Guarantee complexity regardless of the random draw.
+  return body + 'A1!';
+}
 
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -96,7 +118,7 @@ export class UsersController {
     const existing = await this.prisma.user.findUnique({ where: { email: body.email } });
     if (existing) throw new ForbiddenException('Email already in use');
 
-    const tempPassword = body.password || Math.random().toString(36).slice(-10) + 'A1!';
+    const tempPassword = body.password || generateTempPassword();
     const hashed = await bcrypt.hash(tempPassword, 10);
 
     const user = await this.prisma.user.create({
@@ -167,7 +189,7 @@ export class UsersController {
     const user = await this.prisma.user.findUnique({ where: { id }, select: { email: true, name: true } });
     if (!user) throw new NotFoundException('User not found');
 
-    const tempPassword = Math.random().toString(36).slice(-10) + 'A1!';
+    const tempPassword = generateTempPassword();
     const hashed = await bcrypt.hash(tempPassword, 10);
     await this.prisma.user.update({
       where: { id },

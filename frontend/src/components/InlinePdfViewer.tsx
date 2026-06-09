@@ -11,6 +11,7 @@
 import { useState, useCallback, useRef, useEffect, useLayoutEffect } from 'react'
 import { toast } from 'sonner'
 import * as pdfjsLib from 'pdfjs-dist'
+import { getDocumentSafe } from '@/lib/pdfSafe'
 import {
   ChevronLeft, ChevronRight, Eye, EyeOff,
   AlertTriangle, ScanLine, Loader2,
@@ -81,7 +82,7 @@ export function InlinePdfViewer({
   useEffect(() => {
     mountedRef.current = true
     if (!srcRef.current) return
-    const task = pdfjsLib.getDocument(srcRef.current)
+    const task = getDocumentSafe(srcRef.current)
     task.promise
       .then(doc => { if (mountedRef.current) { setPdfDoc(doc); setTotalPages(doc.numPages) } })
       .catch(() => {})

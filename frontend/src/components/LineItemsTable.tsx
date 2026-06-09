@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   AlertTriangle, CheckCircle2, XCircle, HelpCircle,
-  ChevronDown, ChevronUp, Calculator, TrendingUp, ShieldAlert, Eye,
+  ChevronDown, ChevronUp, Calculator, TrendingUp, ShieldAlert, Eye, Stethoscope,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
@@ -30,6 +30,9 @@ interface LineItem {
   fraudRiskScore: number | null
   fraudFlags: string[]
   arithmeticValid: boolean | null
+  diagnosisMatch: 'match' | 'mismatch' | 'uncertain' | 'unchecked' | null
+  diagnosisMatchReason: string | null
+  diagnosisMatchScore: number | null
 }
 
 interface LineItemsResponse {
@@ -48,6 +51,10 @@ interface Props {
   // Defaults to 0.60 if not supplied; matches system-config key
   // ocr_line_item_confidence_threshold.
   confidenceThreshold?: number
+  // When true, render nothing if there are no structured line items. Use this
+  // where another component (e.g. InvoiceBillingAudit) already lists the items,
+  // so an empty "no line items" card doesn't contradict the audit above it.
+  hideWhenEmpty?: boolean
 }
 
 const RISK_CONFIG = {
@@ -91,10 +98,38 @@ function ArithmeticBadge({ valid, qty, unit, total }: {
   )
 }
 
+const DX_MATCH_CONFIG = {
+  match:     { icon: CheckCircle2,  color: 'text-green-600', label: 'Dx match'    },
+  mismatch:  { icon: XCircle,       color: 'text-red-600',   label: 'Dx mismatch' },
+  uncertain: { icon: HelpCircle,    color: 'text-amber-600', label: 'Uncertain'   },
+  unchecked: { icon: HelpCircle,    color: 'text-gray-400',  label: 'Not checked' },
+}
+
+function DxMatchBadge({ match, reason }: { match: string | null; reason: string | null }) {
+  const status = (match ?? 'unchecked') as keyof typeof DX_MATCH_CONFIG
+  const cfg = DX_MATCH_CONFIG[status] ?? DX_MATCH_CONFIG.unchecked
+  const Icon = cfg.icon
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className={`inline-flex items-center gap-1 text-xs font-medium ${cfg.color}`}>
+            <Icon className="h-3.5 w-3.5" />
+            {cfg.label}
+          </span>
+        </TooltipTrigger>
+        {reason && (
+          <TooltipContent className="max-w-[240px] text-xs">{reason}</TooltipContent>
+        )}
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+
 // Rows below this confidence are highlighted as needing manual review.
 const LOW_CONF_DEFAULT = 0.60
 
-export default function LineItemsTable({ claimId, invoiceTotal, confidenceThreshold }: Props) {
+export default function LineItemsTable({ claimId, invoiceTotal, confidenceThreshold, hideWhenEmpty }: Props) {
   const threshold = confidenceThreshold ?? LOW_CONF_DEFAULT
   const [data, setData]         = useState<LineItemsResponse | null>(null)
   const [loading, setLoading]   = useState(true)
@@ -123,18 +158,24 @@ export default function LineItemsTable({ claimId, invoiceTotal, confidenceThresh
     </Card>
   )
 
-  if (!data || data.line_items.length === 0) return (
-    <Card>
-      <CardContent className="py-6 text-center text-muted-foreground text-sm">
-        No line items extracted for this invoice.
-      </CardContent>
-    </Card>
-  )
+  if (!data || data.line_items.length === 0) {
+    // When another component already lists the invoice items (the billing audit),
+    // suppress this card entirely so it doesn't read as "no items" alongside it.
+    if (hideWhenEmpty) return null
+    return (
+      <Card>
+        <CardContent className="py-6 text-center text-muted-foreground text-sm">
+          No itemized line-item breakdown available for this invoice.
+        </CardContent>
+      </Card>
+    )
+  }
 
-  const items        = data.line_items
-  const highCount    = items.filter(i => i.fraudRisk === 'high').length
-  const mediumCount  = items.filter(i => i.fraudRisk === 'medium').length
-  const arithmeticOk = items.every(i => i.arithmeticValid !== false)
+  const items          = data.line_items
+  const highCount      = items.filter(i => i.fraudRisk === 'high').length
+  const mediumCount    = items.filter(i => i.fraudRisk === 'medium').length
+  const arithmeticOk   = items.every(i => i.arithmeticValid !== false)
+  const mismatchCount  = items.filter(i => i.diagnosisMatch === 'mismatch').length
   const lowConfCount = items.filter(i => {
     const conf = i.overallConfidence ?? i.ocrConfidence
     return conf !== null && conf !== undefined && conf < threshold
@@ -175,6 +216,12 @@ export default function LineItemsTable({ claimId, invoiceTotal, confidenceThresh
           <Badge variant="destructive" className="gap-1">
             <TrendingUp className="h-3 w-3" />
             Total discrepancy: {formatCurrency(Math.abs((invoiceTotal ?? data.invoice_total) - data.calculated_total))}
+          </Badge>
+        )}
+        {mismatchCount > 0 && (
+          <Badge variant="destructive" className="gap-1">
+            <Stethoscope className="h-3 w-3" />
+            {mismatchCount} Dx mismatch{mismatchCount !== 1 ? 'es' : ''}
           </Badge>
         )}
         {lowConfCount > 0 && (
@@ -219,6 +266,7 @@ export default function LineItemsTable({ claimId, invoiceTotal, confidenceThresh
                 <TableHead className="w-16 text-center">Chk</TableHead>
                 <TableHead className="w-24 text-center">Conf</TableHead>
                 <TableHead className="w-28 text-center">Risk</TableHead>
+                <TableHead className="w-28 text-center">Dx</TableHead>
                 <TableHead className="w-6" />
               </TableRow>
             </TableHeader>
@@ -282,6 +330,9 @@ export default function LineItemsTable({ claimId, invoiceTotal, confidenceThresh
                           {cfg.label}
                         </span>
                       </TableCell>
+                      <TableCell className="text-center">
+                        <DxMatchBadge match={item.diagnosisMatch} reason={item.diagnosisMatchReason} />
+                      </TableCell>
                       <TableCell className="pr-2 text-muted-foreground">
                         {isOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                       </TableCell>
@@ -290,7 +341,7 @@ export default function LineItemsTable({ claimId, invoiceTotal, confidenceThresh
                     {/* Expanded detail row */}
                     {isOpen && (
                       <TableRow key={`${item.id}-detail`} className={cfg.bg}>
-                        <TableCell colSpan={9} className="pb-3 px-4">
+                        <TableCell colSpan={10} className="pb-3 px-4">
                           <div className="space-y-2 pl-4 border-l-2 border-muted">
                             {item.fraudFlags.length > 0 && (
                               <div>
@@ -334,6 +385,23 @@ export default function LineItemsTable({ claimId, invoiceTotal, confidenceThresh
                                     value={item.fraudRiskScore * 100}
                                     className="h-1.5 mt-1 max-w-[160px]"
                                   />
+                                </div>
+                              )}
+                              {item.diagnosisMatch && item.diagnosisMatch !== 'unchecked' && (
+                                <div className="col-span-3">
+                                  <p className="text-muted-foreground flex items-center gap-1 mb-0.5">
+                                    <Stethoscope className="h-3 w-3" /> Diagnosis match:
+                                    <DxMatchBadge match={item.diagnosisMatch} reason={null} />
+                                  </p>
+                                  {item.diagnosisMatchReason && (
+                                    <p className="text-xs text-muted-foreground italic">{item.diagnosisMatchReason}</p>
+                                  )}
+                                  {item.diagnosisMatchScore != null && (
+                                    <Progress
+                                      value={item.diagnosisMatchScore * 100}
+                                      className="h-1.5 mt-1 max-w-[160px]"
+                                    />
+                                  )}
                                 </div>
                               )}
                             </div>

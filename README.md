@@ -36,7 +36,8 @@ ClaimsFlow digitises the full medical claims lifecycle — from provider intake 
 - **Reporting** — operational, financial, fraud, provider scorecards
 - **ML fraud scoring** — gradient-boosting classifier trained on labelled claims with self-calibrating weights, cross-provider duplicate detection, procedure-code unbundling checks, and a closed human-in-the-loop feedback pipeline
 - **ML Labelling dashboard** — multi-format export (Excel, CSV, JSON), deep analysis tab with fraud rate by invoice band and OCR confidence tier, rotating insight panel during extraction
-- **Hardened security** — HttpOnly JWT cookies, Helmet CSP, HSTS, global rate limiting, magic-byte file verification, AES-256-GCM field-level encryption for special-category data
+- **Diagnosis-vs-billing AI validation** — Gemini LLM scores every line item for clinical appropriateness against the stated diagnosis, flagging mismatches per item and surfacing an overall correspondence verdict to the claims officer
+- **Hardened security** — HttpOnly JWT cookies, Helmet CSP, HSTS, global rate limiting, magic-byte file verification, SSRF guards, centralised password policy (10 chars, 3+ classes), CSPRNG credential generation, startup env validation, AES-256-GCM field-level encryption for special-category data
 - **GDPR / KDPA compliance** — data-subject rights (access, portability, erasure, objection), consent ledger, structured request-ID tracing
 
 ---

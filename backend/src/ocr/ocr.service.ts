@@ -6,11 +6,11 @@ import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
-  INVOICE_NUMBER_PATTERNS, INVOICE_DATE_PATTERNS, TOTAL_AMOUNT_PATTERNS,
+  INVOICE_NUMBER_PATTERNS, INVOICE_DATE_PATTERNS,
   LINE_ITEM_PATTERNS, PATIENT_NAME_PATTERNS, PATIENT_ID_PATTERNS,
   MEMBERSHIP_PATTERNS, PROVIDER_PATTERNS, DIAGNOSIS_PATTERNS, icd10Label,
   SERVICE_DATE_PATTERNS, INSURANCE_PATTERNS, ACCOUNT_PATTERNS,
-  extractMedicalCodes,
+  extractMedicalCodes, selectInvoiceTotal,
 } from './invoice-patterns';
 import { OllamaOcrService } from './ollama-ocr.service';
 import { VisionRouterService } from './vision-router.service';
@@ -81,6 +81,17 @@ export interface ParsedInvoice {
    * passes all structural checks. Surface these in the review UI.
    */
   validationWarnings?: string[];
+  /** Per-field source locations + confidence from the document classifier template zones. */
+  fieldAnnotations?: Array<{
+    fieldName: string;
+    label: string;
+    value: string;
+    confidence: number;
+    page: number;
+    bbox: { x: number; y: number; w: number; h: number };
+  }>;
+  /** Per-field confidence map from the classifier (fieldName → 0-1). */
+  fieldConfidences?: Record<string, number>;
 }
 
 @Injectable()
@@ -365,6 +376,8 @@ export class OcrService {
           diagnosisCode:    cmap['diagnosisCode']     || inv.diagnosisCode,
           treatment:        cmap['treatment']         || inv.treatment,
           serviceDate:      cmap['dateOfService']     || cmap['admissionDate'] || inv.serviceDate,
+          fieldAnnotations: classified.fieldAnnotations,
+          fieldConfidences: Object.keys(classified.confidence ?? {}).length ? classified.confidence : undefined,
         }));
         this.logger.log(`Classifier enriched extraction with ${Object.keys(cmap).length} zone-mapped fields`);
       }
@@ -1158,17 +1171,12 @@ export class OcrService {
     // INVOICE DATE - try all known formats
     result.invoiceDate = tryPatterns(INVOICE_DATE_PATTERNS, t) || '';
 
-    // AMOUNTS - collect ALL pattern matches from normalised text, take the largest
-    // (invoice total > sub-totals > co-pays — max wins)
-    const allAmounts: number[] = [];
-    for (const pat of TOTAL_AMOUNT_PATTERNS) {
-      const m = tAmounts.match(pat);
-      if (m) {
-        const v = parseFloat(m[1].replace(/,/g, ''));
-        if (v > 0 && v < 100000000) allAmounts.push(v);
-      }
-    }
-    if (allAmounts.length > 0) result.invoiceAmount = Math.max(...allAmounts);
+    // AMOUNTS - credit-aware total selection. Excludes negative / payment /
+    // rebate / co-pay figures (e.g. the Aga Khan M-pesa "Less Payments" line
+    // that used to be misreported as the claim amount) and, for each total
+    // label, takes the largest legitimate figure in its window. See
+    // selectInvoiceTotal() in invoice-patterns.ts.
+    result.invoiceAmount = selectInvoiceTotal(tAmounts);
     // Sum line items if no total found
     if (!result.invoiceAmount) {
       for (const pat of LINE_ITEM_PATTERNS) {

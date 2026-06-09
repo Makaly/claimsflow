@@ -39,6 +39,12 @@ COPY prisma ./prisma
 # Tesseract English language data (bundled in the repo root)
 COPY eng.traineddata /usr/share/tessdata/eng.traineddata
 
+# Drop root: run as the built-in unprivileged `node` user. Uploads go to a
+# mounted volume / object storage, and migrations only touch the DB over the
+# network, so the runtime needs no write access to the image filesystem.
+RUN chown -R node:node /app
+USER node
+
 EXPOSE 4000
 
 # Run migrations then start the compiled application

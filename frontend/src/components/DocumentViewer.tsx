@@ -9,6 +9,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import * as pdfjsLib from 'pdfjs-dist'
+import { getDocumentSafe } from '@/lib/pdfSafe'
 import { PDFDocument } from 'pdf-lib'
 
 import {
@@ -845,7 +846,7 @@ export function DocumentViewer({ bytes, url, ready = true, filename = 'document'
         } else {
           loadSrc = pdfSrc as string
         }
-        const pdf = await pdfjsLib.getDocument(loadSrc as any).promise
+        const pdf = await getDocumentSafe(loadSrc as any).promise
         if (dead) { pdf.destroy(); return }
         setPdfDoc(pdf); setNumPages(pdf.numPages)
         // thumbnails in background

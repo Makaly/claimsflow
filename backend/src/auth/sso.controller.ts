@@ -10,6 +10,8 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { UnauthorizedException } from '@nestjs/common';
+import * as crypto from 'crypto';
 import { AuthService } from './auth.service';
 import { JwtService } from '@nestjs/jwt';
 import { MockOidcProvider } from './strategies/mock-oidc.provider';
@@ -67,13 +69,32 @@ export class SsoController {
   }
 
   // IdP leaver webhook — deactivate user when the IdP removes them.
-  // Protect with a shared secret header in production:
-  // TODO: add HmacGuard checking X-Leaver-Signature against SSO_WEBHOOK_SECRET.
+  // Authenticated with a shared secret presented in the `x-leaver-signature`
+  // header. Fails CLOSED: if SSO_WEBHOOK_SECRET is not configured, no caller can
+  // deactivate accounts through this endpoint. Without this, anyone on the
+  // network could disable arbitrary users by POSTing their email.
   @Post('leaver')
   @HttpCode(200)
-  async ssoLeaver(@Body() body: { email: string }) {
+  async ssoLeaver(@Request() req: any, @Body() body: { email: string }) {
+    this.assertValidWebhookSecret(req);
     if (!body.email) throw new BadRequestException('email required');
     return this.authService.deactivateSsoUser(body.email);
+  }
+
+  private assertValidWebhookSecret(req: any): void {
+    const expected = process.env.SSO_WEBHOOK_SECRET;
+    if (!expected) {
+      // Fail closed — never accept an unauthenticated deactivation.
+      throw new UnauthorizedException('Leaver webhook is not configured.');
+    }
+    const provided = String(req.headers?.['x-leaver-signature'] ?? '');
+    const a = Buffer.from(provided);
+    const b = Buffer.from(expected);
+    // Constant-time compare; length check first since timingSafeEqual throws on
+    // length mismatch.
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      throw new UnauthorizedException('Invalid webhook signature.');
+    }
   }
 
   private issueSession(user: any, res: any) {

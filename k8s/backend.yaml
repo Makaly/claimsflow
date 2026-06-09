@@ -29,7 +29,9 @@ spec:
         fsGroup: 1000
       containers:
         - name: backend
-          image: ghcr.io/cic-insurance/claimsflow-backend:latest
+          # Pinned to an immutable release tag — never :latest (non-reproducible,
+          # un-rollback-able). CI rewrites this tag per release (kustomize/sed).
+          image: ghcr.io/cic-insurance/claimsflow-backend:v0.2.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -64,9 +66,20 @@ spec:
             limits:   { cpu: 1000m, memory: 1024Mi }
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: uploads
+              mountPath: /app/uploads
+      volumes:
+        # Writable scratch so the root filesystem can stay read-only.
+        - name: tmp
+          emptyDir: {}
+        - name: uploads
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

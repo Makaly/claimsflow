@@ -8,3 +8,5 @@ pydantic>=2.13.4,<3.0
 scipy>=1.17.1,<2.0
 Pillow>=12.2.0,<13.0
 opencv-python-headless>=4.11,<5.0
+# Per-client rate limiting on compute-heavy endpoints (train/score/preprocess).
+slowapi>=0.1.9,<1.0

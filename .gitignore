@@ -60,6 +60,10 @@ claimsflow-install.sh
 # stage it as a gitlink. It is managed independently from its own .git.
 /claimsflow/
 
+# Android signing keystores — contain private keys, must never be tracked
+*.jks
+*.keystore
+
 # Python — ml-sidecar
 __pycache__/
 *.py[cod]

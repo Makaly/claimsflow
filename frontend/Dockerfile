@@ -11,6 +11,10 @@ RUN npm install
 # Copy source code
 COPY . .
 
+# Drop root: run the dev server as the built-in unprivileged `node` user.
+RUN chown -R node:node /app
+USER node
+
 # Expose port
 EXPOSE 3000
 

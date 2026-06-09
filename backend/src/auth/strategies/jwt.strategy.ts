@@ -33,6 +33,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         id: true,
         email: true,
         role: true,
+        isActive: true,
         providerId: true,
         branchId: true,
         tenantId: true,
@@ -42,7 +43,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         },
       },
     });
-    if (!user) return null;
+    // Reject if the account no longer exists (deleted) OR has been deactivated.
+    // Without the isActive check a disabled/off-boarded user's still-valid JWT
+    // would keep working until natural expiry (up to a day) — an access-control
+    // gap for leavers and compromised accounts that admins "disable".
+    if (!user || !user.isActive) return null;
 
     const roles = user.userRoles
       .filter((ur) => ur.role.isActive)

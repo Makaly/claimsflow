@@ -8,6 +8,7 @@ import { extname, join } from 'path';
 import * as fs from 'fs';
 import { Response } from 'express';
 import { DocumentsService } from './documents.service';
+import { assertAllowedFileSignature } from './file-signature';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -51,6 +52,10 @@ export class DocumentsController {
     @Query('claimId') claimId?: string,
     @Query('branchName') branchName?: string,
   ) {
+    // Defence-in-depth: the multer fileFilter only checks the (spoofable)
+    // filename extension. Confirm the real file header matches an allowed type
+    // before the document is persisted/processed; rejects + deletes otherwise.
+    if (file?.path) assertAllowedFileSignature(file.path);
     return this.documentsService.uploadDocument(file, claimId, branchName);
   }
 

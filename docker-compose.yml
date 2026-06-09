@@ -7,11 +7,13 @@ services:
     container_name: cic_postgres
     restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: cic_claims
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set a strong POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-cic_claims}
+    # Bound to loopback only — reachable from the host (migrations/psql) but never
+    # published on the network. Internal services use the cic_network DNS name.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -22,8 +24,9 @@ services:
     image: redis:7-alpine
     container_name: cic_redis
     restart: always
+    # Loopback-only; internal services reach Redis via the cic_network DNS name.
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     networks:
@@ -48,14 +51,15 @@ services:
     ports:
       - "4000:4000"
     environment:
-      DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/cic_claims?schema=public"
+      DATABASE_URL: "postgresql://${POSTGRES_USER:?set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-cic_claims}?schema=public"
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      JWT_SECRET: "your-super-secret-jwt-key-change-in-production"
+      JWT_SECRET: ${JWT_SECRET:?set a strong JWT_SECRET in .env (32+ random bytes)}
       JWT_EXPIRES_IN: "7d"
       PORT: 4000
       API_PREFIX: "api"
       ML_SIDECAR_URL: "http://ml-sidecar:8000"
+      ML_SIDECAR_API_KEY: ${ML_SIDECAR_API_KEY:?set ML_SIDECAR_API_KEY in .env}
     depends_on:
       - postgres
       - redis
@@ -74,10 +78,13 @@ services:
       dockerfile: Dockerfile
     container_name: cic_ml_sidecar
     restart: always
-    ports:
-      - "8000:8000"
+    # No published port — only the backend reaches it via the internal cic_network
+    # (http://ml-sidecar:8000). Access is additionally gated by ML_SIDECAR_API_KEY.
+    expose:
+      - "8000"
     environment:
       MODEL_PATH: /data/fraud_model.pkl
+      ML_SIDECAR_API_KEY: ${ML_SIDECAR_API_KEY:?set ML_SIDECAR_API_KEY in .env}
     volumes:
       - ml_model_data:/data
     networks:

@@ -8,6 +8,7 @@ import {
   extractMedicalCodes,
   icd10Label,
   restoreOcrAmounts,
+  selectInvoiceTotal,
 } from './invoice-patterns';
 
 function firstMatch(patterns: RegExp[], text: string): string | null {
@@ -249,5 +250,74 @@ describe('restoreOcrAmounts (Aga Khan digit-substitution recovery)', () => {
     const raw = 'Sponsor Coverage: S.E.A region not a number\n';
     const restored = restoreOcrAmounts(raw);
     expect(restored).toContain('S.E.A');
+  });
+});
+
+describe('selectInvoiceTotal (credit-aware total selection)', () => {
+  it('Aga Khan IP bill — picks the gross total, NOT the M-pesa self-payment', () => {
+    // Real layout from "File Agk2.pdf" (MUGO, JASON NYAGA). The PDF text layer
+    // stacks the labels first, then the figures, with the −2,608.00 M-pesa
+    // self-payment appearing FIRST. The old `Sponsor Coverage[...]?(figure)`
+    // regex reported 2,608.00 as the claim amount.
+    const text =
+      'Total Charges:\n' +
+      'NHIF Rebate:\n' +
+      'Less Payments:\n' +
+      '10/03/24 M-pesa Self Payment.\n' +
+      'Sponsor Coverage:\n' +
+      'AGRICULTURE AND FOOD AUTHORITY\n' +
+      '            -2,608.00\n' +
+      '            567,599.82\n' +
+      '            12,000.00\n' +
+      '            552,991.82\n' +
+      'Your Amount Due: 0.00\n';
+    const total = selectInvoiceTotal(text);
+    expect(total).not.toBeCloseTo(2608.0, 2);   // never the payment
+    expect(total).not.toBeCloseTo(12000.0, 2);  // never the NHIF rebate
+    expect(total).toBeCloseTo(567599.82, 2);    // the gross total
+  });
+
+  it('Aga Khan IP bill — multiple M-pesa payments are all excluded', () => {
+    // "File Agk1.pdf" (member KE1814500): three self-payment lines.
+    const text =
+      'Total Charges:\n' +
+      'NHIF Rebate:\n' +
+      'Less Payments:\n' +
+      '28/02/24 M-pesa Self Payment.\n' +
+      '28/02/24 M-pesa Self Payment.\n' +
+      '28/02/24 M-pesa Self Payment.\n' +
+      'Sponsor Coverage:\n' +
+      'AAR Corporate\n' +
+      '            948,206.02\n' +
+      '            12,000.00\n' +
+      '            -136206.00\n' +
+      '            -50000.00\n' +
+      '            -250000.00\n' +
+      '            500,000.00\n' +
+      'Your Amount Due: 0.02\n';
+    expect(selectInvoiceTotal(text)).toBeCloseTo(948206.02, 2);
+  });
+
+  it('Zion outpatient invoice — clean labelled total is preserved', () => {
+    const text =
+      'ZION MEDICAL CENTRE BUNGOMA\n' +
+      'Consultation fee 1 1000 1,000.00\n' +
+      'Epilim Chrono 500mg 30 115.4 3,462.00\n' +
+      'Total Amount : 6,641.20\n' +
+      'Total Copay: 0.00\n' +
+      'Amount Receivable: 6,641.20\n';
+    expect(selectInvoiceTotal(text)).toBeCloseTo(6641.2, 2);
+  });
+
+  it('does not pick a pre-authorisation policy limit far from any total label', () => {
+    const text =
+      'This letter is valid for hospital and all doctors bills up to a limit ' +
+      'of Ksh. 5,000,000.00\n\n\n\n\n\n\n\n' +
+      'Total Amount : 6,641.20\n';
+    expect(selectInvoiceTotal(text)).toBeCloseTo(6641.2, 2);
+  });
+
+  it('returns 0 when no total-bearing label is present', () => {
+    expect(selectInvoiceTotal('Just some narrative text with 1,234.56 in it')).toBe(0);
   });
 });

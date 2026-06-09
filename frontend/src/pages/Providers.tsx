@@ -563,9 +563,10 @@ export default function Providers() {
       if (isPdf) {
         const arrayBuffer = await blob.arrayBuffer()
         const pdfjsLib = await import('pdfjs-dist')
-        pdfjsLib.GlobalWorkerOptions.workerSrc =
-          `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+        // Use the self-hosted v4 worker (same as main.tsx) instead of a CDN —
+        // removes a third-party origin and keeps CSP tight.
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer, isEvalSupported: false }).promise
         let full = ''
         for (let i = 1; i <= pdf.numPages; i++) {
           const page = await pdf.getPage(i)

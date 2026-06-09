@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
+import { getDocumentSafe } from '@/lib/pdfSafe'
 import { Loader2, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -51,7 +52,7 @@ export function ReviewPdfPager({ url, alreadyViewed = [], onLoadPages, onPageVie
     reportedRef.current = new Set(alreadyViewed)
     let cancelled = false
     setLoading(true); setError(null)
-    pdfjsLib.getDocument({ url, withCredentials: true }).promise
+    getDocumentSafe({ url, withCredentials: true }).promise
       .then((doc) => {
         if (cancelled) return
         docRef.current = doc
