@@ -21,4 +21,26 @@ export const batchService = {
     })
     return data
   },
+
+  /**
+   * Download the export bundle (CSV/XML/JSON index + optional searchable PDFs,
+   * per the Job Setup's output targets) for a batch. Accepts a BatchSubmission
+   * id or a batchNumber. Triggers a browser download of the returned zip.
+   */
+  exportBatch: async (idOrNumber: string) => {
+    const { data, headers } = await api.get(`/batch-submissions/${encodeURIComponent(idOrNumber)}/export`, {
+      responseType: 'blob',
+    })
+    const blob = new Blob([data], { type: 'application/zip' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const disp = String(headers?.['content-disposition'] ?? '')
+    const match = disp.match(/filename="?([^"]+)"?/)
+    a.download = match?.[1] ?? `${idOrNumber}-export.zip`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  },
 }
