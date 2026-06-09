@@ -38,8 +38,11 @@ const PRIMARY_CTA =
 const OUTLINE_CTA =
   'border-slate-300 bg-white text-slate-700 transition-all duration-300 hover:-translate-y-0.5 hover:border-slate-400 hover:bg-slate-50 dark:border-white/15 dark:bg-white/[0.03] dark:text-slate-100 dark:hover:bg-white/[0.08] dark:hover:text-white'
 
+// Public distribution repo (claimsflow-mobile source is private, so its release
+// assets aren't anonymously downloadable). claimsflow-releases holds only the
+// signed APKs and is public, so this API + the asset URLs work without auth.
 const GITHUB_RELEASE_API =
-  'https://api.github.com/repos/Makaly/claimsflow-mobile/releases/latest'
+  'https://api.github.com/repos/Makaly/claimsflow-releases/releases/latest'
 const FALLBACK_APK = '/claimsflow-android.apk'
 
 function useLatestApkRelease() {
