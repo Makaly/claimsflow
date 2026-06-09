@@ -70,4 +70,89 @@ export class LlmRouterService {
     this.logger.log(`LLM vision via ${provider}${model ? ` (${model})` : ''}`);
     return this.adapter(provider).generateFromImage(systemPrompt, userMessage, fileBase64, mimeType, { ...options, model });
   }
+
+  // ── Resilient fallback ─────────────────────────────────────────────────────
+  // Cloud reasoning models in preference order. Ollama is intentionally excluded:
+  // local vision models cannot read PDFs and are too slow for clinical reasoning,
+  // so they make a poor automatic fallback for the billing audit.
+  private static readonly CLOUD_FALLBACK = [
+    'gemini:gemini-2.5-flash-lite',
+    'claude:claude-haiku-4-5',
+    'gemini:gemini-2.5-flash',
+    'claude:claude-sonnet-4-6',
+    'gemini:gemini-flash-latest',
+  ];
+
+  /** Ordered, de-duplicated list of available cloud model ids — the caller's
+   *  preferred model first (unless it is an Ollama model). */
+  private async cloudChain(preferred?: string): Promise<string[]> {
+    const ids: string[] = [];
+    if (preferred) {
+      const { provider } = this.parse(preferred);
+      if (provider !== 'ollama') ids.push(preferred);
+    }
+    for (const id of LlmRouterService.CLOUD_FALLBACK) if (!ids.includes(id)) ids.push(id);
+
+    const available: string[] = [];
+    for (const id of ids) {
+      const { provider } = this.parse(id);
+      try {
+        if (await Promise.resolve(this.adapter(provider).isAvailable())) available.push(id);
+      } catch { /* treat as unavailable */ }
+    }
+    // If nothing reports available (e.g. isAvailable only checks reachability),
+    // still attempt the chain — a configured key may work despite the probe.
+    return available.length ? available : ids;
+  }
+
+  /** Try each candidate provider in turn; return the first non-empty answer.
+   *  Throws only when every candidate failed — tagging `isQuota` when they were
+   *  ALL quota/billing failures so the caller can show an accurate notice. */
+  private async withFallback(
+    label: string,
+    options: LlmGenerateOptions | undefined,
+    call: (model: string, provider: Provider) => Promise<string>,
+  ): Promise<string> {
+    const chain = await this.cloudChain(options?.model);
+    let lastErr: any = null;
+    let allQuota = true;
+    for (const id of chain) {
+      const { provider, model } = this.parse(id);
+      try {
+        const out = await call(model ?? id, provider);
+        if (out && out.trim()) {
+          this.logger.log(`LLM ${label} succeeded via ${provider} (${model ?? id})`);
+          return out;
+        }
+        allQuota = false; // empty but no error
+      } catch (err: any) {
+        lastErr = err;
+        if (!err?.isQuota) allQuota = false;
+        this.logger.warn(`LLM ${label} via ${provider} (${model ?? id}) failed: ${err?.message}`);
+      }
+    }
+    if (lastErr) {
+      if (allQuota) lastErr.isQuota = true;
+      throw lastErr;
+    }
+    return ''; // every candidate returned empty
+  }
+
+  /** generate() with automatic provider fallback. */
+  async generateWithFallback(systemPrompt: string, userMessage: string, options?: LlmGenerateOptions): Promise<string> {
+    return this.withFallback('generate', options, (model, provider) =>
+      this.adapter(provider).generate(systemPrompt, userMessage, { ...options, model }));
+  }
+
+  /** generateFromImage() with automatic provider fallback. */
+  async generateFromImageWithFallback(
+    systemPrompt: string,
+    userMessage: string,
+    fileBase64: string,
+    mimeType: string,
+    options?: LlmGenerateOptions,
+  ): Promise<string> {
+    return this.withFallback('vision', options, (model, provider) =>
+      this.adapter(provider).generateFromImage(systemPrompt, userMessage, fileBase64, mimeType, { ...options, model }));
+  }
 }

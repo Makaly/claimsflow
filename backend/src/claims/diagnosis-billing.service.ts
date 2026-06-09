@@ -62,6 +62,7 @@ export class DiagnosisBillingService {
         diagnosis: true,
         treatment: true,
         procedureCodes: true,
+        invoiceAmount: true,
         billingAuditStatus: true,
         billingAuditScore: true,
         billingAuditSummary: true,
@@ -134,7 +135,12 @@ export class DiagnosisBillingService {
       ].filter(Boolean);
 
       try {
-        result = await this.runExtraction(diagnosis, claim.treatment, procedureCodes, rawTextSnippet, `claim ${claimId}`, model);
+        // Only run text extraction when there is real invoice text — never feed
+        // a diagnosis with empty invoice text, or the model invents illustrative
+        // items. With no text we go straight to reading the document image.
+        if (rawTextSnippet) {
+          result = await this.runExtraction(diagnosis, claim.treatment, procedureCodes, rawTextSnippet, `claim ${claimId}`, model);
+        }
 
         // Vision fallback — when the OCR text yields no items (common with poor
         // scans), read the invoice document image directly.
@@ -149,7 +155,7 @@ export class DiagnosisBillingService {
     }
 
     if (!result) {
-      return this.unknownAssessment('AI assessment unavailable — try again shortly', diagnosis);
+      return this.unknownAssessment('No invoice billing items to audit for this claim', diagnosis);
     }
 
     // Persist to DB so subsequent requests are instant (no Gemini call needed)
@@ -163,6 +169,13 @@ export class DiagnosisBillingService {
         billingAuditAt:      new Date(),
       },
     }).catch(err => this.logger.warn(`Failed to cache billing audit for ${claimId}: ${err.message}`));
+
+    // Reconcile the recorded invoice amount with the validated line-item sum.
+    // The itemised total (read line-by-line) is more reliable than a single OCR
+    // grab of the total, which is often mis-read — so when every line is priced
+    // and the sum differs materially, correct the claim amount (with an audit
+    // trail) so the two totals always agree.
+    await this.reconcileInvoiceAmount(claimId, result.items, claim.invoiceAmount ?? null);
 
     return result;
   }
@@ -374,6 +387,47 @@ export class DiagnosisBillingService {
     return { diagnosis, items: [], overall: 'uncertain', overallScore: 0, summary, fromLineItems: false };
   }
 
+  /**
+   * Reconcile the claim's recorded invoice amount with the validated line-item
+   * sum. The itemised total (read line-by-line) is more trustworthy than a single
+   * OCR grab of the printed total — so when EVERY line is priced and the sum
+   * differs materially, we correct the claim amount and log the change for audit.
+   * Guarded to all-lines-priced so a partial extraction never lowers the amount.
+   */
+  private async reconcileInvoiceAmount(
+    claimId: string,
+    items: BillingItemAssessment[],
+    recordedAmount: number | null,
+  ): Promise<void> {
+    if (!items.length) return;
+    // Trust the sum only when every line carries a positive amount.
+    if (!items.every(i => typeof i.amount === 'number' && (i.amount as number) > 0)) return;
+    const itemsTotal = Math.round(items.reduce((s, i) => s + (i.amount ?? 0), 0) * 100) / 100;
+    if (itemsTotal <= 0) return;
+    if (recordedAmount != null && Math.abs(itemsTotal - recordedAmount) < 1) return; // already agree
+
+    try {
+      await this.prisma.claim.update({
+        where: { id: claimId },
+        data: { invoiceAmount: itemsTotal },
+      });
+      await this.prisma.activityLog.create({
+        data: {
+          action: 'invoice_amount_reconciled',
+          entity: 'claim',
+          entityId: claimId,
+          status: 'success',
+          oldValue: { invoiceAmount: recordedAmount } as any,
+          newValue: { invoiceAmount: itemsTotal } as any,
+          metadata: { source: 'diagnosis-billing-audit', lineItems: items.length } as any,
+        },
+      }).catch(() => { /* audit log is best-effort */ });
+      this.logger.log(`Reconciled claim ${claimId} invoice amount ${recordedAmount} → ${itemsTotal} (sum of ${items.length} validated lines)`);
+    } catch (err: any) {
+      this.logger.warn(`Failed to reconcile invoice amount for ${claimId}: ${err.message}`);
+    }
+  }
+
   /** Distinct from unknownAssessment so the UI can show a quota-specific notice
    *  (not a misleading "low-quality scan" message). Not persisted/cached. */
   private quotaAssessment(diagnosis = ''): ClaimBillingAssessment {
@@ -405,6 +459,12 @@ export class DiagnosisBillingService {
       (procedureCodes.length ? `Procedure codes on file: ${procedureCodes.join(', ')}\n\n` : '') +
       (rawTextSnippet ? `Raw invoice / clinical document text:\n${rawTextSnippet}\n\n` : '') +
       `TASK — extract the invoice's BILLING TABLE, then assess each line clinically.\n\n` +
+      `CRITICAL — extract ONLY what literally appears in the invoice provided above ` +
+      `(and/or the attached document image). This is real patient billing data:\n` +
+      `   • Do NOT invent, infer, assume, or list "typical", "example" or "illustrative" ` +
+      `services for the diagnosis. If a service is not printed on the invoice, it does not exist.\n` +
+      `   • If there is NO billing/charges table in the provided invoice, return an EMPTY items array ([]). ` +
+      `Never fabricate items from the diagnosis alone.\n\n` +
       `1. Find the charges/billing table in the text (columns are usually something like ` +
       `Description, Qty, Rate/Unit Price, Amount/Gross). Extract EVERY charged row — ` +
       `bed/ward charges, consultation/doctor/surgeon fees, theatre charges, anaesthesia, ` +
@@ -441,21 +501,21 @@ export class DiagnosisBillingService {
     const prompt = this.buildExtractionPrompt(diagnosis, treatment, procedureCodes, rawTextSnippet);
     const system = 'You are a senior medical claims auditor extracting and assessing billed services from invoice documents. Always reply with valid JSON only.';
 
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        const raw = await this.llm.generate(system, prompt, {
-          temperature: 0,
-          json: true,
-          maxOutputTokens: 4096,
-          model,
-        });
-        this.logger.debug(`Billing audit (${label}) attempt ${attempt} raw (first 200): ${raw.slice(0, 200)}`);
-        const parsed = this.parseAssessment(raw, diagnosis);
-        if (parsed && parsed.items.length > 0) return parsed;
-      } catch (err: any) {
-        if (err?.isQuota) throw err;   // quota: stop and let the caller surface it
-        this.logger.warn(`Billing audit (${label}) attempt ${attempt} failed: ${err.message}`);
-      }
+    // generateWithFallback walks the cloud provider chain (preferred model
+    // first), so a single call already tries multiple providers before failing.
+    try {
+      const raw = await this.llm.generateWithFallback(system, prompt, {
+        temperature: 0,
+        json: true,
+        maxOutputTokens: 4096,
+        model,
+      });
+      this.logger.debug(`Billing audit (${label}) raw (first 200): ${raw.slice(0, 200)}`);
+      const parsed = this.parseAssessment(raw, diagnosis);
+      if (parsed && parsed.items.length > 0) return parsed;
+    } catch (err: any) {
+      if (err?.isQuota) throw err;   // every provider quota-limited — surface it
+      this.logger.warn(`Billing audit (${label}) failed: ${err.message}`);
     }
     return null;
   }
@@ -522,7 +582,7 @@ export class DiagnosisBillingService {
     const prompt = this.buildExtractionPrompt(diagnosis, treatment, procedureCodes, '');
     const system = 'You are a senior medical claims auditor. Read the attached invoice document image and extract its billing table. Reply with valid JSON only.';
     try {
-      const raw = await this.llm.generateFromImage(system, prompt, bytes.toString('base64'), mime, {
+      const raw = await this.llm.generateFromImageWithFallback(system, prompt, bytes.toString('base64'), mime, {
         temperature: 0, json: true, maxOutputTokens: 4096, model,
       });
       this.logger.debug(`Billing audit (${label}) vision raw (first 200): ${raw.slice(0, 200)}`);
@@ -685,7 +745,7 @@ export class DiagnosisBillingService {
       `[{"match":"match"|"mismatch"|"uncertain","score":0.0-1.0,"reason":"brief explanation"}]`;
 
     try {
-      const raw = await this.llm.generate(
+      const raw = await this.llm.generateWithFallback(
         'You are a medical claims auditor. Assess clinical appropriateness of billed services. Reply with valid JSON only.',
         prompt,
         { temperature: 0, json: true, maxOutputTokens: 2048, model },
