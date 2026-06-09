@@ -9,6 +9,23 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **Per-page document categories on the Gemini path**
+  (`backend/src/ocr/gemini-vision.service.ts`) — Gemini's extraction schema
+  doesn't classify pages, so its `documentPages` always came back empty and
+  documents extracted with Gemini showed no category tags. It now derives the
+  same per-page categories (Invoice / Authorization Letter / Discharge Summary /
+  Lab Results / Medical Claim Form …) Claude produces, by reusing the
+  digital-text page pre-scan that already runs for every PDF — so document
+  categorization works regardless of the chosen vision model. Covered by unit
+  tests for the Aga Khan inpatient layout.
+
+- **Starter Document Classifier templates** (`backend/prisma/seed-classifier-templates.ts`)
+  — the classifier list was empty (`Template cache hit (0 templates)`), so no
+  document could be matched/categorized. A seed script adds starter templates for
+  the common document types (Aga Khan inpatient invoice, Zion outpatient invoice,
+  AAR authorization letter, discharge summary, AAR medical claim form). Zones are
+  refined afterwards in Settings → Document Classifiers.
+
 - **Job Setups: full capture → separate → index → validate → output pipeline**
   (`backend/prisma/schema.prisma`,
   `backend/prisma/migrations/20260609130000_add_jobsetup_capture_index_fields/`,
