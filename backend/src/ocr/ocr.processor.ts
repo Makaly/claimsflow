@@ -150,6 +150,11 @@ export class OcrProcessor extends WorkerHost {
       if (doc?.claimId) {
         const claimId = doc.claimId;
 
+        const perFieldConf = primary?.fieldConfidences
+          ? (primary.fieldConfidences as Record<string, number>)
+          : Object.keys(cc).length ? cc : undefined;
+        const perFieldAnnotations = primary?.fieldAnnotations ?? undefined;
+
         await this.prisma.ocrExtraction.upsert({
           where: { claimId },
           create: {
@@ -172,6 +177,8 @@ export class OcrProcessor extends WorkerHost {
             requiresReview:    needsReview,
             anomalyScore:      null,
             possibleFraud:     false,
+            fieldConfidences:  perFieldConf as any ?? undefined,
+            fieldAnnotations:  perFieldAnnotations as any ?? undefined,
           },
           update: {
             memberNumber:      mergedMemberNumber  || undefined,
@@ -190,6 +197,8 @@ export class OcrProcessor extends WorkerHost {
             status:            finalStatus,
             requiresReview:    needsReview,
             processedAt:       new Date(),
+            fieldConfidences:  perFieldConf as any ?? undefined,
+            fieldAnnotations:  perFieldAnnotations as any ?? undefined,
           },
         });
 

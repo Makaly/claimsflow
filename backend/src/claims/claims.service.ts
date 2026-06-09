@@ -561,6 +561,8 @@ export class ClaimsService {
 
     const fieldConf = (ocr?.fieldConfidences as Record<string, number> | null) ?? {};
     const anomalyReasons: string[] = (ocr?.anomalyReasons as string[]) ?? [];
+    type StoredAnnotation = { fieldName: string; label: string; value: string; confidence: number; page: number; bbox: { x: number; y: number; w: number; h: number } };
+    const storedAnnotations: StoredAnnotation[] = Array.isArray(ocr?.fieldAnnotations) ? (ocr.fieldAnnotations as StoredAnnotation[]) : [];
 
     // The canonical, always-present set of correctable OCR fields. We emit every
     // one — even when OCR left it blank — so the maker-checker can fill in or fix
@@ -586,19 +588,47 @@ export class ClaimsService {
       return String(v);
     };
 
+    // Map claim field keys to classifier zone fieldNames for confidence/bbox lookup
+    const CLAIM_TO_CLASSIFIER: Record<string, string[]> = {
+      memberName:    ['patient_name'],
+      memberNumber:  ['membership_number', 'ak_number', 'account_number', 'account_name'],
+      patientId:     ['patient_id'],
+      providerName:  ['provider_name'],
+      invoiceNumber: ['invoice_number'],
+      invoiceDate:   ['invoice_date'],
+      invoiceAmount: ['invoice_amount', 'total_billed'],
+      dateOfService: ['service_date', 'admission_date'],
+      diagnosis:     ['diagnosis'],
+    };
+
     const fields = STANDARD_FIELDS.map(f => {
-      const confidence = fieldConf[f.key];
+      const classifierKeys = CLAIM_TO_CLASSIFIER[f.key] ?? [];
+      // Prefer classifier confidence from fieldConfidences (stored by classifier fieldName)
+      let confidence: number | undefined = fieldConf[f.key];
+      if (confidence === undefined) {
+        for (const ck of classifierKeys) {
+          if (fieldConf[ck] !== undefined) { confidence = fieldConf[ck]; break; }
+        }
+      }
+      // Find bbox from stored field annotations (keyed by classifier fieldName)
+      let bbox: { x: number; y: number; w: number; h: number } | undefined;
+      let annotPage = 1;
+      for (const ck of classifierKeys) {
+        const ann = storedAnnotations.find(a => a.fieldName === ck);
+        if (ann) { bbox = ann.bbox; annotPage = ann.page ?? 1; break; }
+      }
       const anomaly = anomalyReasons.some(
         r => r.toLowerCase().includes(f.key.toLowerCase()) || r.toLowerCase().includes(f.label.toLowerCase()),
       );
       return {
-        page: 1,
+        page: annotPage,
         key: f.key,
         label: f.label,
         type: f.type,
         value: rawValue(f.key),
         editable: true,
         ...(confidence !== undefined ? { confidence } : {}),
+        ...(bbox ? { bbox } : {}),
         anomaly: anomaly || undefined,
       };
     });

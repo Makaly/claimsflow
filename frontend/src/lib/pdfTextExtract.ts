@@ -46,6 +46,17 @@ export interface ExtractedInvoiceData {
   }>
   /** Structural warnings raised server-side (sum mismatch, future date, etc.) */
   validationWarnings?: string[]
+  /** Per-field source locations + extraction confidence from the document classifier zones. */
+  fieldAnnotations?: Array<{
+    fieldName: string
+    label: string
+    value: string
+    confidence: number
+    page: number
+    bbox: { x: number; y: number; w: number; h: number }
+  }>
+  /** Per-field confidence map (fieldName → 0-1) from the classifier. */
+  fieldConfidences?: Record<string, number>
 }
 
 /**
@@ -133,6 +144,12 @@ export async function extractInvoicesFromPdf(
           lineItems: Array.isArray(inv.lineItems) ? inv.lineItems : undefined,
           validationWarnings: Array.isArray(inv.validationWarnings) && inv.validationWarnings.length > 0
             ? inv.validationWarnings
+            : undefined,
+          fieldAnnotations: Array.isArray(inv.fieldAnnotations) && inv.fieldAnnotations.length > 0
+            ? inv.fieldAnnotations
+            : undefined,
+          fieldConfidences: inv.fieldConfidences && typeof inv.fieldConfidences === 'object'
+            ? inv.fieldConfidences
             : undefined,
         }
       })

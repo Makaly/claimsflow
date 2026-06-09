@@ -462,6 +462,14 @@ Focus on: invoice/claim numbers, dates, amounts, patient demographics, provider 
     validation: Array<{ field: string; issue: string; severity: 'error' | 'warning' | 'info' }>;
     claimFieldMap: Record<string, string>;
     unknownDocumentId?: string;
+    fieldAnnotations?: Array<{
+      fieldName: string;
+      label: string;
+      value: string;
+      confidence: number;
+      page: number;
+      bbox: { x: number; y: number; w: number; h: number };
+    }>;
   }> {
     const emptyClaimFieldMap: Record<string, string> = {};
     const empty = { templateId: null as string | null, fields: {}, confidence: {}, validation: [], claimFieldMap: emptyClaimFieldMap };
@@ -516,12 +524,28 @@ Focus on: invoice/claim numbers, dates, amounts, patient demographics, provider 
 
         // Build claimFieldMap for Gemini path using zone.claimField or implicit default
         const geminiClaimFieldMap: Record<string, string> = {};
+        const geminiFieldAnnotations: Array<{ fieldName: string; label: string; value: string; confidence: number; page: number; bbox: { x: number; y: number; w: number; h: number } }> = [];
         for (const zone of geminiTemplate?.zones ?? []) {
           const target = (zone as any).claimField || IMPLICIT_CLAIM_FIELD[zone.fieldName];
           const value  = result.fields?.[zone.fieldName];
           if (target && value) geminiClaimFieldMap[target] = value;
+          if (value) {
+            geminiFieldAnnotations.push({
+              fieldName:  zone.fieldName,
+              label:      zone.fieldLabel,
+              value,
+              confidence: geminiConf[zone.fieldName] ?? 0.5,
+              page:       zone.pageNumber ?? 1,
+              bbox: {
+                x: zone.xPercent / 100,
+                y: zone.yPercent / 100,
+                w: zone.widthPercent / 100,
+                h: zone.heightPercent / 100,
+              },
+            });
+          }
         }
-        return { ...result, claimFieldMap: geminiClaimFieldMap };
+        return { ...result, claimFieldMap: geminiClaimFieldMap, fieldAnnotations: geminiFieldAnnotations.length ? geminiFieldAnnotations : undefined };
       } catch (err) {
         this.logger.error(`Gemini classifyAndExtract failed: ${err}`);
         const msg = String((err as any)?.message ?? err);
@@ -731,15 +755,31 @@ Focus on: invoice/claim numbers, dates, amounts, patient demographics, provider 
       await this.prisma.ocrZoneHit.createMany({ data: zoneHitData }).catch(() => {});
     }
 
-    // Build claimFieldMap: zone.claimField (or implicit default) → extracted value
+    // Build claimFieldMap + fieldAnnotations: zone.claimField (or implicit default) → extracted value
     const claimFieldMap: Record<string, string> = {};
+    const fieldAnnotations: Array<{ fieldName: string; label: string; value: string; confidence: number; page: number; bbox: { x: number; y: number; w: number; h: number } }> = [];
     for (const zone of matchedTemplate.zones) {
       const target = zone.claimField || IMPLICIT_CLAIM_FIELD[zone.fieldName];
       const value  = fields[zone.fieldName];
       if (target && value) claimFieldMap[target] = value;
+      if (value) {
+        fieldAnnotations.push({
+          fieldName:  zone.fieldName,
+          label:      zone.fieldLabel,
+          value,
+          confidence: confidence[zone.fieldName] ?? 0.5,
+          page:       zone.pageNumber ?? 1,
+          bbox: {
+            x: zone.xPercent / 100,
+            y: zone.yPercent / 100,
+            w: zone.widthPercent / 100,
+            h: zone.heightPercent / 100,
+          },
+        });
+      }
     }
 
-    return { templateId: matchedId, templateName: matchedTemplate.name, fields, confidence, validation, claimFieldMap };
+    return { templateId: matchedId, templateName: matchedTemplate.name, fields, confidence, validation, claimFieldMap, fieldAnnotations: fieldAnnotations.length ? fieldAnnotations : undefined };
   }
 
   // ── AI field validation ───────────────────────────────────────────────────────

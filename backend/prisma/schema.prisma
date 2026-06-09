@@ -736,6 +736,7 @@ model OcrExtraction {
   procedureCodes    String[]
   overallConfidence Float?
   fieldConfidences  Json?
+  fieldAnnotations  Json?     // Array<{fieldName, label, value, confidence, page, bbox:{x,y,w,h}}>
   ocrEngine         String?
   ocrEngineVersion  String?
   templateUsed      String?
@@ -1944,6 +1945,9 @@ model BatchDraftClaim {
   annotations   Json      @default("[]")
   lineItems     Json      @default("[]")
   documentPages Json      @default("[]")
+  rawText          String?  // OCR text — needed by the billing audit to extract line items
+  fieldAnnotations Json?    // per-field source bboxes + confidence (Kodak-style overlay)
+  fieldConfidences Json?    // per-field confidence map (fieldName → 0-1)
   publishedAt   DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
