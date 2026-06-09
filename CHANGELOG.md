@@ -9,19 +9,29 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
-- **Selectable AI model for the billing audit**
-  (`backend/src/assistant/gemini-llm.adapter.ts`,
+- **Multi-provider AI model selection for the billing audit**
+  (`backend/src/assistant/llm.types.ts`, `backend/src/assistant/claude-llm.adapter.ts`,
+  `backend/src/assistant/ollama-llm.adapter.ts`, `backend/src/assistant/llm-router.service.ts`,
+  `backend/src/assistant/gemini-llm.adapter.ts`, `backend/src/assistant/assistant.module.ts`,
   `backend/src/claims/diagnosis-billing.service.ts`,
   `backend/src/claims/claims.controller.ts`,
-  `frontend/src/components/InvoiceBillingAudit.tsx`) — `generate()` and
-  `generateFromImage()` accept an optional `model` override, threaded through every
-  diagnosis-billing entry point and exposed on the API as `?model=` on
-  `GET /claims/:id/billing-validation` and a `model` field on the inline
-  `assess` / `assess-vision` requests. When a model's daily quota is exhausted the
-  audit's quota notice now offers a model picker (each Gemini model has a separate
-  free-tier allowance); the selection is remembered in `localStorage` and applied
-  to all subsequent requests, so reviewers can switch to an available model and
-  retry without waiting for a quota reset.
+  `frontend/src/components/InvoiceBillingAudit.tsx`) — the diagnosis-billing audit
+  now offers the **same model menu as the Batch Upload extractor** (`GET /ocr/models`):
+  Claude (Opus 4.7 / Sonnet 4.6 / Haiku 4.5), Gemini (2.5 Pro / 2.5 Flash /
+  2.0 Flash) and local Ollama (Llama 3.2 Vision / Moondream). A new
+  `LlmRouterService` parses a `provider:model` id and dispatches text and
+  multimodal calls to the matching adapter, mirroring the OCR `VisionRouterService`.
+  New `ClaudeLlmAdapter` and `OllamaLlmAdapter` implement the shared `LlmAdapter`
+  contract (`generate` / `generateFromImage`) — Claude via the Anthropic SDK,
+  Ollama via the local `/api/chat` endpoint — and, like the Gemini adapter, throw
+  quota-tagged errors so the audit's quota notice can suggest switching providers.
+  The billing component fetches the model list from `/ocr/models`, disables
+  providers whose credentials/runtime are missing, and threads the chosen `model`
+  through every endpoint (`?model=` on `GET /claims/:id/billing-validation`; a
+  `model` field on `assess`, `assess-vision` and `enrich-item`). The selection is
+  remembered in `localStorage`. Each cloud model has a separate daily free-tier
+  allowance, so reviewers can switch to an available model and retry without
+  waiting for a quota reset.
 
 ## [2.1.0] - 2026-06-09
 
