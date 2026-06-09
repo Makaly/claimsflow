@@ -27,6 +27,10 @@ export class GeminiLlmAdapter {
     this.apiKey = config.get<string>('GEMINI_API_KEY');
   }
 
+  isAvailable(): boolean {
+    return !!this.apiKey;
+  }
+
   async embed(text: string): Promise<number[]> {
     if (!this.apiKey) {
       // Stub: return deterministic zero vector so unit tests work offline.

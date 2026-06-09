@@ -89,16 +89,13 @@ const MATCH = {
   },
 } as const
 
-// Gemini models the user can switch to — each has its OWN daily free-tier
-// quota, so picking one not used today bypasses an exhausted model's limit.
-const MODEL_OPTIONS = [
-  { value: '',                      label: 'Default (flash-latest)' },
-  { value: 'gemini-2.5-flash',      label: 'Gemini 2.5 Flash' },
-  { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite' },
-  { value: 'gemini-2.0-flash',      label: 'Gemini 2.0 Flash' },
-  { value: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash-Lite' },
-  { value: 'gemini-2.5-pro',        label: 'Gemini 2.5 Pro' },
-] as const
+// AI models the user can switch to for the billing audit. The list is the SAME
+// menu the Batch Upload extractor offers (GET /ocr/models) — Claude, Gemini and
+// local Ollama — so a reviewer can pick any provider. Each cloud model has its
+// own daily free-tier quota, so switching providers bypasses an exhausted one.
+type AuditModel = { id: string; label: string; provider: string; available: boolean; tier: string }
+// Shown first; '' lets the backend use its configured default (Gemini flash).
+const DEFAULT_MODEL_OPTION = { id: '', label: 'Default (recommended)', provider: '', available: true, tier: '' }
 
 function fmtKES(n?: number | null) {
   if (n == null) return null
@@ -134,6 +131,23 @@ export default function InvoiceBillingAudit({
   // Persisted model override — remembered so the user doesn't re-pick each time.
   const [selectedModel, setSelectedModel] = useState<string>(() => localStorage.getItem('billingAuditModel') || '')
   const setModel = (m: string) => { setSelectedModel(m); localStorage.setItem('billingAuditModel', m) }
+  // Available AI models, fetched from the same endpoint Batch Upload uses so the
+  // two menus never drift. Tesseract is excluded — it's pure OCR and cannot do
+  // the clinical reasoning the billing audit needs.
+  const [models, setModels] = useState<AuditModel[]>([])
+  useEffect(() => {
+    let cancelled = false
+    api.get('/ocr/models')
+      .then(({ data }) => {
+        if (cancelled) return
+        const list: AuditModel[] = (data.models || [])
+          .filter((m: AuditModel) => m.provider !== 'tesseract')
+          .map((m: any) => ({ id: m.id, label: m.label, provider: m.provider, available: !!m.available, tier: m.tier }))
+        setModels(list)
+      })
+      .catch(err => console.warn('Failed to load AI models for billing audit:', err))
+    return () => { cancelled = true }
+  }, [])
 
   const toggleExpand = (i: number) => setExpanded(prev => {
     const next = new Set(prev)
@@ -246,6 +260,7 @@ export default function InvoiceBillingAudit({
       const { data } = await api.post<AssessedItem>('/claims/billing-validation/enrich-item', {
         claimId, diagnosis, treatment, rawText,
         itemName: row.description,
+        model: selectedModel || undefined,
       }, { timeout: 45_000 })
       setEnrichOverrides(prev => ({ ...prev, [i]: data }))
     } catch {
@@ -253,7 +268,7 @@ export default function InvoiceBillingAudit({
     } finally {
       setEnriching(prev => { const n = new Set(prev); n.delete(i); return n })
     }
-  }, [claimId, diagnosis, treatment, rawText])
+  }, [claimId, diagnosis, treatment, rawText, selectedModel])
 
   // Apply an enrichment override onto a row (filled amount/code/verdict win).
   const withOverride = (row: MergedRow, i: number): MergedRow => {
@@ -554,7 +569,8 @@ export default function InvoiceBillingAudit({
             </p>
           </div>
 
-          {/* Model picker — each Gemini model has its own daily free-tier quota */}
+          {/* Model picker — Claude / Gemini / local, the same menu as Batch
+              Upload. Each cloud model has its own daily free-tier quota. */}
           <div className="flex items-center justify-center gap-2">
             <label className="text-[10px] font-semibold text-orange-700/70 dark:text-orange-300/60 uppercase tracking-wide">Model</label>
             <select
@@ -562,7 +578,11 @@ export default function InvoiceBillingAudit({
               onChange={e => setModel(e.target.value)}
               className="text-[11px] rounded-lg border border-orange-300/60 dark:border-orange-700/50 bg-white dark:bg-orange-950/40 text-orange-800 dark:text-orange-200 px-2 py-1 outline-none focus:ring-2 focus:ring-orange-400/40"
             >
-              {MODEL_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+              {[DEFAULT_MODEL_OPTION, ...models].map(m => (
+                <option key={m.id || 'default'} value={m.id} disabled={!m.available}>
+                  {m.label}{m.available ? '' : ' (unavailable)'}
+                </option>
+              ))}
             </select>
           </div>
 

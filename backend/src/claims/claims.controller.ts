@@ -378,6 +378,7 @@ export class ClaimsController {
     diagnosis?: string;
     treatment?: string;
     rawText?: string;
+    model?: string;
   }) {
     return this.diagnosisBillingService.enrichItem(body);
   }

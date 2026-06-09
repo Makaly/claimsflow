@@ -1,0 +1,73 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { GeminiLlmAdapter } from './gemini-llm.adapter';
+import { ClaudeLlmAdapter } from './claude-llm.adapter';
+import { OllamaLlmAdapter } from './ollama-llm.adapter';
+import { LlmAdapter, LlmGenerateOptions } from './llm.types';
+
+type Provider = 'gemini' | 'claude' | 'ollama';
+
+/**
+ * Routes an LLM call to the right provider based on a model id, mirroring the
+ * OCR VisionRouterService so the diagnosis-billing audit can offer the SAME
+ * model menu as batch upload (Claude / Gemini / local Ollama).
+ *
+ * The model id matches the ids served by GET /ocr/models — either the
+ * namespaced `provider:model` form (`claude:claude-opus-4-7`,
+ * `gemini:gemini-2.5-pro`, `ollama:moondream`) or a bare model name, whose
+ * provider is inferred from its prefix. A missing id falls back to Gemini's
+ * configured default, preserving the previous Gemini-only behaviour.
+ */
+@Injectable()
+export class LlmRouterService {
+  private readonly logger = new Logger(LlmRouterService.name);
+
+  constructor(
+    private readonly gemini: GeminiLlmAdapter,
+    private readonly claude: ClaudeLlmAdapter,
+    private readonly ollama: OllamaLlmAdapter,
+  ) {}
+
+  /** Split a model id into a provider + bare model name. Exposed for tests. */
+  parse(modelId?: string): { provider: Provider; model?: string } {
+    if (!modelId) return { provider: 'gemini' };
+    if (modelId.includes(':')) {
+      const [p, m] = modelId.split(':', 2);
+      if (p === 'claude' || p === 'gemini' || p === 'ollama') return { provider: p, model: m };
+      // tesseract / unknown prefix → Gemini default (Tesseract can't reason).
+      return { provider: 'gemini' };
+    }
+    const lower = modelId.toLowerCase();
+    if (lower === 'tesseract') return { provider: 'gemini' };   // OCR only — can't reason
+    if (lower.startsWith('claude')) return { provider: 'claude', model: modelId };
+    if (lower.startsWith('llama') || lower.startsWith('moondream') || lower.startsWith('llava'))
+      return { provider: 'ollama', model: modelId };
+    // gemini-*, flash-latest, gemini-flash-latest, bare → Gemini.
+    return { provider: 'gemini', model: modelId };
+  }
+
+  private adapter(provider: Provider): LlmAdapter {
+    switch (provider) {
+      case 'claude': return this.claude;
+      case 'ollama': return this.ollama;
+      default: return this.gemini;
+    }
+  }
+
+  async generate(systemPrompt: string, userMessage: string, options?: LlmGenerateOptions): Promise<string> {
+    const { provider, model } = this.parse(options?.model);
+    this.logger.log(`LLM generate via ${provider}${model ? ` (${model})` : ''}`);
+    return this.adapter(provider).generate(systemPrompt, userMessage, { ...options, model });
+  }
+
+  async generateFromImage(
+    systemPrompt: string,
+    userMessage: string,
+    fileBase64: string,
+    mimeType: string,
+    options?: LlmGenerateOptions,
+  ): Promise<string> {
+    const { provider, model } = this.parse(options?.model);
+    this.logger.log(`LLM vision via ${provider}${model ? ` (${model})` : ''}`);
+    return this.adapter(provider).generateFromImage(systemPrompt, userMessage, fileBase64, mimeType, { ...options, model });
+  }
+}

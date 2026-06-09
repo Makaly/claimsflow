@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as fs from 'fs';
 import { PrismaService } from '../prisma/prisma.service';
-import { GeminiLlmAdapter } from '../assistant/gemini-llm.adapter';
+import { LlmRouterService } from '../assistant/llm-router.service';
 
 const BATCH_SIZE = 10;
 // Gemini inline-data requests must stay well under the ~20MB request cap.
@@ -48,7 +48,7 @@ export class DiagnosisBillingService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly llm: GeminiLlmAdapter,
+    private readonly llm: LlmRouterService,
   ) {}
 
   /**
@@ -229,6 +229,7 @@ export class DiagnosisBillingService {
     diagnosis?: string;
     treatment?: string;
     rawText?: string;
+    model?: string;
   }): Promise<BillingItemAssessment> {
     let diagnosis = data.diagnosis || '';
     let treatment = data.treatment || '';
@@ -279,7 +280,7 @@ export class DiagnosisBillingService {
       const raw = await this.llm.generate(
         'You are a senior medical claims auditor. Enrich a single billing line from invoice text. Reply with valid JSON only.',
         prompt,
-        { temperature: 0, json: true, maxOutputTokens: 1024 },
+        { temperature: 0, json: true, maxOutputTokens: 1024, model: data.model },
       );
       const stripped = raw.replace(/```json|```/g, '').trim();
       const s = stripped.indexOf('{');
