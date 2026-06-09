@@ -7,6 +7,76 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-06-09
+
+### Added
+
+- **Per-field source annotations and confidence, end-to-end**
+  (`backend/prisma/schema.prisma`,
+  `backend/src/document-classifier/document-classifier.service.ts`,
+  `backend/src/ocr/ocr.processor.ts`, `backend/src/ocr/ocr.service.ts`,
+  `backend/src/claims/claims.service.ts`,
+  `backend/src/batch-submission/batch-submission.service.ts`,
+  `frontend/src/lib/pdfTextExtract.ts`, `frontend/src/pages/BatchUpload.tsx`) —
+  the document classifier now emits `fieldAnnotations` (label, value, confidence,
+  page and a normalised bbox) from its template zones on both the Gemini and the
+  template-match paths. This data is persisted on `OcrExtraction.fieldAnnotations`
+  and on `BatchDraftClaim` (`rawText`, `fieldAnnotations`, `fieldConfidences`) and
+  carried through to the review UI, where each correctable field resolves its own
+  confidence badge and Kodak-style source overlay that survive a draft reload.
+
+- **Billing-audit vision fallback** (`backend/src/assistant/gemini-llm.adapter.ts`,
+  `backend/src/claims/diagnosis-billing.service.ts`,
+  `backend/src/claims/claims.controller.ts`,
+  `frontend/src/components/InvoiceBillingAudit.tsx`) — when text extraction finds
+  no line items, the audit reads the invoice image/PDF directly via a new
+  multimodal `generateFromImage()` adapter call, exposed as
+  `POST /claims/billing-validation/assess-vision`. The frontend goes straight to
+  vision when there is no OCR text but a document is available.
+
+- **Per-item billing enrichment** (`POST /claims/billing-validation/enrich-item`)
+  — fills a single billing line's missing amount, code or verdict and merges it
+  back into the cached assessment, with an inline "enrich" action in the audit UI.
+
+- **Billing-audit cache refresh** — `?refresh=true` on
+  `GET /claims/:id/billing-validation` bypasses the DB cache and re-runs the AI
+  extraction; a manual refresh control is exposed in the audit panel.
+
+### Changed
+
+- **Quota-aware Gemini adapter** (`backend/src/assistant/gemini-llm.adapter.ts`) —
+  `generate()` now throws on API errors (quota / billing / auth / safety),
+  tagging quota and rate-limit failures with `isQuota` and the HTTP status, so
+  callers can distinguish "the AI failed" from "the AI found nothing" instead of
+  silently returning `No answer generated.` Adds a generation-config builder
+  supporting deterministic `temperature`, JSON response mode
+  (`responseMimeType: application/json`) and `maxOutputTokens`. The diagnosis-billing
+  service surfaces a clear degraded result when the quota is exhausted.
+
+- **Claim detail pane styling** (`frontend/src/pages/Claims.tsx`) — the detail
+  header gains a violet→emerald accent bar and gradient with stronger light/dark
+  contrast, and the fraud-signal cards move to a severity-colour-coded
+  card-with-header layout with a summarised signal count. Presentation only.
+
+- **`LineItemsTable` suppress-when-empty** (`frontend/src/components/LineItemsTable.tsx`)
+  — a `suppressWhenEmpty` prop stops the table rendering an empty "no line items"
+  card beneath the billing audit that already lists the items.
+
+### Fixed
+
+- **Credit-aware invoice total selection** (`backend/src/ocr/invoice-patterns.ts`,
+  `backend/src/ocr/invoice-patterns.spec.ts`, `backend/src/ocr/ocr.service.ts`,
+  `backend/src/ocr/ollama-ocr.service.ts`) — multi-page inpatient bills (Aga Khan)
+  stack the bill-summary labels first and the figures in a separate block, so the
+  previous "first figure after the label" match grabbed the leading M-pesa
+  "Less Payments" credit and reported it as the claim amount (the `Ksh 2,608.00` /
+  `Ksh 236.00` figures seen in the review UI). New `selectInvoiceTotal()` restores
+  OCR-garbled digits, excludes negative / payment / rebate / co-pay figures, and
+  for each total-bearing label takes the largest legitimate figure in its window —
+  scoped to label windows so pre-authorisation policy limits are excluded. Covered
+  by unit tests for the Aga Khan IP layouts, a clean outpatient invoice, the
+  policy-limit case and the no-total case.
+
 ## [2.0.0] - 2026-06-08
 
 ### Added
@@ -2827,7 +2897,9 @@ preserves the original stage and role names for compliance immutability.
 - Completeness validation.
 - 15 frontend pages and 50+ API endpoints.
 
-[Unreleased]: https://github.com/Makaly/claimsflow/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/Makaly/claimsflow/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/Makaly/claimsflow/compare/v2.0.0...v2.1.0
+[2.0.0]: https://github.com/Makaly/claimsflow/compare/v1.6.0...v2.0.0
 [1.6.0]: https://github.com/Makaly/claimsflow/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/Makaly/claimsflow/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/Makaly/claimsflow/compare/v1.3.0...v1.4.0
