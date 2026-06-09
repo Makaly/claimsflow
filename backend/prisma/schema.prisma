@@ -737,6 +737,7 @@ model OcrExtraction {
   overallConfidence Float?
   fieldConfidences  Json?
   fieldAnnotations  Json?     // Array<{fieldName, label, value, confidence, page, bbox:{x,y,w,h}}>
+  documentPages     Json?     @default("[]") // Per-page classification: Array<{pageNumber, category, categoryLabel, confidence, summary}>
   ocrEngine         String?
   ocrEngineVersion  String?
   templateUsed      String?

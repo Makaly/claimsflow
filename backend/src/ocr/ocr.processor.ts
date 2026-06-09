@@ -154,6 +154,10 @@ export class OcrProcessor extends WorkerHost {
           ? (primary.fieldConfidences as Record<string, number>)
           : Object.keys(cc).length ? cc : undefined;
         const perFieldAnnotations = primary?.fieldAnnotations ?? undefined;
+        // Per-page document classification (Invoice / Auth Letter / Discharge
+        // Summary …) so the published claim retains the categories the vision
+        // model produced — surfaced as tags on the DocumentViewer thumbnails.
+        const perDocumentPages = primary?.documentPages?.length ? primary.documentPages : undefined;
 
         await this.prisma.ocrExtraction.upsert({
           where: { claimId },
@@ -179,6 +183,7 @@ export class OcrProcessor extends WorkerHost {
             possibleFraud:     false,
             fieldConfidences:  perFieldConf as any ?? undefined,
             fieldAnnotations:  perFieldAnnotations as any ?? undefined,
+            documentPages:     perDocumentPages as any ?? undefined,
           },
           update: {
             memberNumber:      mergedMemberNumber  || undefined,
@@ -199,6 +204,7 @@ export class OcrProcessor extends WorkerHost {
             processedAt:       new Date(),
             fieldConfidences:  perFieldConf as any ?? undefined,
             fieldAnnotations:  perFieldAnnotations as any ?? undefined,
+            documentPages:     perDocumentPages as any ?? undefined,
           },
         });
 

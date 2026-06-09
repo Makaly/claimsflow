@@ -9,6 +9,18 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **Per-page document categories in the full DocumentViewer**
+  (`backend/prisma/schema.prisma`,
+  `backend/prisma/migrations/20260609120000_add_documentpages_to_ocr_extraction/`,
+  `backend/src/ocr/ocr.processor.ts`, `backend/src/claims/claims.service.ts`,
+  `frontend/src/pages/Claims.tsx`, `frontend/src/components/DocumentViewer.tsx`) —
+  the vision model's per-page classification (Invoice / Authorization Letter /
+  Discharge Summary / Prescription / Lab Result …) is now persisted on
+  `OcrExtraction.documentPages` (previously kept only on draft uploads), returned
+  by `GET /claims/:id/ocr-fields`, and rendered as a coloured tag on every page
+  thumbnail in the full-screen DocumentViewer — matching the tags already shown in
+  the Batch Upload strip. Categories repopulate the next time a claim is extracted.
+
 - **Multi-provider AI model selection for the billing audit**
   (`backend/src/assistant/llm.types.ts`, `backend/src/assistant/claude-llm.adapter.ts`,
   `backend/src/assistant/ollama-llm.adapter.ts`, `backend/src/assistant/llm-router.service.ts`,
