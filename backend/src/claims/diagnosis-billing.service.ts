@@ -55,7 +55,7 @@ export class DiagnosisBillingService {
    * Primary entry point: works on first upload using claim-level diagnosis +
    * treatment data. Falls back to stored InvoiceLineItem records when available.
    */
-  async assessFromClaimData(claimId: string, force = false): Promise<ClaimBillingAssessment> {
+  async assessFromClaimData(claimId: string, force = false, model?: string): Promise<ClaimBillingAssessment> {
     const claim = await this.prisma.claim.findUnique({
       where: { id: claimId },
       select: {
@@ -134,12 +134,12 @@ export class DiagnosisBillingService {
       ].filter(Boolean);
 
       try {
-        result = await this.runExtraction(diagnosis, claim.treatment, procedureCodes, rawTextSnippet, `claim ${claimId}`);
+        result = await this.runExtraction(diagnosis, claim.treatment, procedureCodes, rawTextSnippet, `claim ${claimId}`, model);
 
         // Vision fallback — when the OCR text yields no items (common with poor
         // scans), read the invoice document image directly.
         if (!result || result.items.length === 0) {
-          const visionResult = await this.extractViaVision(claimId, diagnosis, claim.treatment, procedureCodes);
+          const visionResult = await this.extractViaVision(claimId, diagnosis, claim.treatment, procedureCodes, model);
           if (visionResult && visionResult.items.length > 0) result = visionResult;
         }
       } catch (err: any) {
@@ -173,6 +173,7 @@ export class DiagnosisBillingService {
     treatment?: string;
     rawText?: string;
     lineItems?: { description: string; procedureCode?: string }[];
+    model?: string;
   }): Promise<ClaimBillingAssessment> {
     const diagnosis = data.diagnosis || '';
     const rawTextSnippet = data.rawText ? data.rawText.slice(0, 16000) : '';
@@ -192,6 +193,7 @@ export class DiagnosisBillingService {
             description: li.description,
             procedureCode: li.procedureCode ?? null,
           })),
+          data.model,
         );
         const items: BillingItemAssessment[] = data.lineItems.map((li, i) => ({
           name: li.description,
@@ -204,7 +206,7 @@ export class DiagnosisBillingService {
 
       // Path B: no structured items — ask Gemini to EXTRACT billing items from the
       // raw invoice text, then assess each one against the diagnosis.
-      const parsed = await this.runExtraction(diagnosis, data.treatment, [], rawTextSnippet, 'inline');
+      const parsed = await this.runExtraction(diagnosis, data.treatment, [], rawTextSnippet, 'inline', data.model);
       if (parsed) return parsed;
     } catch (err: any) {
       if (err?.isQuota) return this.quotaAssessment(diagnosis);
@@ -433,6 +435,7 @@ export class DiagnosisBillingService {
     procedureCodes: string[],
     rawTextSnippet: string,
     label: string,
+    model?: string,
   ): Promise<ClaimBillingAssessment | null> {
     const prompt = this.buildExtractionPrompt(diagnosis, treatment, procedureCodes, rawTextSnippet);
     const system = 'You are a senior medical claims auditor extracting and assessing billed services from invoice documents. Always reply with valid JSON only.';
@@ -443,6 +446,7 @@ export class DiagnosisBillingService {
           temperature: 0,
           json: true,
           maxOutputTokens: 4096,
+          model,
         });
         this.logger.debug(`Billing audit (${label}) attempt ${attempt} raw (first 200): ${raw.slice(0, 200)}`);
         const parsed = this.parseAssessment(raw, diagnosis);
@@ -465,6 +469,7 @@ export class DiagnosisBillingService {
     diagnosis: string,
     treatment: string | null | undefined,
     procedureCodes: string[],
+    model?: string,
   ): Promise<ClaimBillingAssessment | null> {
     // Prefer the invoice document; fall back to any image/PDF attached to the claim.
     const docs = await this.prisma.document.findMany({
@@ -496,7 +501,7 @@ export class DiagnosisBillingService {
       ? invoice.mimetype
       : /\.pdf$/i.test(invoice.originalName ?? '') ? 'application/pdf' : 'image/png';
 
-    return this.runVisionExtraction(bytes, mime, diagnosis, treatment, procedureCodes, `claim ${claimId}`);
+    return this.runVisionExtraction(bytes, mime, diagnosis, treatment, procedureCodes, `claim ${claimId}`, model);
   }
 
   /** Core vision extraction — read a document buffer and parse its billing table. */
@@ -507,6 +512,7 @@ export class DiagnosisBillingService {
     treatment: string | null | undefined,
     procedureCodes: string[],
     label: string,
+    model?: string,
   ): Promise<ClaimBillingAssessment | null> {
     if (bytes.length > VISION_MAX_BYTES) {
       this.logger.warn(`Vision extraction (${label}): file too large (${bytes.length} bytes) — skipping`);
@@ -516,7 +522,7 @@ export class DiagnosisBillingService {
     const system = 'You are a senior medical claims auditor. Read the attached invoice document image and extract its billing table. Reply with valid JSON only.';
     try {
       const raw = await this.llm.generateFromImage(system, prompt, bytes.toString('base64'), mime, {
-        temperature: 0, json: true, maxOutputTokens: 4096,
+        temperature: 0, json: true, maxOutputTokens: 4096, model,
       });
       this.logger.debug(`Billing audit (${label}) vision raw (first 200): ${raw.slice(0, 200)}`);
       const parsed = this.parseAssessment(raw, diagnosis);
@@ -541,10 +547,11 @@ export class DiagnosisBillingService {
     mimetype: string,
     diagnosis?: string,
     treatment?: string,
+    model?: string,
   ): Promise<ClaimBillingAssessment> {
     const dx = diagnosis || '';
     try {
-      const result = await this.runVisionExtraction(buffer, mimetype || 'image/png', dx, treatment, [], 'inline-vision');
+      const result = await this.runVisionExtraction(buffer, mimetype || 'image/png', dx, treatment, [], 'inline-vision', model);
       return result ?? this.unknownAssessment('Could not read billing items from the document image', dx);
     } catch (err: any) {
       if (err?.isQuota) return this.quotaAssessment(dx);
@@ -660,6 +667,7 @@ export class DiagnosisBillingService {
   private async scoreBatch(
     diagnosisContext: string,
     items: { id: string; description: string; procedureCode: string | null }[],
+    model?: string,
   ): Promise<GeminiMatchResult[]> {
     const lineList = items
       .map((it, idx) => {
@@ -679,7 +687,7 @@ export class DiagnosisBillingService {
       const raw = await this.llm.generate(
         'You are a medical claims auditor. Assess clinical appropriateness of billed services. Reply with valid JSON only.',
         prompt,
-        { temperature: 0, json: true, maxOutputTokens: 2048 },
+        { temperature: 0, json: true, maxOutputTokens: 2048, model },
       );
       const stripped = raw.replace(/```json|```/g, '').trim();
       const arrStart = stripped.indexOf('[');

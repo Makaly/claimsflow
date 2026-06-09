@@ -89,6 +89,17 @@ const MATCH = {
   },
 } as const
 
+// Gemini models the user can switch to — each has its OWN daily free-tier
+// quota, so picking one not used today bypasses an exhausted model's limit.
+const MODEL_OPTIONS = [
+  { value: '',                      label: 'Default (flash-latest)' },
+  { value: 'gemini-2.5-flash',      label: 'Gemini 2.5 Flash' },
+  { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite' },
+  { value: 'gemini-2.0-flash',      label: 'Gemini 2.0 Flash' },
+  { value: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash-Lite' },
+  { value: 'gemini-2.5-pro',        label: 'Gemini 2.5 Pro' },
+] as const
+
 function fmtKES(n?: number | null) {
   if (n == null) return null
   return 'KES ' + n.toLocaleString('en-KE', { minimumFractionDigits: 2 })
@@ -120,6 +131,9 @@ export default function InvoiceBillingAudit({
   const [bigView, setBigView]       = useState(false)
   const [enriching, setEnriching]   = useState<Set<number>>(new Set())
   const [enrichOverrides, setEnrichOverrides] = useState<Record<number, AssessedItem>>({})
+  // Persisted model override — remembered so the user doesn't re-pick each time.
+  const [selectedModel, setSelectedModel] = useState<string>(() => localStorage.getItem('billingAuditModel') || '')
+  const setModel = (m: string) => { setSelectedModel(m); localStorage.setItem('billingAuditModel', m) }
 
   const toggleExpand = (i: number) => setExpanded(prev => {
     const next = new Set(prev)
@@ -158,13 +172,14 @@ export default function InvoiceBillingAudit({
       fd.append('file', new File([blob], 'invoice', { type: blob.type || 'application/pdf' }))
       if (diagnosis) fd.append('diagnosis', diagnosis)
       if (treatment) fd.append('treatment', treatment)
+      if (selectedModel) fd.append('model', selectedModel)
       const { data } = await api.post<Assessment>('/claims/billing-validation/assess-vision', fd, {
         headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60_000,
       })
       if (data?.items?.length) { setAssessment(data); return true }
     } catch { /* fall through to the text result */ }
     return false
-  }, [fileUrl, diagnosis, treatment])
+  }, [fileUrl, diagnosis, treatment, selectedModel])
 
   const runAssessment = useCallback(() => {
     if (!hasAssessableContent) return
@@ -183,10 +198,14 @@ export default function InvoiceBillingAudit({
       return
     }
 
+    const qs = new URLSearchParams()
+    if (forceRefresh > 0) qs.set('refresh', 'true')
+    if (selectedModel) qs.set('model', selectedModel)
+    const query = qs.toString() ? `?${qs.toString()}` : ''
     const req = claimId
-      ? api.get<Assessment>(`/claims/${claimId}/billing-validation${forceRefresh > 0 ? '?refresh=true' : ''}`, { timeout: 60_000 })
+      ? api.get<Assessment>(`/claims/${claimId}/billing-validation${query}`, { timeout: 60_000 })
       : api.post<Assessment>('/claims/billing-validation/assess', {
-          diagnosis, treatment, rawText,
+          diagnosis, treatment, rawText, model: selectedModel || undefined,
           lineItems: lineItems?.map(li => ({
             description: li.description,
             procedureCode: li.procedureCode ?? undefined,
@@ -209,7 +228,7 @@ export default function InvoiceBillingAudit({
           : (e?.response?.data?.message ?? 'Assessment unavailable'))
       })
       .finally(() => setLoading(false))
-  }, [claimId, diagnosis, treatment, rawText, lineItems, forceRefresh, hasAssessableContent, fileUrl, runVisionAssessment]) // eslint-disable-line
+  }, [claimId, diagnosis, treatment, rawText, lineItems, forceRefresh, hasAssessableContent, fileUrl, runVisionAssessment, selectedModel]) // eslint-disable-line
 
   useEffect(() => {
     if (newKey === keyRef.current && forceRefresh === 0) return
@@ -531,15 +550,28 @@ export default function InvoiceBillingAudit({
           <div className="space-y-0.5">
             <p className="text-xs font-semibold text-orange-800 dark:text-orange-300">AI service is over its quota</p>
             <p className="text-[11px] text-orange-700/80 dark:text-orange-300/70 leading-relaxed">
-              The billing audit couldn't run because the AI provider's quota/billing limit was hit. It will work again once the quota resets (or after the API key's billing is topped up). Your invoice data is unaffected.
+              The billing audit couldn't run because the AI provider's quota/billing limit was hit. Each model has a separate daily allowance — pick a different one below and retry, or wait for the quota to reset. Your invoice data is unaffected.
             </p>
           </div>
+
+          {/* Model picker — each Gemini model has its own daily free-tier quota */}
+          <div className="flex items-center justify-center gap-2">
+            <label className="text-[10px] font-semibold text-orange-700/70 dark:text-orange-300/60 uppercase tracking-wide">Model</label>
+            <select
+              value={selectedModel}
+              onChange={e => setModel(e.target.value)}
+              className="text-[11px] rounded-lg border border-orange-300/60 dark:border-orange-700/50 bg-white dark:bg-orange-950/40 text-orange-800 dark:text-orange-200 px-2 py-1 outline-none focus:ring-2 focus:ring-orange-400/40"
+            >
+              {MODEL_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+            </select>
+          </div>
+
           <button
             type="button"
             onClick={() => { setError(null); setForceRefresh(n => n + 1) }}
-            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-orange-700 dark:text-orange-300 border border-orange-300/60 dark:border-orange-700/50 rounded-lg px-3 py-1.5 hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors"
+            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-white bg-orange-600 hover:bg-orange-500 rounded-lg px-4 py-1.5 transition-colors"
           >
-            <RefreshCw className="h-3 w-3" /> Try again
+            <RefreshCw className="h-3 w-3" /> Retry with this model
           </button>
         </div>
       )}

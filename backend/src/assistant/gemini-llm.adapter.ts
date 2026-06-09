@@ -56,7 +56,7 @@ export class GeminiLlmAdapter {
   async generate(
     systemPrompt: string,
     userMessage: string,
-    options?: { temperature?: number; json?: boolean; maxOutputTokens?: number },
+    options?: { temperature?: number; json?: boolean; maxOutputTokens?: number; model?: string },
   ): Promise<string> {
     if (!this.apiKey) {
       this.logger.warn('GEMINI_API_KEY not set — returning stub answer');
@@ -84,10 +84,11 @@ export class GeminiLlmAdapter {
    */
   private async callGenerate(
     parts: any[],
-    options?: { temperature?: number; json?: boolean; maxOutputTokens?: number },
+    options?: { temperature?: number; json?: boolean; maxOutputTokens?: number; model?: string },
   ): Promise<string> {
     const generationConfig = this.buildGenerationConfig(options);
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.llmModel}:generateContent?key=${this.apiKey}`;
+    const model = options?.model || this.llmModel;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.apiKey}`;
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -134,7 +135,7 @@ export class GeminiLlmAdapter {
     userMessage: string,
     fileBase64: string,
     mimeType: string,
-    options?: { temperature?: number; json?: boolean; maxOutputTokens?: number },
+    options?: { temperature?: number; json?: boolean; maxOutputTokens?: number; model?: string },
   ): Promise<string> {
     if (!this.apiKey) {
       this.logger.warn('GEMINI_API_KEY not set — returning stub answer');

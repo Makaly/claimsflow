@@ -7,6 +7,22 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- **Selectable AI model for the billing audit**
+  (`backend/src/assistant/gemini-llm.adapter.ts`,
+  `backend/src/claims/diagnosis-billing.service.ts`,
+  `backend/src/claims/claims.controller.ts`,
+  `frontend/src/components/InvoiceBillingAudit.tsx`) — `generate()` and
+  `generateFromImage()` accept an optional `model` override, threaded through every
+  diagnosis-billing entry point and exposed on the API as `?model=` on
+  `GET /claims/:id/billing-validation` and a `model` field on the inline
+  `assess` / `assess-vision` requests. When a model's daily quota is exhausted the
+  audit's quota notice now offers a model picker (each Gemini model has a separate
+  free-tier allowance); the selection is remembered in `localStorage` and applied
+  to all subsequent requests, so reviewers can switch to an available model and
+  retry without waiting for a quota reset.
+
 ## [2.1.0] - 2026-06-09
 
 ### Added

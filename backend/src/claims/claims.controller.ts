@@ -362,8 +362,12 @@ export class ClaimsController {
   /** Diagnosis-vs-billing correspondence check — works on first upload.
    *  ?refresh=true bypasses the DB cache and re-runs the AI extraction. */
   @Get(':id/billing-validation')
-  getBillingValidation(@Param('id') id: string, @Query('refresh') refresh?: string) {
-    return this.diagnosisBillingService.assessFromClaimData(id, refresh === 'true' || refresh === '1');
+  getBillingValidation(
+    @Param('id') id: string,
+    @Query('refresh') refresh?: string,
+    @Query('model') model?: string,
+  ) {
+    return this.diagnosisBillingService.assessFromClaimData(id, refresh === 'true' || refresh === '1', model);
   }
 
   /** Fill in the gaps for one billing line (missing amount / code / verdict). */
@@ -386,13 +390,13 @@ export class ClaimsController {
   }))
   assessBillingVision(
     @UploadedFile() file: Express.Multer.File,
-    @Body() body: { diagnosis?: string; treatment?: string },
+    @Body() body: { diagnosis?: string; treatment?: string; model?: string },
   ) {
     if (!file?.buffer) {
       throw new BadRequestException('No document file provided');
     }
     return this.diagnosisBillingService.assessFromImageBuffer(
-      file.buffer, file.mimetype, body.diagnosis, body.treatment,
+      file.buffer, file.mimetype, body.diagnosis, body.treatment, body.model,
     );
   }
 
@@ -403,6 +407,7 @@ export class ClaimsController {
     treatment?: string;
     rawText?: string;
     lineItems?: { description: string; procedureCode?: string }[];
+    model?: string;
   }) {
     return this.diagnosisBillingService.assessFromRawData(body);
   }
