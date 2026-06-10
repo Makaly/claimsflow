@@ -219,7 +219,7 @@ export class DiagnosisBillingService {
     // grab of the total, which is often mis-read — so when every line is priced
     // and the sum differs materially, correct the claim amount (with an audit
     // trail) so the two totals always agree.
-    await this.reconcileInvoiceAmount(claimId, result.items, claim.invoiceAmount ?? null);
+    await this.reconcileInvoiceAmount(claimId, result.items, claim.invoiceAmount ?? null, result.totals);
 
     return result;
   }
@@ -490,18 +490,30 @@ export class DiagnosisBillingService {
     claimId: string,
     items: BillingItemAssessment[],
     recordedAmount: number | null,
+    totals?: BillingTotals | null,
   ): Promise<void> {
-    if (!items.length) return;
-    // Trust the sum only when every line carries a positive amount.
-    if (!items.every(i => typeof i.amount === 'number' && (i.amount as number) > 0)) return;
-    const itemsTotal = Math.round(items.reduce((s, i) => s + (i.amount ?? 0), 0) * 100) / 100;
-    if (itemsTotal <= 0) return;
-    if (recordedAmount != null && Math.abs(itemsTotal - recordedAmount) < 1) return; // already agree
+    // The claim amount is what the INSURER is billed. Priority:
+    //   1. sponsorCoverage — the invoice's own "Sponsor Coverage" figure is the
+    //      amount being claimed from the scheme/insurer (the authoritative claim
+    //      amount on Aga Khan-style invoices).
+    //   2. otherwise fall back to the itemised line-item sum (gross), but only
+    //      when every line is priced so a partial extraction never lowers it.
+    let target: number | null = null;
+    let source = '';
+    if (totals?.sponsorCoverage != null && totals.sponsorCoverage > 0) {
+      target = Math.round(totals.sponsorCoverage * 100) / 100;
+      source = 'sponsor-coverage';
+    } else if (items.length && items.every(i => typeof i.amount === 'number' && (i.amount as number) > 0)) {
+      target = Math.round(items.reduce((s, i) => s + (i.amount ?? 0), 0) * 100) / 100;
+      source = 'line-items';
+    }
+    if (target == null || target <= 0) return;
+    if (recordedAmount != null && Math.abs(target - recordedAmount) < 1) return; // already agree
 
     try {
       await this.prisma.claim.update({
         where: { id: claimId },
-        data: { invoiceAmount: itemsTotal },
+        data: { invoiceAmount: target },
       });
       await this.prisma.activityLog.create({
         data: {
@@ -510,11 +522,11 @@ export class DiagnosisBillingService {
           entityId: claimId,
           status: 'success',
           oldValue: { invoiceAmount: recordedAmount } as any,
-          newValue: { invoiceAmount: itemsTotal } as any,
-          metadata: { source: 'diagnosis-billing-audit', lineItems: items.length } as any,
+          newValue: { invoiceAmount: target } as any,
+          metadata: { source: `diagnosis-billing-audit:${source}`, lineItems: items.length } as any,
         },
       }).catch(() => { /* audit log is best-effort */ });
-      this.logger.log(`Reconciled claim ${claimId} invoice amount ${recordedAmount} → ${itemsTotal} (sum of ${items.length} validated lines)`);
+      this.logger.log(`Reconciled claim ${claimId} invoice amount ${recordedAmount} → ${target} (${source})`);
     } catch (err: any) {
       this.logger.warn(`Failed to reconcile invoice amount for ${claimId}: ${err.message}`);
     }
@@ -586,8 +598,8 @@ export class DiagnosisBillingService {
       `   • gross — total billed / subtotal before deductions (labels: Total, Gross, Subtotal, Amount Billed).\n` +
       `   • discount — any rebate or discount taken off the bill.\n` +
       `   • tax — VAT / tax.\n` +
-      `   • sponsorCoverage — amount covered by the sponsor / insurer / scheme (labels: "Sponsor Coverage", Insurer Paid, Scheme, Covered). This is a DEDUCTION from what the patient pays.\n` +
-      `   • netPayable — the FINAL amount payable after deductions (labels: Net, Balance, Amount Due/Payable, Patient Payable).\n` +
+      `   • sponsorCoverage — the amount the sponsor / insurer / scheme covers, i.e. the amount being claimed FROM the insurer. Labels: "Sponsor Coverage", Insurer/Scheme Paid, Covered. The figure usually sits to the RIGHT of the scheme name, on the line(s) under a "Sponsor Coverage:" heading — e.g. "AGRICULTURE AND FOOD AUTHORITY   552,991.82" means sponsorCoverage = 552991.82.\n` +
+      `   • netPayable — the amount the PATIENT pays after the sponsor's share / self-payments (labels: Net, Balance, Amount Due/Payable, Patient Payable).\n` +
       `   • currency — e.g. KES, USD.\n` +
       `3. For each extracted line, judge clinical appropriateness for the diagnosis:\n` +
       `   • "match" — clearly needed for this diagnosis/treatment.\n` +
