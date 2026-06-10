@@ -5,6 +5,8 @@ import { BatchSubmissionController } from './batch-submission.controller';
 import { BatchSubmissionProcessor } from './batch-submission.processor';
 import { BarcodeService } from '../common/services/barcode.service';
 import { PdfWatermarkService } from '../common/services/pdf-watermark.service';
+import { BatchExportService } from './batch-export.service';
+import { SearchablePdfService } from '../ocr/searchable-pdf.service';
 import { OcrModule } from '../ocr/ocr.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { WorkflowModule } from '../workflow/workflow.module';
@@ -24,6 +26,8 @@ import { WorkflowModule } from '../workflow/workflow.module';
     BatchSubmissionProcessor,
     BarcodeService,
     PdfWatermarkService,
+    BatchExportService,
+    SearchablePdfService,
   ],
   exports: [BatchSubmissionService],
 })

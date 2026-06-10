@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Sparkles, Wand2, Loader2 } from 'lucide-react'
-import { jobSetupApi, type JobSetup, type JobSetupField } from '@/services/jobSetupService'
+import { Sparkles, Wand2, Loader2, AlertCircle } from 'lucide-react'
+import { jobSetupApi, validateFieldValues, type JobSetup, type JobSetupField } from '@/services/jobSetupService'
 import { cn } from '@/lib/utils'
 
-type Provenance = Record<string, 'lookup' | 'history' | 'extraction' | 'manual'>
+type Provenance = Record<string, 'lookup' | 'history' | 'extraction' | 'system' | 'manual'>
 
 /**
  * Renders a job setup's custom index fields and auto-populates them:
@@ -18,21 +18,46 @@ export function DynamicIndexForm({
   onChange,
   extracted,
   className,
+  onValidityChange,
 }: {
   setup: JobSetup
   values: Record<string, any>
   onChange: (values: Record<string, any>) => void
   extracted?: Record<string, any>
   className?: string
+  /** Called whenever validation state changes — true when all rules pass. */
+  onValidityChange?: (valid: boolean, errors: Record<string, string>) => void
 }) {
   const [provenance, setProvenance] = useState<Provenance>({})
   const [resolving, setResolving] = useState(false)
   const [warnings, setWarnings] = useState<string[]>([])
+  // Blind re-key confirmations for fields with verifyDoubleKey.
+  const [confirmValues, setConfirmValues] = useState<Record<string, string>>({})
 
   const fields = useMemo(
     () => [...setup.fields].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
     [setup.fields],
   )
+
+  // ── Validation (mirrors the server rules) ───────────────────────────────────
+  const errors = useMemo(() => {
+    const errs = validateFieldValues(fields, values)
+    // Double-key: a verified field must match its blind re-key.
+    for (const f of fields) {
+      if (!f.verifyDoubleKey) continue
+      const v = values[f.key]
+      if (v == null || String(v).trim() === '') continue
+      if (String(confirmValues[f.key] ?? '') !== String(v)) {
+        errs[f.key] = `${f.label || f.key} confirmation does not match`
+      }
+    }
+    return errs
+  }, [fields, values, confirmValues])
+
+  useEffect(() => {
+    onValidityChange?.(Object.keys(errors).length === 0, errors)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [errors])
 
   // Seed extraction-sourced fields from the OCR payload once, when empty.
   useEffect(() => {
@@ -109,6 +134,9 @@ export function DynamicIndexForm({
             value={values[f.key]}
             via={provenance[f.key]}
             setupId={setup.id}
+            error={errors[f.key]}
+            confirmValue={confirmValues[f.key] ?? ''}
+            onConfirmChange={(v) => setConfirmValues((c) => ({ ...c, [f.key]: v }))}
             onChange={(v) => setField(f.key, v)}
             onCommit={() => {
               if (keyFields.has(f.key)) runResolve()
@@ -134,6 +162,7 @@ function viaBadge(via?: string) {
     lookup:     { label: 'looked up',    cls: 'bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400' },
     history:    { label: 'from history', cls: 'bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-400' },
     extraction: { label: 'extracted',    cls: 'bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-400' },
+    system:     { label: 'system',       cls: 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400' },
   }
   const m = map[via]
   if (!m) return null
@@ -150,6 +179,9 @@ function FieldInput({
   value,
   via,
   setupId,
+  error,
+  confirmValue,
+  onConfirmChange,
   onChange,
   onCommit,
 }: {
@@ -157,12 +189,20 @@ function FieldInput({
   value: any
   via?: string
   setupId: string
+  error?: string
+  confirmValue: string
+  onConfirmChange: (v: string) => void
   onChange: (v: any) => void
   onCommit: () => void
 }) {
   const [suggestions, setSuggestions] = useState<string[]>([])
+  const [touched, setTouched] = useState(false)
   const listId = `sugg-${setupId}-${field.key}`
-  const base = 'w-full border rounded px-3 py-1.5 text-sm mt-1 bg-background text-foreground border-input placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring'
+  const showError = touched && !!error
+  const base = cn(
+    'w-full border rounded px-3 py-1.5 text-sm mt-1 bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring',
+    showError ? 'border-destructive' : 'border-input',
+  )
 
   async function loadSuggestions(prefix: string) {
     try {
@@ -181,6 +221,23 @@ function FieldInput({
     </span>
   )
 
+  const commit = () => { setTouched(true); onCommit() }
+  const errorNode = showError ? (
+    <span className="text-[11px] text-destructive flex items-center gap-1 mt-1">
+      <AlertCircle className="h-3 w-3" /> {error}
+    </span>
+  ) : null
+  const confirmNode = field.verifyDoubleKey ? (
+    <input
+      className={cn(base, 'mt-1')}
+      type={field.type === 'number' || field.type === 'currency' ? 'number' : field.type === 'date' ? 'date' : 'text'}
+      placeholder="re-enter to confirm"
+      value={confirmValue}
+      onChange={(e) => onConfirmChange(e.target.value)}
+      onBlur={() => setTouched(true)}
+    />
+  ) : null
+
   if (field.type === 'boolean') {
     return (
       <label className="text-sm flex items-center gap-2 sm:col-span-2">
@@ -192,9 +249,9 @@ function FieldInput({
 
   if (field.type === 'select') {
     return (
-      <label className="text-sm">
+      <label className="text-sm flex flex-col">
         {label}
-        <select className={base} value={value ?? ''} onChange={(e) => { onChange(e.target.value); onCommit() }}>
+        <select className={base} value={value ?? ''} onChange={(e) => { onChange(e.target.value); commit() }}>
           <option value="">—</option>
           {(field.options ?? []).map((o) => (
             <option key={o.value} value={o.value}>
@@ -202,13 +259,14 @@ function FieldInput({
             </option>
           ))}
         </select>
+        {errorNode}
       </label>
     )
   }
 
   if (field.type === 'textarea') {
     return (
-      <label className="text-sm sm:col-span-2">
+      <label className="text-sm sm:col-span-2 flex flex-col">
         {label}
         <textarea
           className={cn(base, 'resize-none')}
@@ -216,8 +274,9 @@ function FieldInput({
           placeholder={field.placeholder ?? ''}
           value={value ?? ''}
           onChange={(e) => onChange(e.target.value)}
-          onBlur={onCommit}
+          onBlur={commit}
         />
+        {errorNode}
       </label>
     )
   }
@@ -225,7 +284,7 @@ function FieldInput({
   const inputType = field.type === 'number' || field.type === 'currency' ? 'number' : field.type === 'date' ? 'date' : 'text'
 
   return (
-    <label className="text-sm">
+    <label className="text-sm flex flex-col">
       {label}
       <input
         className={base}
@@ -238,7 +297,7 @@ function FieldInput({
           if (inputType === 'text') loadSuggestions(e.target.value)
         }}
         onFocus={() => inputType === 'text' && loadSuggestions('')}
-        onBlur={onCommit}
+        onBlur={commit}
       />
       {suggestions.length > 0 && (
         <datalist id={listId}>
@@ -247,6 +306,8 @@ function FieldInput({
           ))}
         </datalist>
       )}
+      {confirmNode}
+      {errorNode}
     </label>
   )
 }

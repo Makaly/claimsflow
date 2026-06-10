@@ -18,7 +18,7 @@ import {
   Underline, Strikethrough, ChevronDown, Save, MapPin,
   Copy, Check, AlertTriangle, Trash2,
   ScanLine, Printer, RefreshCw, WifiOff, Wifi, Camera, CameraOff,
-  Layers, FileX, RotateCw, FileStack,
+  Layers, FileX, RotateCw, FileStack, FileOutput,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -45,6 +45,7 @@ import api from '@/services/api'
 import { JobSetupPicker } from '@/components/JobSetupPicker'
 import { DynamicIndexForm } from '@/components/DynamicIndexForm'
 import { jobSetupApi, type JobSetup } from '@/services/jobSetupService'
+import { batchService } from '@/services/batchService'
 import { useScanMetering } from '@/hooks/useScanMetering'
 import { getDeviceInfo as getDeviceInfoForScan } from '@/lib/deviceInfo'
 import InvoiceBillingAudit from '@/components/InvoiceBillingAudit'
@@ -1742,13 +1743,14 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId, jobSetup }: {
                   {/* Unified audit: each receipt item + diagnosis match */}
                   <div className="mx-3">
                     {doc.dbId
-                      ? <InvoiceBillingAudit claimId={doc.dbId} />
+                      ? <InvoiceBillingAudit claimId={doc.dbId} invoiceAmount={parseFloat(edit.invoiceAmount) || doc.invoiceAmount} />
                       : <InvoiceBillingAudit
                           diagnosis={edit.diagnosis}
                           treatment={edit.treatment}
                           lineItems={items}
                           rawText={doc.rawText}
                           fileUrl={doc.fileUrl}
+                          invoiceAmount={parseFloat(edit.invoiceAmount) || doc.invoiceAmount}
                         />
                     }
                   </div>
@@ -2271,6 +2273,8 @@ export default function BatchUpload() {
   }, [session?.jobSetupId])
   const [currentExtractIndex, setCurrentExtractIndex] = useState(0)
   const [publishProgress, setPublishProgress] = useState(0)
+  const [publishedBatchNumber, setPublishedBatchNumber] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
   const [publishValidationErrors, setPublishValidationErrors] = useState<Record<string, string[]>>({})
   const [previewDoc, setPreviewDoc] = useState<ExtractedClaim | null>(null)
   const previewDocRef = useRef<ExtractedClaim | null>(null) // latest modal state for publish flush
@@ -2480,6 +2484,7 @@ export default function BatchUpload() {
     } catch {
       batchNumber = _fallbackBatchNumber()
     }
+    setPublishedBatchNumber(batchNumber)
 
     try {
       const { data: savedClaim } = await api.post('/claims', {
@@ -3440,6 +3445,7 @@ export default function BatchUpload() {
     } catch {
       batchNumber = _fallbackBatchNumber()
     }
+    setPublishedBatchNumber(batchNumber)
 
     const uploadedBy = user?.email || user?.name || 'unknown'
     const working = claims.map(c => ({ ...c }))
@@ -4848,6 +4854,17 @@ export default function BatchUpload() {
                         <p className="font-medium text-emerald-800 dark:text-emerald-300">All {claims.length} claims published successfully!</p>
                         <p className="text-sm text-emerald-600 dark:text-emerald-400">Claims are now visible in the Claims page for processing. Resetting for new upload in a moment…</p>
                       </div>
+                      {publishedBatchNumber && (
+                        <Button size="sm" variant="outline" disabled={exporting} className="shrink-0 border-emerald-400 text-emerald-800 dark:text-emerald-300"
+                          onClick={async () => {
+                            setExporting(true)
+                            try { await batchService.exportBatch(publishedBatchNumber) }
+                            catch (e) { console.error('Export failed', e) }
+                            finally { setExporting(false) }
+                          }}>
+                          <FileOutput className="mr-1 h-3 w-3" /> {exporting ? 'Exporting…' : 'Export batch'}
+                        </Button>
+                      )}
                       <Button size="sm" variant="outline" className="shrink-0 border-emerald-400 text-emerald-800 dark:text-emerald-300"
                         onClick={resetAll}>
                         <Upload className="mr-1 h-3 w-3" /> Upload New Batch

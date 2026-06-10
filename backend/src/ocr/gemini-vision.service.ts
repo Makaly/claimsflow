@@ -68,6 +68,58 @@ export async function buildPageHintsMap(pdfPath: string): Promise<Map<number, Pa
   return parsePageHints(text);
 }
 
+// ── Per-page document categories from the page pre-scan ───────────────────────
+// Gemini's JSON schema doesn't classify pages, so we derive the same per-page
+// categories (Invoice / Auth Letter / Discharge Summary …) Claude returns from
+// the digital-text page pre-scan that already runs for every PDF. This keeps
+// document categorization working regardless of the chosen vision model.
+
+/** Map a page pre-scan entry to a DocumentPage category + human label. */
+function hintToCategory(e: PageHintEntry): { category: ParsedInvoice['documentPages'][number]['category']; categoryLabel: string } {
+  const t = (e.rawType || '').toUpperCase();
+  if (e.isMcf || t.includes('MEDICAL CLAIM FORM')) return { category: 'claim_form', categoryLabel: 'Medical Claim Form' };
+  if (t.includes('DISCHARGE SUMMARY'))             return { category: 'discharge_summary', categoryLabel: 'Discharge Summary' };
+  if (t.includes('AUTHORIZATION LETTER') || t.includes('AUTH LETTER')) return { category: 'pre_auth', categoryLabel: 'Authorization Letter' };
+  if (t.includes('LAB RESULT') || t.includes('LABORATORY'))           return { category: 'lab_result', categoryLabel: 'Lab Results' };
+  if (t.includes('REFERRAL'))                      return { category: 'referral', categoryLabel: 'Referral Letter' };
+  if (t.includes('PRESCRIPTION'))                  return { category: 'prescription', categoryLabel: 'Prescription' };
+  if (t.includes('INVOICE'))                       return { category: 'invoice', categoryLabel: t.includes('CONTINUATION') ? 'Invoice (cont.)' : 'Invoice' };
+  if (t.includes('SCANNED'))                       return { category: 'unknown', categoryLabel: 'Scanned Page' };
+  return { category: 'unknown', categoryLabel: 'Document' };
+}
+
+/** Expand a pageRange like "1-5" or "7" into the explicit page numbers. */
+function pageRangeToNums(range?: string): number[] {
+  if (!range) return [];
+  const m = String(range).match(/^\s*(\d+)\s*-\s*(\d+)\s*$/);
+  if (m) { const a = +m[1], b = +m[2]; return a <= b ? Array.from({ length: b - a + 1 }, (_, i) => a + i) : []; }
+  const n = parseInt(String(range), 10);
+  return Number.isFinite(n) ? [n] : [];
+}
+
+/** Build DocumentPage[] from the page-hint map for the given pages (all if omitted). */
+export function documentPagesFromHints(
+  hints: Map<number, PageHintEntry>,
+  pageNumbers?: number[],
+): ParsedInvoice['documentPages'] {
+  if (!hints.size) return [];
+  const nums = (pageNumbers && pageNumbers.length ? pageNumbers : [...hints.keys()]).sort((a, b) => a - b);
+  const out: ParsedInvoice['documentPages'] = [];
+  for (const pg of nums) {
+    const e = hints.get(pg);
+    if (!e) continue;
+    const { category, categoryLabel } = hintToCategory(e);
+    out.push({
+      pageNumber: pg,
+      category,
+      categoryLabel,
+      confidence: 0.75,
+      summary: (e.rawType || '').replace(/\*+/g, '').replace(/\s{2,}/g, ' ').trim(),
+    });
+  }
+  return out;
+}
+
 // In-process promise cache: re-uses the in-flight result when the same PDF is
 // processed by multiple providers simultaneously (e.g. Claude + Gemini racing).
 // Entries auto-evict after 10 minutes; uploads use unique timestamped paths so
@@ -452,6 +504,10 @@ Return one entry per distinct claim.`;
     if (!claims?.length) return [];
     this.logger.log(`Gemini identified ${claims.length} claim packet(s)`);
 
+    // Derive per-page categories from the page pre-scan so each split claim
+    // carries its document categories (Gemini's schema doesn't classify pages).
+    const hintsMap = parsePageHints(pageHints);
+
     const DIAGNOSIS_NOISE = /\b(DETAILED\s+)?INVOICE\b|\bDETAILED\b|\bMEDICAL CLAIM FORM\b/gi;
     return claims.map((c: any): ParsedInvoice => ({
       patientName:      c.patientName      || '',
@@ -475,7 +531,7 @@ Return one entry per distinct claim.`;
       confidence:       Math.max(0, Math.min(1, Number(c.confidence) || 0.8)),
       rawText:          '',
       pageRange:        c.pageRange || '1',
-      documentPages:    [],
+      documentPages:    documentPagesFromHints(hintsMap, pageRangeToNums(c.pageRange)),
     }));
   }
 
@@ -487,6 +543,12 @@ Return one entry per distinct claim.`;
     const isPdf = mimetype === 'application/pdf' || filePath.endsWith('.pdf');
     const effectiveMime = isPdf ? 'application/pdf' : (mimetype || 'image/png');
     const b64 = fs.readFileSync(filePath).toString('base64');
+
+    // Per-page categories from the digital-text page pre-scan (PDFs only) — so
+    // the published claim retains document categories even on the Gemini path.
+    const docPages = isPdf
+      ? documentPagesFromHints(parsePageHints(await buildPageContextHints(filePath)))
+      : [];
 
     this.logger.log(`Gemini extracting with model=${modelId} (${isPdf ? 'pdf' : 'image'})`);
 
@@ -540,8 +602,8 @@ Return one entry per distinct claim.`;
       accountName:      fields.accountName      || '',
       confidence:       Math.max(0, Math.min(1, Number(fields.confidence) || 0.85)),
       rawText:          '',
-      pageRange:        '1',
-      documentPages:    [],
+      pageRange:        docPages.length ? `1-${docPages.length}` : '1',
+      documentPages:    docPages,
     };
   }
 }

@@ -43,12 +43,26 @@ export class JobSetupController {
   @Post(':id/resolve')
   resolve(
     @Param('id') id: string,
-    @Body() body: { values: Record<string, any>; onlyField?: string; useHistory?: boolean },
+    @Body()
+    body: {
+      values: Record<string, any>;
+      onlyField?: string;
+      useHistory?: boolean;
+      context?: { batchName?: string; operator?: string; pageCount?: number; barcode?: string };
+    },
   ) {
     return this.service.resolve(id, body?.values ?? {}, {
       onlyField: body?.onlyField,
       useHistory: body?.useHistory,
+      context: body?.context,
     });
+  }
+
+  /** Validate a value set against this setup's field rules. Returns field errors. */
+  @Post(':id/validate')
+  async validate(@Param('id') id: string, @Body() body: { values: Record<string, any> }) {
+    const errors = await this.service.validate(id, body?.values ?? {});
+    return { valid: errors.length === 0, errors };
   }
 
   /** Record confirmed values into this setup's ISOLATED knowledge base. */

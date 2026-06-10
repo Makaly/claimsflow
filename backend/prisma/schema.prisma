@@ -578,6 +578,8 @@ model Claim {
   billingAuditScore       Float?               // 0-1 overall appropriateness
   billingAuditSummary     String?              // 1-2 sentence human-readable verdict
   billingAuditItems       Json?                // BillingItemAssessment[] — per-item results
+  billingAuditTotals      Json?                // BillingTotals — gross/discount/tax/sponsor/net
+  billingAuditDxInferred  Boolean?             // diagnosis was read off the invoice, not recorded
   billingAuditAt          DateTime?            // when the assessment was last run
   cases                   Case[]
   label                   ClaimLabel?
@@ -737,6 +739,7 @@ model OcrExtraction {
   overallConfidence Float?
   fieldConfidences  Json?
   fieldAnnotations  Json?     // Array<{fieldName, label, value, confidence, page, bbox:{x,y,w,h}}>
+  documentPages     Json?     @default("[]") // Per-page classification: Array<{pageNumber, category, categoryLabel, confidence, summary}>
   ocrEngine         String?
   ocrEngineVersion  String?
   templateUsed      String?
@@ -1985,22 +1988,49 @@ model JobSetup {
   /// Auto-suggest field values from THIS setup's own confirmed history.
   autoPopulateFromHistory Boolean             @default(true)
   sortOrder               Int                 @default(0)
+  /// Document/batch naming patterns with tokens: {counter} {date} {field:key}.
+  /// { batchPattern?, documentPattern? }
+  naming                  Json?
+  /// Scan/image capture settings (DPI, color mode, deskew, blank-page drop…).
+  captureSettings         Json?
+  /// Document separation rules (method + params).
+  separationRules         Json?
+  /// Export destinations produced for a completed batch.
+  outputTargets           Json?
   createdBy               String?
   createdAt               DateTime            @default(now())
   updatedAt               DateTime            @updatedAt
   fields                  JobSetupField[]
   knowledge               JobSetupKnowledge[]
+  counters                JobSetupCounter[]
 
   @@index([slug])
   @@index([isActive])
   @@map("job_setups")
 }
 
+/// Atomic, named sequence counters per JobSetup (batch number, doc number,
+/// arbitrary field sequences). Incremented inside a transaction so concurrent
+/// batches never collide on a value.
+model JobSetupCounter {
+  id         String   @id @default(uuid())
+  jobSetupId String
+  name       String
+  value      Int      @default(0)
+  updatedAt  DateTime @updatedAt
+  jobSetup   JobSetup @relation(fields: [jobSetupId], references: [id], onDelete: Cascade)
+
+  @@unique([jobSetupId, name])
+  @@map("job_setup_counters")
+}
+
 /// One user-defined index field on a JobSetup.
-/// source = manual | extraction | lookup. When source=extraction, extractionKey
-/// maps to a key on the OCR/ParsedInvoice payload. When auto-populate is on, a
-/// change to lookupKeyField triggers a lookup against lookupSourceId and the
-/// lookupReturn column fills this field.
+/// source = manual | extraction | lookup | system | barcode | ocrZone.
+/// When source=extraction, extractionKey maps to a key on the OCR/ParsedInvoice
+/// payload. When source=system, systemValue names a runtime value (date, batch
+/// counter, page count…). When auto-populate is on, a change to lookupKeyField
+/// triggers a lookup against lookupSourceId and the lookupReturn column fills
+/// this field.
 model JobSetupField {
   id              String   @id @default(uuid())
   jobSetupId      String
@@ -2013,14 +2043,25 @@ model JobSetupField {
   defaultValue    String?
   options         Json     @default("[]") // select options: [{ value, label }]
   validationRegex String?
-  source          String   @default("manual") // manual|extraction|lookup
+  /// Richer validation block (merged with validationRegex):
+  /// { regex?, message?, min?, max?, minLength?, maxLength? }
+  validation      Json?
+  /// Input mask hint, e.g. "###-##-####" (# = digit, A = letter, * = any).
+  inputMask       String?
+  source          String   @default("manual") // manual|extraction|lookup|system|barcode|ocrZone
   extractionKey   String?
+  /// When source=system: date|time|datetime|batchName|batchCounter|docCounter|pageCount|sequence|operator
+  systemValue     String?
+  /// When source=ocrZone: { page, xPercent, yPercent, widthPercent, heightPercent, searchPhrase?, engine? }
+  zone            Json?
   lookupSourceId  String?
   lookupKeyField  String? // key of the field whose value is the lookup key
   lookupReturn    String? // which column of the lookup result fills this field
   autoPopulate    Boolean  @default(false)
   /// Marks a field whose value is a lookup key that triggers populating others.
   isKey           Boolean  @default(false)
+  /// Require blind re-keying of this field to confirm it (double-key verify).
+  verifyDoubleKey Boolean  @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   jobSetup        JobSetup @relation(fields: [jobSetupId], references: [id], onDelete: Cascade)

@@ -461,6 +461,7 @@ export default function Claims() {
       chiefComplaint?: string; diagnosis?: string; treatment?: string
       medications?: string[]; labResults?: string; doctorNotes?: string
     }
+    documentPages?: Array<{ pageNumber: number; category: string; categoryLabel: string; confidence?: number; summary?: string }>
     status: string | null
   } | null>(null)
 
@@ -2281,7 +2282,7 @@ export default function Claims() {
                       <TabsContent value="billing" className="px-2.5 pb-3 mt-2.5 data-[state=inactive]:hidden space-y-3">
 
                       {/* Unified billing audit: receipt items + diagnosis correspondence + fraud signals */}
-                      <InvoiceBillingAudit claimId={selectedClaim.id} />
+                      <InvoiceBillingAudit claimId={selectedClaim.id} invoiceAmount={selectedClaim.invoiceAmount ?? undefined} />
 
                       {/* Granular per-line-item table with arithmetic + price ceiling checks.
                           hideWhenEmpty: the billing audit above already lists the items, so an
@@ -2617,6 +2618,7 @@ export default function Claims() {
           claimId={selectedClaim?.id}
           barcode={selectedClaim?.barcode}
           ocrFields={ocrData?.fields ?? []}
+          documentPages={ocrData?.documentPages ?? []}
           onClose={() => { setViewerOpen(false) }}
         />
       )}

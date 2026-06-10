@@ -76,6 +76,21 @@ interface DocumentViewerProps {
   claimId?: string   // when set: annotations are loaded from + saved to the DB
   barcode?: string   // claim barcode — used as primary annotation storage key
   ocrFields?: OcrField[]  // extracted field chips shown in the bottom strip
+  // Per-page document classification — tags each thumbnail with its category
+  // (Invoice / Authorization Letter / Discharge Summary …).
+  documentPages?: Array<{ pageNumber: number; category: string; categoryLabel: string; confidence?: number; summary?: string }>
+}
+
+// Thumbnail category colours — kept in sync with BatchUpload's strip.
+const THUMB_CAT_COLORS: Record<string, string> = {
+  invoice:          'bg-blue-500/80 text-white',
+  claim_form:       'bg-purple-500/80 text-white',
+  prescription:     'bg-green-500/80 text-white',
+  lab_result:       'bg-orange-500/80 text-white',
+  medical_report:   'bg-teal-500/80 text-white',
+  discharge_summary:'bg-cyan-500/80 text-white',
+  referral:         'bg-indigo-500/80 text-white',
+  pre_auth:         'bg-amber-500/80 text-white',
 }
 
 // Module-level sets that persist across React Strict Mode double-mounts.
@@ -579,7 +594,7 @@ function dataUrlToBytes(dataUrl: string): Uint8Array {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export function DocumentViewer({ bytes, url, ready = true, filename = 'document', mimeType, onClose, claimId, barcode, ocrFields = [] }: DocumentViewerProps) {
+export function DocumentViewer({ bytes, url, ready = true, filename = 'document', mimeType, onClose, claimId, barcode, ocrFields = [], documentPages = [] }: DocumentViewerProps) {
   // PDF state
   const [pdfDoc, setPdfDoc]   = useState<pdfjsLib.PDFDocumentProxy | null>(null)
   const [pageNum, setPageNum] = useState(1)
@@ -1262,20 +1277,32 @@ export function DocumentViewer({ bytes, url, ready = true, filename = 'document'
       <div className="flex-1 overflow-hidden flex" style={{ minHeight: 0 }}>
 
         {/* Thumbnail strip */}
-        {isPdf && numPages > 1 && (
+        {isPdf && numPages > 1 && (() => {
+          const pageMap = Object.fromEntries(documentPages.map(p => [p.pageNumber, p]))
+          return (
           <div className="w-[88px] shrink-0 bg-muted/40 border-r overflow-y-auto py-2 space-y-2">
-            {Array.from({ length: numPages }).map((_, i) => (
-              <button key={i} onClick={() => setPageNum(i+1)} className="w-full px-2 flex flex-col items-center gap-1 group">
-                <div className={`w-full rounded overflow-hidden ring-2 transition-all ${pageNum===i+1 ? 'ring-primary' : 'ring-transparent group-hover:ring-muted-foreground/30'}`}>
+            {Array.from({ length: numPages }).map((_, i) => {
+              const pg = pageMap[i + 1]
+              return (
+              <button key={i} onClick={() => setPageNum(i+1)} className="w-full px-2 flex flex-col items-center gap-1 group"
+                title={pg ? `${pg.categoryLabel}${pg.summary ? ` — ${pg.summary}` : ''}` : undefined}>
+                <div className={`relative w-full rounded overflow-hidden ring-2 transition-all ${pageNum===i+1 ? 'ring-primary' : 'ring-transparent group-hover:ring-muted-foreground/30'}`}>
                   {thumbs[i]
                     ? <img src={thumbs[i]} alt={`p${i+1}`} className="w-full block" />
                     : <div className="aspect-[3/4] bg-muted flex items-center justify-center"><Loader2 className="h-3 w-3 animate-spin text-muted-foreground" /></div>}
+                  {pg && (
+                    <span className={`absolute bottom-0 inset-x-0 text-center text-[7px] font-semibold leading-tight py-0.5 px-1 truncate ${THUMB_CAT_COLORS[pg.category] ?? 'bg-gray-500/80 text-white'}`}>
+                      {pg.categoryLabel}
+                    </span>
+                  )}
                 </div>
                 <span className={`text-[9px] tabular-nums ${pageNum===i+1 ? 'text-primary font-bold' : 'text-muted-foreground'}`}>{i+1}</span>
               </button>
-            ))}
+              )
+            })}
           </div>
-        )}
+          )
+        })()}
 
         {/* Center: canvas + toolbar */}
         <div className="flex-1 flex flex-col overflow-hidden" style={{ minWidth: 0 }}>

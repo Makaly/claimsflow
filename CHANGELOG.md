@@ -9,19 +9,87 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
-- **Selectable AI model for the billing audit**
-  (`backend/src/assistant/gemini-llm.adapter.ts`,
+- **Per-page document categories on the Gemini path**
+  (`backend/src/ocr/gemini-vision.service.ts`) — Gemini's extraction schema
+  doesn't classify pages, so its `documentPages` always came back empty and
+  documents extracted with Gemini showed no category tags. It now derives the
+  same per-page categories (Invoice / Authorization Letter / Discharge Summary /
+  Lab Results / Medical Claim Form …) Claude produces, by reusing the
+  digital-text page pre-scan that already runs for every PDF — so document
+  categorization works regardless of the chosen vision model. Covered by unit
+  tests for the Aga Khan inpatient layout.
+
+- **Starter Document Classifier templates** (`backend/prisma/seed-classifier-templates.ts`)
+  — the classifier list was empty (`Template cache hit (0 templates)`), so no
+  document could be matched/categorized. A seed script adds starter templates for
+  the common document types (Aga Khan inpatient invoice, Zion outpatient invoice,
+  AAR authorization letter, discharge summary, AAR medical claim form). Zones are
+  refined afterwards in Settings → Document Classifiers.
+
+- **Job Setups: full capture → separate → index → validate → output pipeline**
+  (`backend/prisma/schema.prisma`,
+  `backend/prisma/migrations/20260609130000_add_jobsetup_capture_index_fields/`,
+  `backend/prisma/migrations/20260609131000_add_jobsetup_pipeline_config/`,
+  `backend/src/job-setup/`, `backend/src/ocr/`, `backend/src/batch-submission/`,
+  `frontend/src/pages/JobSetups.tsx`, `frontend/src/components/DynamicIndexForm.tsx`) —
+  a Job Setup is now a complete document-capture profile, configured from a tabbed
+  editor (General · Capture · Separation · Index Fields · OCR Zones · Output):
+  - **Field validation is enforced** (previously stored but ignored): required,
+    regex, numeric/date range, min/max length, and input masks (`#` digit, `A`
+    letter, `*` any) — the same rules run client-side before submit and server-side
+    via `POST /job-setups/:id/validate`.
+  - **New field sources** — `system` (current date/time, batch/document counters,
+    page count, operator), `barcode`, and `ocrZone`; plus per-field default values
+    and **double-key (blind re-key) verification**.
+  - **OCR Zones** — bind an index field to a page region by drawing a box on a
+    sample page; values are read at extraction time and written to
+    `OcrExtraction.customFields`.
+  - **Document separation** — split a multi-page upload into separate claims by
+    fixed page count, blank page, or header phrase.
+  - **Output/Export** — `GET /batch-submissions/:id/export` streams a zip of
+    CSV / XML / JSON index files plus optional searchable-PDF renders, with
+    configurable file-name patterns (`{batchName}`, `{date}`, `{docCounter}`,
+    `{field:KEY}`) and per-field subfoldering.
+  - **Capture settings** — deskew, auto-crop, grayscale, despeckle, and DPI
+    normalization applied to image uploads before extraction.
+  - Atomic per-setup sequence counters (`JobSetupCounter`) back the counter system
+    values and document naming. See `backend/docs/JOB_SETUPS.md`.
+
+- **Per-page document categories in the full DocumentViewer**
+  (`backend/prisma/schema.prisma`,
+  `backend/prisma/migrations/20260609120000_add_documentpages_to_ocr_extraction/`,
+  `backend/src/ocr/ocr.processor.ts`, `backend/src/claims/claims.service.ts`,
+  `frontend/src/pages/Claims.tsx`, `frontend/src/components/DocumentViewer.tsx`) —
+  the vision model's per-page classification (Invoice / Authorization Letter /
+  Discharge Summary / Prescription / Lab Result …) is now persisted on
+  `OcrExtraction.documentPages` (previously kept only on draft uploads), returned
+  by `GET /claims/:id/ocr-fields`, and rendered as a coloured tag on every page
+  thumbnail in the full-screen DocumentViewer — matching the tags already shown in
+  the Batch Upload strip. Categories repopulate the next time a claim is extracted.
+
+- **Multi-provider AI model selection for the billing audit**
+  (`backend/src/assistant/llm.types.ts`, `backend/src/assistant/claude-llm.adapter.ts`,
+  `backend/src/assistant/ollama-llm.adapter.ts`, `backend/src/assistant/llm-router.service.ts`,
+  `backend/src/assistant/gemini-llm.adapter.ts`, `backend/src/assistant/assistant.module.ts`,
   `backend/src/claims/diagnosis-billing.service.ts`,
   `backend/src/claims/claims.controller.ts`,
-  `frontend/src/components/InvoiceBillingAudit.tsx`) — `generate()` and
-  `generateFromImage()` accept an optional `model` override, threaded through every
-  diagnosis-billing entry point and exposed on the API as `?model=` on
-  `GET /claims/:id/billing-validation` and a `model` field on the inline
-  `assess` / `assess-vision` requests. When a model's daily quota is exhausted the
-  audit's quota notice now offers a model picker (each Gemini model has a separate
-  free-tier allowance); the selection is remembered in `localStorage` and applied
-  to all subsequent requests, so reviewers can switch to an available model and
-  retry without waiting for a quota reset.
+  `frontend/src/components/InvoiceBillingAudit.tsx`) — the diagnosis-billing audit
+  now offers the **same model menu as the Batch Upload extractor** (`GET /ocr/models`):
+  Claude (Opus 4.7 / Sonnet 4.6 / Haiku 4.5), Gemini (2.5 Pro / 2.5 Flash /
+  2.0 Flash) and local Ollama (Llama 3.2 Vision / Moondream). A new
+  `LlmRouterService` parses a `provider:model` id and dispatches text and
+  multimodal calls to the matching adapter, mirroring the OCR `VisionRouterService`.
+  New `ClaudeLlmAdapter` and `OllamaLlmAdapter` implement the shared `LlmAdapter`
+  contract (`generate` / `generateFromImage`) — Claude via the Anthropic SDK,
+  Ollama via the local `/api/chat` endpoint — and, like the Gemini adapter, throw
+  quota-tagged errors so the audit's quota notice can suggest switching providers.
+  The billing component fetches the model list from `/ocr/models`, disables
+  providers whose credentials/runtime are missing, and threads the chosen `model`
+  through every endpoint (`?model=` on `GET /claims/:id/billing-validation`; a
+  `model` field on `assess`, `assess-vision` and `enrich-item`). The selection is
+  remembered in `localStorage`. Each cloud model has a separate daily free-tier
+  allowance, so reviewers can switch to an available model and retry without
+  waiting for a quota reset.
 
 ## [2.1.0] - 2026-06-09
 

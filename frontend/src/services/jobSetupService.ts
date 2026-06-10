@@ -3,7 +3,36 @@ import api from './api'
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type FieldType = 'text' | 'number' | 'date' | 'select' | 'currency' | 'boolean' | 'textarea'
-export type FieldSource = 'manual' | 'extraction' | 'lookup'
+export type FieldSource = 'manual' | 'extraction' | 'lookup' | 'system' | 'barcode' | 'ocrZone'
+export type SystemValue =
+  | 'date' | 'time' | 'datetime' | 'batchName' | 'batchCounter' | 'docCounter'
+  | 'pageCount' | 'sequence' | 'operator'
+
+export const SYSTEM_VALUE_LABELS: Record<SystemValue, string> = {
+  date: 'Current date', time: 'Current time', datetime: 'Date + time',
+  batchName: 'Batch name', batchCounter: 'Batch counter', docCounter: 'Document counter',
+  pageCount: 'Page count', sequence: 'Sequence number', operator: 'Operator name',
+}
+
+export interface FieldValidation {
+  regex?: string
+  message?: string
+  min?: number
+  max?: number
+  minLength?: number
+  maxLength?: number
+}
+
+/** A rectangular OCR zone bound to a field (percentage coords, 0–100). */
+export interface FieldZone {
+  page?: number
+  xPercent: number
+  yPercent: number
+  widthPercent: number
+  heightPercent: number
+  searchPhrase?: string
+  engine?: string
+}
 export type SourceType =
   | 'member_policy'
   | 'provider'
@@ -25,13 +54,18 @@ export interface JobSetupField {
   defaultValue?: string | null
   options?: { value: string; label: string }[]
   validationRegex?: string | null
+  validation?: FieldValidation | null
+  inputMask?: string | null
   source: FieldSource
   extractionKey?: string | null
+  systemValue?: SystemValue | null
+  zone?: FieldZone | null
   lookupSourceId?: string | null
   lookupKeyField?: string | null
   lookupReturn?: string | null
   autoPopulate?: boolean
   isKey?: boolean
+  verifyDoubleKey?: boolean
 }
 
 export interface JobSetup {
@@ -47,8 +81,54 @@ export interface JobSetup {
   learningEnabled: boolean
   autoPopulateFromHistory: boolean
   sortOrder: number
+  naming?: { batchPattern?: string; documentPattern?: string } | null
+  captureSettings?: CaptureSettings | null
+  separationRules?: SeparationRules | null
+  outputTargets?: OutputTarget[] | null
   fields: JobSetupField[]
   _count?: { knowledge: number }
+}
+
+export interface CaptureSettings {
+  dpi?: number
+  colorMode?: 'bw' | 'gray' | 'color'
+  duplex?: boolean
+  pageSize?: string
+  deskew?: boolean
+  despeckle?: boolean
+  autoCrop?: boolean
+  blankPageRemoval?: { enabled?: boolean; threshold?: number }
+  borderCrop?: boolean
+  holeFill?: boolean
+  imprintText?: string
+}
+
+export type SeparationMethod =
+  | 'none' | 'fixedCount' | 'blankPage' | 'barcode' | 'patchcode' | 'ocrPhrase'
+
+export interface SeparationRules {
+  method: SeparationMethod
+  pagesPerDoc?: number
+  barcodePrefix?: string
+  ocrPhrase?: string
+  maxPages?: number
+}
+
+export type OutputFormat = 'csv' | 'xml' | 'json' | 'searchablePdf'
+
+export interface OutputTarget {
+  id: string
+  type: OutputFormat
+  namePattern?: string
+  subfolderBy?: string
+  destination?: string
+  fields?: string[]
+}
+
+export interface FieldError {
+  field: string
+  label: string
+  message: string
 }
 
 export interface LookupSource {
@@ -110,8 +190,10 @@ export const jobSetupApi = {
     api.patch<JobSetup>(`/job-setups/${id}`, body).then((r) => r.data),
   remove: (id: string) => api.delete(`/job-setups/${id}`).then((r) => r.data),
   clone: (id: string) => api.post(`/job-setups/${id}/clone`).then((r) => r.data),
-  resolve: (id: string, values: Record<string, any>, onlyField?: string) =>
-    api.post<ResolveResult>(`/job-setups/${id}/resolve`, { values, onlyField }).then((r) => r.data),
+  resolve: (id: string, values: Record<string, any>, onlyField?: string, context?: Record<string, any>) =>
+    api.post<ResolveResult>(`/job-setups/${id}/resolve`, { values, onlyField, context }).then((r) => r.data),
+  validate: (id: string, values: Record<string, any>) =>
+    api.post<{ valid: boolean; errors: FieldError[] }>(`/job-setups/${id}/validate`, { values }).then((r) => r.data),
   learn: (id: string, values: Record<string, any>) =>
     api.post(`/job-setups/${id}/learn`, { values }).then((r) => r.data),
   suggest: (id: string, field: string, prefix = '') =>
@@ -152,4 +234,58 @@ export const lookupApi = {
     api
       .get(`/lookups/query?sourceId=${encodeURIComponent(sourceId)}&key=${encodeURIComponent(key)}`)
       .then((r) => r.data),
+}
+
+// ── Client-side validation (mirrors backend JobSetupService.validateValues) ─────
+// Same rules run here (before submit) and on the server (on publish). # = digit,
+// A = letter, * = any in a mask; everything else is a literal.
+function matchesMask(val: string, mask: string): boolean {
+  if (val.length !== mask.length) return false
+  for (let i = 0; i < mask.length; i++) {
+    const m = mask[i]
+    const c = val[i]
+    if (m === '#' && !/[0-9]/.test(c)) return false
+    if (m === 'A' && !/[A-Za-z]/.test(c)) return false
+    if (m === '*') continue
+    if (m !== '#' && m !== 'A' && m !== '*' && c !== m) return false
+  }
+  return true
+}
+
+export function validateFieldValues(
+  fields: JobSetupField[],
+  values: Record<string, any>,
+): Record<string, string> {
+  const errors: Record<string, string> = {}
+  const isEmpty = (v: any) => v === null || v === undefined || String(v).trim() === ''
+  for (const f of fields) {
+    const raw = values?.[f.key]
+    const label = f.label || f.key
+    if (isEmpty(raw)) {
+      if (f.required) errors[f.key] = `${label} is required`
+      continue
+    }
+    const val = String(raw)
+    const rules = f.validation ?? {}
+    if (f.type === 'number' || f.type === 'currency') {
+      const num = Number(val.replace(/[^0-9.\-]/g, ''))
+      if (Number.isNaN(num)) { errors[f.key] = `${label} must be a number`; continue }
+      if (rules.min != null && num < Number(rules.min)) errors[f.key] = `${label} must be ≥ ${rules.min}`
+      else if (rules.max != null && num > Number(rules.max)) errors[f.key] = `${label} must be ≤ ${rules.max}`
+    }
+    if (f.type === 'date' && Number.isNaN(Date.parse(val))) { errors[f.key] = `${label} is not a valid date`; continue }
+    if (rules.minLength != null && val.length < Number(rules.minLength))
+      errors[f.key] = `${label} must be at least ${rules.minLength} characters`
+    else if (rules.maxLength != null && val.length > Number(rules.maxLength))
+      errors[f.key] = `${label} must be at most ${rules.maxLength} characters`
+    const pattern = rules.regex ?? f.validationRegex ?? null
+    if (pattern && !errors[f.key]) {
+      try {
+        if (!new RegExp(pattern).test(val)) errors[f.key] = rules.message || `${label} is invalid`
+      } catch { /* ignore bad regex */ }
+    }
+    if (f.inputMask && !errors[f.key] && !matchesMask(val, f.inputMask))
+      errors[f.key] = `${label} must match ${f.inputMask}`
+  }
+  return errors
 }

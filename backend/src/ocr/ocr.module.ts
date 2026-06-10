@@ -16,6 +16,8 @@ import { LineItemFraudService } from '../claims/line-item-fraud.service';
 import { DiagnosisBillingService } from '../claims/diagnosis-billing.service';
 import { ClaimTypeConfigService } from '../claims/claim-type-config.service';
 import { InvoiceFanoutService } from './invoice-fanout.service';
+import { DocumentSeparationService } from './document-separation.service';
+import { ImagePreprocessorService } from './image-preprocessor.service';
 import { AssistantModule } from '../assistant/assistant.module';
 
 @Module({
@@ -40,6 +42,8 @@ import { AssistantModule } from '../assistant/assistant.module';
     DiagnosisBillingService,
     ClaimTypeConfigService,
     InvoiceFanoutService,
+    DocumentSeparationService,
+    ImagePreprocessorService,
   ],
   exports: [OcrService, OllamaOcrService, VisionRouterService, ImagePreprocessService],
 })

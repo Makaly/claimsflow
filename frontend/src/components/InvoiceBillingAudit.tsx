@@ -43,12 +43,23 @@ interface AssessedItem {
   enriched?:     boolean
 }
 
+interface BillingTotals {
+  currency?:        string | null
+  gross?:           number | null
+  discount?:        number | null
+  tax?:             number | null
+  sponsorCoverage?: number | null
+  netPayable?:      number | null
+}
+
 interface Assessment {
   diagnosis:    string
   items:        AssessedItem[]
   overall:      'match' | 'partial' | 'mismatch' | 'uncertain'
   overallScore: number
   summary:      string
+  totals?:      BillingTotals | null   // invoice-level gross/deductions/net
+  diagnosisInferred?: boolean          // diagnosis read off the invoice, not recorded on the claim
   cachedAt?:    string   // ISO string if served from DB cache
 }
 
@@ -61,6 +72,8 @@ export interface Props {
   /** Document URL — upload stage only. Lets the audit read the invoice image
    *  directly (vision) when text extraction finds no line items. */
   fileUrl?:   string
+  /** The claim's recorded invoice total — used to reconcile the line-item sum. */
+  invoiceAmount?: number
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -89,16 +102,13 @@ const MATCH = {
   },
 } as const
 
-// Gemini models the user can switch to — each has its OWN daily free-tier
-// quota, so picking one not used today bypasses an exhausted model's limit.
-const MODEL_OPTIONS = [
-  { value: '',                      label: 'Default (flash-latest)' },
-  { value: 'gemini-2.5-flash',      label: 'Gemini 2.5 Flash' },
-  { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite' },
-  { value: 'gemini-2.0-flash',      label: 'Gemini 2.0 Flash' },
-  { value: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash-Lite' },
-  { value: 'gemini-2.5-pro',        label: 'Gemini 2.5 Pro' },
-] as const
+// AI models the user can switch to for the billing audit. The list is the SAME
+// menu the Batch Upload extractor offers (GET /ocr/models) — Claude, Gemini and
+// local Ollama — so a reviewer can pick any provider. Each cloud model has its
+// own daily free-tier quota, so switching providers bypasses an exhausted one.
+type AuditModel = { id: string; label: string; provider: string; available: boolean; tier: string }
+// Shown first; '' lets the backend use its configured default (Gemini flash).
+const DEFAULT_MODEL_OPTION = { id: '', label: 'Default (recommended)', provider: '', available: true, tier: '' }
 
 function fmtKES(n?: number | null) {
   if (n == null) return null
@@ -121,7 +131,7 @@ type MergedRow = ReceiptItem & { assessed?: AssessedItem }
 // ── component ──────────────────────────────────────────────────────────────
 
 export default function InvoiceBillingAudit({
-  claimId, diagnosis, treatment, lineItems, rawText, fileUrl,
+  claimId, diagnosis, treatment, lineItems, rawText, fileUrl, invoiceAmount,
 }: Props) {
   const [assessment, setAssessment] = useState<Assessment | null>(null)
   const [loading, setLoading]       = useState(false)
@@ -134,6 +144,26 @@ export default function InvoiceBillingAudit({
   // Persisted model override — remembered so the user doesn't re-pick each time.
   const [selectedModel, setSelectedModel] = useState<string>(() => localStorage.getItem('billingAuditModel') || '')
   const setModel = (m: string) => { setSelectedModel(m); localStorage.setItem('billingAuditModel', m) }
+  // Available AI models, fetched from the same endpoint Batch Upload uses so the
+  // two menus never drift. Tesseract is excluded — it's pure OCR and cannot do
+  // the clinical reasoning the billing audit needs.
+  const [models, setModels] = useState<AuditModel[]>([])
+  useEffect(() => {
+    let cancelled = false
+    api.get('/ocr/models')
+      .then(({ data }) => {
+        if (cancelled) return
+        // Exclude tesseract (pure OCR, can't reason) and ollama (local vision
+        // models can't read PDF invoices and are too slow for this) — they make
+        // poor billing-audit providers and only lead to dead ends.
+        const list: AuditModel[] = (data.models || [])
+          .filter((m: AuditModel) => m.provider !== 'tesseract' && m.provider !== 'ollama')
+          .map((m: any) => ({ id: m.id, label: m.label, provider: m.provider, available: !!m.available, tier: m.tier }))
+        setModels(list)
+      })
+      .catch(err => console.warn('Failed to load AI models for billing audit:', err))
+    return () => { cancelled = true }
+  }, [])
 
   const toggleExpand = (i: number) => setExpanded(prev => {
     const next = new Set(prev)
@@ -246,6 +276,7 @@ export default function InvoiceBillingAudit({
       const { data } = await api.post<AssessedItem>('/claims/billing-validation/enrich-item', {
         claimId, diagnosis, treatment, rawText,
         itemName: row.description,
+        model: selectedModel || undefined,
       }, { timeout: 45_000 })
       setEnrichOverrides(prev => ({ ...prev, [i]: data }))
     } catch {
@@ -253,7 +284,7 @@ export default function InvoiceBillingAudit({
     } finally {
       setEnriching(prev => { const n = new Set(prev); n.delete(i); return n })
     }
-  }, [claimId, diagnosis, treatment, rawText])
+  }, [claimId, diagnosis, treatment, rawText, selectedModel])
 
   // Apply an enrichment override onto a row (filled amount/code/verdict win).
   const withOverride = (row: MergedRow, i: number): MergedRow => {
@@ -297,12 +328,49 @@ export default function InvoiceBillingAudit({
   const mismatchTotal = mismatchRows.reduce((s, r) => s + (r.totalPrice ?? 0), 0)
   const displayDx     = assessment?.diagnosis || diagnosis || ''
   const isQuota       = assessment?.summary === 'AI_QUOTA_EXCEEDED'
+  // Itemised total — the sum of every line that has an amount. Reconciled against
+  // the claim's recorded invoice amount so a mismatch (missing/extra lines or a
+  // padded total) is visible at a glance.
+  const itemsTotal      = displayRows.reduce((s, r) => s + (r.totalPrice ?? 0), 0)
+  const itemsWithAmount = displayRows.filter(r => r.totalPrice != null).length
+  // Invoice totals block (gross/deductions/net) parsed off the document, if present.
+  const totals          = assessment?.totals ?? null
+  const hasTotals       = !!totals && [totals.gross, totals.discount, totals.tax, totals.sponsorCoverage, totals.netPayable].some(v => v != null)
+  // Reconcile the line-item sum against the invoice's gross (preferred) or the
+  // claim's recorded amount.
+  const grossRef        = totals?.gross ?? invoiceAmount ?? null
+  const recDiff         = grossRef != null ? itemsTotal - grossRef : null
+  const reconciles      = recDiff != null && Math.abs(recDiff) < 1
+  const cur             = totals?.currency || 'KES'
+  const fmtCur          = (n?: number | null) => n == null ? null : `${cur} ` + n.toLocaleString('en-KE', { minimumFractionDigits: 2 })
 
   const hasAnyData = claimId || diagnosis || treatment || rawText || (lineItems && lineItems.length > 0)
   if (!hasAnyData) return null
 
-  // ── single audit row — stacked, readable, expandable ──────────────────────
-  // `wide` (used in the larger panel) forces every reason fully expanded.
+  // Reusable model picker — shown on every failure state so the reviewer can
+  // switch provider and retry without ever getting stuck on a dead end.
+  const modelPicker = (
+    <div className="flex items-center justify-center gap-2">
+      <label className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wide">Model</label>
+      <select
+        value={selectedModel}
+        onChange={e => setModel(e.target.value)}
+        className="text-[11px] rounded-lg border border-border bg-background text-foreground px-2 py-1 outline-none focus:ring-2 focus:ring-sky-400/40"
+      >
+        {[DEFAULT_MODEL_OPTION, ...models].map(m => (
+          <option key={m.id || 'default'} value={m.id} disabled={!m.available}>
+            {m.label}{m.available ? '' : ' (unavailable)'}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+
+  // ── single audit row — COMPACT line item + collapsible detail dropdown ─────
+  // The header line stays one row (name · amount · accuracy · verdict) no matter
+  // how long the clinical reason is; all detail (qty × rate, code, reason,
+  // enrichment) lives in the dropdown, so long text never disarranges the list.
+  // `wide` (the larger panel) forces every row open.
   const AuditRow = ({ row, i, wide }: { row: MergedRow; i: number; wide?: boolean }) => {
     const cfg      = row.assessed ? MATCH[row.assessed.match] : null
     const Icon     = cfg?.icon
@@ -310,105 +378,104 @@ export default function InvoiceBillingAudit({
     const hasArith = row.quantity != null && row.unitPrice != null && row.totalPrice != null
       && Math.abs(row.quantity * row.unitPrice - row.totalPrice) > 0.5
     const reason   = row.assessed?.reason ?? ''
-    const isLong   = reason.length > 90
     const isOpen   = wide || expanded.has(i)
     const score    = row.assessed?.score
-    // A line is "incomplete" when its amount is missing or its verdict is
-    // unresolved — these can be filled in by the per-item enrichment pass.
     const busy        = enriching.has(i)
     const isEnriched  = !!row.assessed?.enriched || !!enrichOverrides[i]
     const isIncomplete = row.totalPrice == null || row.assessed?.match === 'uncertain'
+    const hasQtyRate  = row.quantity != null && row.unitPrice != null
+    // Is there anything worth expanding for?
+    const hasDetails  = !!reason || hasQtyRate || !!row.procedureCode || hasArith
+      || (row.taxAmount != null && row.taxAmount > 0) || isIncomplete || isEnriched
+    const expandable  = hasDetails && !wide
 
     return (
-      <div className={`rounded-xl border px-3 py-2.5 ${cfg ? cfg.bg : 'border-border bg-card'}`}>
-        {/* Header: description (wraps) + verdict pill */}
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-start gap-1.5 min-w-0 flex-1">
-            {isBad && <Flag className="h-3.5 w-3.5 text-red-500 shrink-0 mt-0.5" />}
-            <p className={`text-sm font-semibold leading-snug break-words ${isBad ? 'text-red-700 dark:text-red-300' : 'text-foreground'}`}>
-              {row.description}
-            </p>
-          </div>
-          {cfg && Icon && (
-            <span className={`inline-flex items-center gap-1 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${cfg.pill}`}>
-              <Icon className={`h-3 w-3 ${cfg.color}`} />{cfg.label}
-            </span>
-          )}
-        </div>
-
-        {/* Meta: amount · qty×rate · procedure code · accuracy index */}
-        <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-1.5">
+      <div className={`rounded-xl border overflow-hidden ${cfg ? cfg.bg : 'border-border bg-card'}`}>
+        {/* Compact header line — click to toggle the detail dropdown */}
+        <button
+          type="button"
+          onClick={() => expandable && toggleExpand(i)}
+          className={`w-full flex items-center gap-2 px-3 py-2 text-left ${expandable ? 'cursor-pointer hover:bg-black/[0.02] dark:hover:bg-white/[0.02]' : 'cursor-default'}`}
+        >
+          {expandable
+            ? (isOpen ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />)
+            : <span className="w-3.5 shrink-0" />}
+          {isBad && <Flag className="h-3.5 w-3.5 text-red-500 shrink-0" />}
+          <span className={`flex-1 min-w-0 truncate text-sm font-semibold ${isBad ? 'text-red-700 dark:text-red-300' : 'text-foreground'}`}>
+            {row.description}
+          </span>
           {row.totalPrice != null && (
-            <span className={`text-sm font-bold font-mono tabular-nums ${isBad ? 'text-red-600 dark:text-red-400' : 'text-foreground'}`}>
+            <span className={`shrink-0 text-sm font-bold font-mono tabular-nums ${isBad ? 'text-red-600 dark:text-red-400' : 'text-foreground'}`}>
               {fmtKES(row.totalPrice)}
             </span>
           )}
-          {(row.quantity != null && row.unitPrice != null) && (
-            <span className="text-[11px] font-mono text-muted-foreground">{row.quantity} × {fmtKES(row.unitPrice)}</span>
-          )}
-          {row.taxAmount != null && row.taxAmount > 0 && (
-            <span className="text-[10px] font-mono text-muted-foreground/50">+VAT {fmtKES(row.taxAmount)}</span>
-          )}
-          {row.procedureCode && (
-            <span className="text-[10px] font-mono text-muted-foreground/70 border border-border rounded px-1.5 py-0">{row.procedureCode}</span>
-          )}
           {score != null && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className={`ml-auto inline-flex items-center gap-1 text-[10px] font-bold rounded px-1.5 py-0.5 cursor-default ${
-                  score >= 0.85 ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10' :
-                  score >= 0.6  ? 'text-amber-600 dark:text-amber-400 bg-amber-500/10' :
-                                  'text-red-600 dark:text-red-400 bg-red-500/10'
-                }`}>
-                  <Gauge className="h-2.5 w-2.5" />{Math.round(score * 100)}%
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="left" className="text-xs">AI accuracy index for this verdict</TooltipContent>
-            </Tooltip>
+            <span className={`shrink-0 inline-flex items-center gap-0.5 text-[10px] font-bold rounded px-1.5 py-0.5 ${
+              score >= 0.85 ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10' :
+              score >= 0.6  ? 'text-amber-600 dark:text-amber-400 bg-amber-500/10' :
+                              'text-red-600 dark:text-red-400 bg-red-500/10'
+            }`}>
+              <Gauge className="h-2.5 w-2.5" />{Math.round(score * 100)}%
+            </span>
           )}
-        </div>
+          {cfg && Icon && (
+            <span className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${cfg.pill}`}>
+              <Icon className={`h-3 w-3 ${cfg.color}`} />{cfg.label}
+            </span>
+          )}
+        </button>
 
-        {hasArith && (
-          <p className="flex items-center gap-1 text-[10px] text-red-500 mt-1">
-            <AlertTriangle className="h-3 w-3" /> qty × rate ≠ total
-          </p>
-        )}
+        {/* Detail dropdown — qty × rate, code, full reason, enrichment */}
+        {isOpen && hasDetails && (
+          <div className="px-3 pb-2.5 pt-2 ml-5 space-y-1.5 border-t border-black/[0.04] dark:border-white/[0.04]">
+            {(hasQtyRate || row.procedureCode || (row.taxAmount != null && row.taxAmount > 0)) && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5">
+                {hasQtyRate && (
+                  <span className="text-[11px] font-mono text-muted-foreground">
+                    Qty {row.quantity} × {fmtKES(row.unitPrice)}
+                  </span>
+                )}
+                {row.taxAmount != null && row.taxAmount > 0 && (
+                  <span className="text-[10px] font-mono text-muted-foreground/60">+VAT {fmtKES(row.taxAmount)}</span>
+                )}
+                {row.procedureCode && (
+                  <span className="text-[10px] font-mono text-muted-foreground/80 border border-border rounded px-1.5 py-0">
+                    {row.procedureCode}
+                  </span>
+                )}
+              </div>
+            )}
 
-        {/* Clinical reason — full width, wraps, expandable */}
-        {reason && (
-          <div className="mt-1.5">
-            <p className={`text-[11.5px] leading-relaxed break-words ${isBad ? 'text-red-600/90 dark:text-red-400/80' : 'text-muted-foreground'} ${!isOpen && isLong ? 'line-clamp-2' : ''}`}>
-              {reason}
-            </p>
-            {isLong && !wide && (
+            {hasArith && (
+              <p className="flex items-center gap-1 text-[10px] text-red-500">
+                <AlertTriangle className="h-3 w-3" /> qty × rate ≠ line total
+              </p>
+            )}
+
+            {reason && (
+              <p className={`text-[11.5px] leading-relaxed break-words ${isBad ? 'text-red-600/90 dark:text-red-400/80' : 'text-muted-foreground'}`}>
+                {reason}
+              </p>
+            )}
+
+            {isIncomplete && !isEnriched && (
               <button
                 type="button"
-                onClick={() => toggleExpand(i)}
-                className="mt-0.5 inline-flex items-center gap-0.5 text-[10px] font-semibold text-sky-600 dark:text-sky-400 hover:underline"
+                onClick={() => enrichItem(i, row)}
+                disabled={busy}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-sky-300/60 dark:border-sky-700/50 bg-sky-50 dark:bg-sky-950/30 px-2.5 py-1 text-[10px] font-semibold text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/40 transition-colors disabled:opacity-60"
               >
-                {isOpen ? <>Show less <ChevronUp className="h-2.5 w-2.5" /></> : <>Read more <ChevronDown className="h-2.5 w-2.5" /></>}
+                {busy
+                  ? <><Loader2 className="h-3 w-3 animate-spin" /> Fetching details…</>
+                  : <><Sparkles className="h-3 w-3" /> Fetch missing details</>}
               </button>
             )}
+            {isEnriched && (
+              <p className="inline-flex items-center gap-1 text-[9px] font-semibold text-emerald-600 dark:text-emerald-400">
+                <CheckCircle2 className="h-2.5 w-2.5" /> Details fetched from invoice
+              </p>
+            )}
           </div>
-        )}
-
-        {/* Fetch-details — fill in a line whose amount/code/verdict is missing */}
-        {isIncomplete && !isEnriched && (
-          <button
-            type="button"
-            onClick={() => enrichItem(i, row)}
-            disabled={busy}
-            className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-sky-300/60 dark:border-sky-700/50 bg-sky-50 dark:bg-sky-950/30 px-2.5 py-1 text-[10px] font-semibold text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/40 transition-colors disabled:opacity-60"
-          >
-            {busy
-              ? <><Loader2 className="h-3 w-3 animate-spin" /> Fetching details…</>
-              : <><Sparkles className="h-3 w-3" /> Fetch missing details</>}
-          </button>
-        )}
-        {isEnriched && (
-          <p className="mt-1.5 inline-flex items-center gap-1 text-[9px] font-semibold text-emerald-600 dark:text-emerald-400">
-            <CheckCircle2 className="h-2.5 w-2.5" /> Details fetched from invoice
-          </p>
         )}
       </div>
     )
@@ -430,6 +497,18 @@ export default function InvoiceBillingAudit({
               <p className="text-sm font-semibold text-foreground leading-snug">
                 {displayDx || <span className="italic text-muted-foreground">Not recorded</span>}
               </p>
+              {displayDx && assessment?.diagnosisInferred && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="mt-1 inline-flex items-center gap-1 rounded-full border border-amber-300/60 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-950/30 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700 dark:text-amber-300 cursor-help">
+                      <Sparkles className="h-2.5 w-2.5" /> inferred from billing
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[220px] text-xs">
+                    No diagnosis was recorded on the claim — this was read from the invoice/procedure codes by the AI. Verify against the clinical record before relying on it.
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </div>
           </div>
 
@@ -512,6 +591,8 @@ export default function InvoiceBillingAudit({
       {!loading && error && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-3 text-center space-y-2">
           <p className="text-xs text-destructive/80">{error}</p>
+          <p className="text-[10px] text-muted-foreground/70">Try a different AI model, then retry:</p>
+          {modelPicker}
           <button
             type="button"
             onClick={() => { setError(null); setForceRefresh(n => n + 1) }}
@@ -554,7 +635,8 @@ export default function InvoiceBillingAudit({
             </p>
           </div>
 
-          {/* Model picker — each Gemini model has its own daily free-tier quota */}
+          {/* Model picker — Claude / Gemini / local, the same menu as Batch
+              Upload. Each cloud model has its own daily free-tier quota. */}
           <div className="flex items-center justify-center gap-2">
             <label className="text-[10px] font-semibold text-orange-700/70 dark:text-orange-300/60 uppercase tracking-wide">Model</label>
             <select
@@ -562,7 +644,11 @@ export default function InvoiceBillingAudit({
               onChange={e => setModel(e.target.value)}
               className="text-[11px] rounded-lg border border-orange-300/60 dark:border-orange-700/50 bg-white dark:bg-orange-950/40 text-orange-800 dark:text-orange-200 px-2 py-1 outline-none focus:ring-2 focus:ring-orange-400/40"
             >
-              {MODEL_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+              {[DEFAULT_MODEL_OPTION, ...models].map(m => (
+                <option key={m.id || 'default'} value={m.id} disabled={!m.available}>
+                  {m.label}{m.available ? '' : ' (unavailable)'}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -584,9 +670,10 @@ export default function InvoiceBillingAudit({
           <div className="space-y-0.5">
             <p className="text-xs font-medium text-foreground/70">Couldn't read the billing items</p>
             <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
-              The invoice text was scanned but no billed line items could be parsed from it — this usually means a low-quality scan. Try again, or re-process the document.
+              No billed line items could be parsed — usually a low-quality scan, or the chosen AI model was unavailable. Try a different model, or re-process the document.
             </p>
           </div>
+          {modelPicker}
           <button
             type="button"
             onClick={() => { setError(null); setForceRefresh(n => n + 1) }}
@@ -594,6 +681,77 @@ export default function InvoiceBillingAudit({
           >
             <RefreshCw className="h-3 w-3" /> Try again
           </button>
+        </div>
+      )}
+
+      {/* ── Itemised total ⇄ invoice reconciliation + deductions/net ─────── */}
+      {!loading && assessment && (itemsWithAmount > 0 || hasTotals) && (
+        <div className={`rounded-xl border px-4 py-2.5 ${
+          recDiff == null      ? 'border-border bg-muted/30' :
+          reconciles           ? 'border-emerald-200/70 dark:border-emerald-800/40 bg-emerald-50/50 dark:bg-emerald-950/15' :
+                                 'border-amber-300/60 dark:border-amber-700/50 bg-amber-50/60 dark:bg-amber-950/20'
+        }`}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
+                Itemised total{itemsWithAmount < rows.length ? ` · ${itemsWithAmount}/${rows.length} priced` : ''}
+              </p>
+              <p className="text-lg font-black tabular-nums font-mono text-foreground leading-tight">{fmtKES(itemsTotal)}</p>
+            </div>
+            {invoiceAmount != null && (
+              <div className="text-right shrink-0">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Invoice amount</p>
+                <p className="text-sm font-bold tabular-nums font-mono text-muted-foreground leading-tight">{fmtKES(invoiceAmount)}</p>
+              </div>
+            )}
+          </div>
+          {recDiff != null && (
+            <div className={`mt-1.5 pt-1.5 border-t flex items-center gap-1.5 text-[11px] font-semibold ${
+              reconciles
+                ? 'border-emerald-200/50 dark:border-emerald-800/30 text-emerald-700 dark:text-emerald-400'
+                : 'border-amber-200/50 dark:border-amber-800/30 text-amber-700 dark:text-amber-400'
+            }`}>
+              {reconciles
+                ? <><CheckCircle2 className="h-3.5 w-3.5" /> Line items reconcile with the invoice total</>
+                : <><AlertTriangle className="h-3.5 w-3.5" /> {recDiff > 0 ? 'Items exceed' : 'Items fall short of'} the invoice by {fmtKES(Math.abs(recDiff))}</>}
+            </div>
+          )}
+
+          {/* Deductions / rebates / net payable — the invoice's totals block */}
+          {hasTotals && (
+            <div className="mt-2 pt-2 border-t border-black/[0.06] dark:border-white/[0.06] space-y-1 text-[11px]">
+              {totals!.gross != null && (
+                <div className="flex items-center justify-between text-muted-foreground">
+                  <span>Gross billed</span>
+                  <span className="font-mono tabular-nums">{fmtCur(totals!.gross)}</span>
+                </div>
+              )}
+              {totals!.tax != null && totals!.tax > 0 && (
+                <div className="flex items-center justify-between text-muted-foreground">
+                  <span>VAT / tax</span>
+                  <span className="font-mono tabular-nums">+ {fmtCur(totals!.tax)}</span>
+                </div>
+              )}
+              {totals!.discount != null && totals!.discount > 0 && (
+                <div className="flex items-center justify-between text-emerald-700 dark:text-emerald-400">
+                  <span>Discount / rebate</span>
+                  <span className="font-mono tabular-nums">− {fmtCur(totals!.discount)}</span>
+                </div>
+              )}
+              {totals!.sponsorCoverage != null && totals!.sponsorCoverage > 0 && (
+                <div className="flex items-center justify-between text-sky-700 dark:text-sky-400">
+                  <span>Sponsor / insurer coverage</span>
+                  <span className="font-mono tabular-nums">− {fmtCur(totals!.sponsorCoverage)}</span>
+                </div>
+              )}
+              {totals!.netPayable != null && (
+                <div className="flex items-center justify-between pt-1 mt-1 border-t border-black/[0.06] dark:border-white/[0.06] text-foreground font-bold">
+                  <span>Final amount payable</span>
+                  <span className="font-mono tabular-nums text-base">{fmtCur(totals!.netPayable)}</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -718,6 +876,11 @@ export default function InvoiceBillingAudit({
               </p>
               <p className="text-base font-bold text-foreground leading-snug break-words">
                 {displayDx || <span className="italic text-muted-foreground">Not recorded</span>}
+                {displayDx && assessment?.diagnosisInferred && (
+                  <span className="ml-2 inline-flex items-center gap-1 rounded-full border border-amber-300/60 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-950/30 px-1.5 py-0.5 align-middle text-[9px] font-semibold text-amber-700 dark:text-amber-300">
+                    <Sparkles className="h-2.5 w-2.5" /> inferred from billing
+                  </span>
+                )}
               </p>
               {assessment?.summary && (
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{assessment.summary}</p>

@@ -11,13 +11,16 @@ import {
   UseInterceptors,
   UploadedFiles,
   Request,
+  Res,
   Headers,
   BadRequestException,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { BatchSubmissionService } from './batch-submission.service';
+import { BatchExportService } from './batch-export.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -26,7 +29,10 @@ import { ProviderApprovedGuard } from '../auth/guards/provider-approved.guard';
 @Controller('batch-submissions')
 @UseGuards(JwtAuthGuard)
 export class BatchSubmissionController {
-  constructor(private readonly batchSubmissionService: BatchSubmissionService) {}
+  constructor(
+    private readonly batchSubmissionService: BatchSubmissionService,
+    private readonly batchExportService: BatchExportService,
+  ) {}
 
   @Post('upload')
   @UseGuards(ProviderApprovedGuard)
@@ -225,6 +231,17 @@ export class BatchSubmissionController {
   @Get(':id')
   async getBatchById(@Param('id') id: string) {
     return this.batchSubmissionService.getBatchById(id);
+  }
+
+  /**
+   * GET /batch-submissions/:id/export
+   * Streams a zip bundle for the batch built from its Job Setup's output targets
+   * (CSV/XML/JSON index files + optional searchable-PDF renders). Falls back to a
+   * single CSV index when no targets are configured.
+   */
+  @Get(':id/export')
+  async exportBatch(@Param('id') id: string, @Res() res: Response) {
+    return this.batchExportService.exportBatch(id, res);
   }
 
   /**
