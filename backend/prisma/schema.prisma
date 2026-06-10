@@ -578,6 +578,7 @@ model Claim {
   billingAuditScore       Float?               // 0-1 overall appropriateness
   billingAuditSummary     String?              // 1-2 sentence human-readable verdict
   billingAuditItems       Json?                // BillingItemAssessment[] — per-item results
+  billingAuditTotals      Json?                // BillingTotals — gross/discount/tax/sponsor/net
   billingAuditAt          DateTime?            // when the assessment was last run
   cases                   Case[]
   label                   ClaimLabel?

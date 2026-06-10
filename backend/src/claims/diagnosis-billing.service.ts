@@ -32,6 +32,21 @@ export interface BillingItemAssessment {
   enriched?: boolean;
 }
 
+/**
+ * Invoice-level money totals read off the document's totals block. All optional
+ * — present only when the figure is printed on the invoice. Lets the audit show
+ * the full picture: what was billed (gross), what is deducted (sponsor/insurer
+ * cover, rebates, discounts), and the final amount payable (net).
+ */
+export interface BillingTotals {
+  currency?: string | null;
+  gross?: number | null;           // total billed before deductions
+  discount?: number | null;        // rebate / discount off the bill
+  tax?: number | null;             // VAT / tax
+  sponsorCoverage?: number | null; // amount the sponsor/insurer covers (a deduction)
+  netPayable?: number | null;      // final amount payable after deductions
+}
+
 export interface ClaimBillingAssessment {
   diagnosis: string;
   items: BillingItemAssessment[];
@@ -39,6 +54,7 @@ export interface ClaimBillingAssessment {
   overallScore: number;
   summary: string;
   fromLineItems: boolean;
+  totals?: BillingTotals | null;   // invoice-level gross/deductions/net
   cachedAt?: string;   // ISO — present when served from DB cache
 }
 
@@ -67,6 +83,7 @@ export class DiagnosisBillingService {
         billingAuditScore: true,
         billingAuditSummary: true,
         billingAuditItems: true,
+        billingAuditTotals: true,
         billingAuditAt: true,
         ocrData: {
           select: { diagnosis: true, procedureCodes: true, rawText: true },
@@ -96,6 +113,7 @@ export class DiagnosisBillingService {
         overallScore: claim.billingAuditScore ?? 0,
         summary: claim.billingAuditSummary ?? '',
         fromLineItems: false,
+        totals: (claim.billingAuditTotals as unknown as BillingTotals | null) ?? null,
         cachedAt: claim.billingAuditAt.toISOString(),
       };
     }
@@ -166,6 +184,7 @@ export class DiagnosisBillingService {
         billingAuditScore:   result.overallScore,
         billingAuditSummary: result.summary,
         billingAuditItems:   result.items as any,
+        billingAuditTotals:  (result.totals ?? null) as any,
         billingAuditAt:      new Date(),
       },
     }).catch(err => this.logger.warn(`Failed to cache billing audit for ${claimId}: ${err.message}`));
@@ -465,22 +484,34 @@ export class DiagnosisBillingService {
       `services for the diagnosis. If a service is not printed on the invoice, it does not exist.\n` +
       `   • If there is NO billing/charges table in the provided invoice, return an EMPTY items array ([]). ` +
       `Never fabricate items from the diagnosis alone.\n\n` +
-      `1. Find the charges/billing table in the text (columns are usually something like ` +
-      `Description, Qty, Rate/Unit Price, Amount/Gross). Extract EVERY charged row — ` +
+      `1. Find the charges/billing table in the text and extract EVERY charged row — ` +
       `bed/ward charges, consultation/doctor/surgeon fees, theatre charges, anaesthesia, ` +
       `medication/drugs, lab tests, imaging, consumables, nursing, etc.\n` +
+      `   • Column layouts vary by provider. Map them to our fields, e.g.:\n` +
+      `     – Description / Item / Service / "Charge Category" → "name" (use the most specific service text on the row).\n` +
+      `     – Qty / Quantity / Units → "quantity".\n` +
+      `     – Rate / Unit Price / Price → "unitPrice".\n` +
+      `     – Gross / Amount / Total / Charge / Line Total → "amount" (the line total).\n` +
+      `     An Aga Khan-style table has columns "Number, Charge Category, Date, Description, Location, Provider/RX #/Req #, Qty, Rate, Gross" — there "Gross" is the line amount and "Rate" is the unit price; rows may wrap onto two printed lines (header row then a detail row) — treat them as ONE line item.\n` +
       `   • One object per billed line. Do not collapse multiple days/rows into one.\n` +
-      `   • Capture the amount: "quantity", "unitPrice" (rate per unit) and "amount" (line total) as plain numbers (no currency symbols/commas). Use null only when truly absent.\n` +
+      `   • Capture "quantity", "unitPrice" (rate per unit) and "amount" (line total) as plain numbers (no currency symbols/commas). Use null only when truly absent.\n` +
       `   • Use the exact service name as printed on the invoice.\n` +
       `   • A bare procedure/diagnosis CODE (e.g. "G18", an ICD/CPT code) is NOT a billed service — do not list a code as an item unless it labels an actual charged line with an amount.\n` +
       `   • NEVER list the diagnosis/condition itself as a billed item.\n` +
-      `2. For each extracted line, judge clinical appropriateness for the diagnosis:\n` +
+      `2. Read the invoice's TOTALS block (usually below the table). Capture, as plain numbers (null when absent):\n` +
+      `   • gross — total billed / subtotal before deductions (labels: Total, Gross, Subtotal, Amount Billed).\n` +
+      `   • discount — any rebate or discount taken off the bill.\n` +
+      `   • tax — VAT / tax.\n` +
+      `   • sponsorCoverage — amount covered by the sponsor / insurer / scheme (labels: "Sponsor Coverage", Insurer Paid, Scheme, Covered). This is a DEDUCTION from what the patient pays.\n` +
+      `   • netPayable — the FINAL amount payable after deductions (labels: Net, Balance, Amount Due/Payable, Patient Payable).\n` +
+      `   • currency — e.g. KES, USD.\n` +
+      `3. For each extracted line, judge clinical appropriateness for the diagnosis:\n` +
       `   • "match" — clearly needed for this diagnosis/treatment.\n` +
       `   • "mismatch" — unrelated to the diagnosis (possible bill inflation / fraud).\n` +
       `   • "uncertain" — cannot tell from the information given.\n` +
       `   • "score" 0.0–1.0 = your confidence the line is appropriate.\n\n` +
       `Respond ONLY with this JSON (no markdown, no prose outside JSON):\n` +
-      `{"diagnosis":"<patient diagnosis>","items":[{"name":"<service name>","quantity":<number|null>,"unitPrice":<number|null>,"amount":<number|null>,"match":"match"|"mismatch"|"uncertain","score":0.0-1.0,"reason":"<one brief sentence>"}],"overall":"match"|"partial"|"mismatch"|"uncertain","overallScore":0.0-1.0,"summary":"<1-2 sentences>"}`
+      `{"diagnosis":"<patient diagnosis>","items":[{"name":"<service name>","quantity":<number|null>,"unitPrice":<number|null>,"amount":<number|null>,"match":"match"|"mismatch"|"uncertain","score":0.0-1.0,"reason":"<one brief sentence>"}],"totals":{"currency":"<code|null>","gross":<number|null>,"discount":<number|null>,"tax":<number|null>,"sponsorCoverage":<number|null>,"netPayable":<number|null>},"overall":"match"|"partial"|"mismatch"|"uncertain","overallScore":0.0-1.0,"summary":"<1-2 sentences>"}`
     );
   }
 
@@ -655,6 +686,27 @@ export class DiagnosisBillingService {
 
     if (items.length === 0) return null;
 
+    // Invoice-level totals block (optional — present only when printed).
+    let totals: BillingTotals | null = null;
+    if (parsed.totals && typeof parsed.totals === 'object') {
+      const t = parsed.totals;
+      const cur = t.currency != null && String(t.currency).trim() && String(t.currency).toLowerCase() !== 'null'
+        ? String(t.currency).trim().toUpperCase() : null;
+      const candidate: BillingTotals = {
+        currency: cur,
+        gross: num(t.gross),
+        discount: num(t.discount),
+        tax: num(t.tax),
+        sponsorCoverage: num(t.sponsorCoverage),
+        netPayable: num(t.netPayable),
+      };
+      // Keep only when at least one money figure was read.
+      if ([candidate.gross, candidate.discount, candidate.tax, candidate.sponsorCoverage, candidate.netPayable]
+        .some(v => typeof v === 'number')) {
+        totals = candidate;
+      }
+    }
+
     const overall = ['match', 'partial', 'mismatch', 'uncertain'].includes(parsed.overall)
       ? parsed.overall
       : undefined;
@@ -665,6 +717,7 @@ export class DiagnosisBillingService {
       overall: overall ?? rolled.overall,
       overallScore: num(parsed.overallScore) ?? rolled.overallScore,
       summary: String(parsed.summary ?? '').trim() || rolled.summary,
+      totals,
     };
   }
 
