@@ -2523,6 +2523,13 @@ export default function BatchUpload() {
         await api.patch(`/claims/${savedClaim.id}/annotations`, { annotations: c.annotations }).catch(() => {})
       }
 
+      // Compute + persist the billing audit at publish time so it's saved on the
+      // claim (no re-run when the Billing tab is later opened). Fire-and-forget —
+      // the server reads the just-uploaded document and caches the result.
+      if (savedClaim?.id) {
+        api.get(`/claims/${savedClaim.id}/billing-validation`, { timeout: 90_000 }).catch(() => {})
+      }
+
       // Flash "Published" briefly so the user sees confirmation, then remove
       // the card from the review list — the claim is now in the main Claims page.
       setClaims(prev => prev.map(x => x.id === claimId ? { ...x, status: 'published', dbId: savedClaim?.id } : x))
@@ -3510,6 +3517,12 @@ export default function BatchUpload() {
 
           if (c.annotations?.length && savedClaim?.id) {
             await api.patch(`/claims/${savedClaim.id}/annotations`, { annotations: c.annotations }).catch(() => {})
+          }
+
+          // Compute + persist the billing audit at publish time so it's saved on
+          // the claim and never re-runs when the Billing tab is opened later.
+          if (savedClaim?.id) {
+            api.get(`/claims/${savedClaim.id}/billing-validation`, { timeout: 90_000 }).catch(() => {})
           }
 
           // Teach the selected job setup from this confirmed claim. Recorded
