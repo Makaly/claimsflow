@@ -336,11 +336,17 @@ export default function InvoiceBillingAudit({
   // Invoice totals block (gross/deductions/net) parsed off the document, if present.
   const totals          = assessment?.totals ?? null
   const hasTotals       = !!totals && [totals.gross, totals.discount, totals.tax, totals.sponsorCoverage, totals.netPayable].some(v => v != null)
-  // Reconcile the line-item sum against the invoice's gross (preferred) or the
-  // claim's recorded amount.
+  const hasDeductions   = !!totals && [totals.discount, totals.tax, totals.sponsorCoverage, totals.netPayable].some(v => v != null)
+  // Reconcile the line-item sum against ONE invoice reference: the invoice's
+  // printed gross total when we read it, else the claim's recorded amount. The
+  // header and the diff message use the SAME number so they never contradict.
   const grossRef        = totals?.gross ?? invoiceAmount ?? null
+  const refLabel        = totals?.gross != null ? 'Invoice total' : 'Invoice amount'
   const recDiff         = grossRef != null ? itemsTotal - grossRef : null
   const reconciles      = recDiff != null && Math.abs(recDiff) < 1
+  // When the OCR-grabbed claim amount disagrees with the invoice's printed total,
+  // surface it rather than showing a third, contradictory number.
+  const ocrAmountDiffers = totals?.gross != null && invoiceAmount != null && Math.abs(invoiceAmount - totals.gross) >= 1
   const cur             = totals?.currency || 'KES'
   const fmtCur          = (n?: number | null) => n == null ? null : `${cur} ` + n.toLocaleString('en-KE', { minimumFractionDigits: 2 })
 
@@ -698,10 +704,10 @@ export default function InvoiceBillingAudit({
               </p>
               <p className="text-lg font-black tabular-nums font-mono text-foreground leading-tight">{fmtKES(itemsTotal)}</p>
             </div>
-            {invoiceAmount != null && (
+            {grossRef != null && (
               <div className="text-right shrink-0">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Invoice amount</p>
-                <p className="text-sm font-bold tabular-nums font-mono text-muted-foreground leading-tight">{fmtKES(invoiceAmount)}</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">{refLabel}</p>
+                <p className="text-sm font-bold tabular-nums font-mono text-muted-foreground leading-tight">{fmtKES(grossRef)}</p>
               </div>
             )}
           </div>
@@ -712,20 +718,20 @@ export default function InvoiceBillingAudit({
                 : 'border-amber-200/50 dark:border-amber-800/30 text-amber-700 dark:text-amber-400'
             }`}>
               {reconciles
-                ? <><CheckCircle2 className="h-3.5 w-3.5" /> Line items reconcile with the invoice total</>
-                : <><AlertTriangle className="h-3.5 w-3.5" /> {recDiff > 0 ? 'Items exceed' : 'Items fall short of'} the invoice by {fmtKES(Math.abs(recDiff))}</>}
+                ? <><CheckCircle2 className="h-3.5 w-3.5" /> Line items reconcile with the {refLabel.toLowerCase()}</>
+                : <><AlertTriangle className="h-3.5 w-3.5" /> {recDiff > 0 ? 'Items exceed' : 'Items fall short of'} the {refLabel.toLowerCase()} by {fmtKES(Math.abs(recDiff))}</>}
             </div>
           )}
+          {ocrAmountDiffers && (
+            <p className="mt-1 text-[10px] text-muted-foreground/70 leading-snug">
+              Recorded claim amount {fmtKES(invoiceAmount)} differs from the invoice's printed total — verify which is correct.
+            </p>
+          )}
 
-          {/* Deductions / rebates / net payable — the invoice's totals block */}
-          {hasTotals && (
+          {/* Deductions / rebates / net payable — the invoice's totals block.
+              Gross is already shown above as the invoice total, so it's omitted here. */}
+          {hasDeductions && (
             <div className="mt-2 pt-2 border-t border-black/[0.06] dark:border-white/[0.06] space-y-1 text-[11px]">
-              {totals!.gross != null && (
-                <div className="flex items-center justify-between text-muted-foreground">
-                  <span>Gross billed</span>
-                  <span className="font-mono tabular-nums">{fmtCur(totals!.gross)}</span>
-                </div>
-              )}
               {totals!.tax != null && totals!.tax > 0 && (
                 <div className="flex items-center justify-between text-muted-foreground">
                   <span>VAT / tax</span>
