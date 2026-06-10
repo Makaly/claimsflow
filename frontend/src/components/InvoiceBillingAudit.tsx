@@ -59,6 +59,7 @@ interface Assessment {
   overallScore: number
   summary:      string
   totals?:      BillingTotals | null   // invoice-level gross/deductions/net
+  diagnosisInferred?: boolean          // diagnosis read off the invoice, not recorded on the claim
   cachedAt?:    string   // ISO string if served from DB cache
 }
 
@@ -496,6 +497,18 @@ export default function InvoiceBillingAudit({
               <p className="text-sm font-semibold text-foreground leading-snug">
                 {displayDx || <span className="italic text-muted-foreground">Not recorded</span>}
               </p>
+              {displayDx && assessment?.diagnosisInferred && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="mt-1 inline-flex items-center gap-1 rounded-full border border-amber-300/60 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-950/30 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700 dark:text-amber-300 cursor-help">
+                      <Sparkles className="h-2.5 w-2.5" /> inferred from billing
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[220px] text-xs">
+                    No diagnosis was recorded on the claim — this was read from the invoice/procedure codes by the AI. Verify against the clinical record before relying on it.
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </div>
           </div>
 
@@ -863,6 +876,11 @@ export default function InvoiceBillingAudit({
               </p>
               <p className="text-base font-bold text-foreground leading-snug break-words">
                 {displayDx || <span className="italic text-muted-foreground">Not recorded</span>}
+                {displayDx && assessment?.diagnosisInferred && (
+                  <span className="ml-2 inline-flex items-center gap-1 rounded-full border border-amber-300/60 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-950/30 px-1.5 py-0.5 align-middle text-[9px] font-semibold text-amber-700 dark:text-amber-300">
+                    <Sparkles className="h-2.5 w-2.5" /> inferred from billing
+                  </span>
+                )}
               </p>
               {assessment?.summary && (
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{assessment.summary}</p>

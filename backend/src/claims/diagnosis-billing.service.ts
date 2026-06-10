@@ -55,6 +55,7 @@ export interface ClaimBillingAssessment {
   summary: string;
   fromLineItems: boolean;
   totals?: BillingTotals | null;   // invoice-level gross/deductions/net
+  diagnosisInferred?: boolean;     // diagnosis was read off the invoice, not recorded on the claim
   cachedAt?: string;   // ISO — present when served from DB cache
 }
 
@@ -84,6 +85,7 @@ export class DiagnosisBillingService {
         billingAuditSummary: true,
         billingAuditItems: true,
         billingAuditTotals: true,
+        billingAuditDxInferred: true,
         billingAuditAt: true,
         ocrData: {
           select: { diagnosis: true, procedureCodes: true, rawText: true },
@@ -114,6 +116,7 @@ export class DiagnosisBillingService {
         summary: claim.billingAuditSummary ?? '',
         fromLineItems: false,
         totals: (claim.billingAuditTotals as unknown as BillingTotals | null) ?? null,
+        diagnosisInferred: claim.billingAuditDxInferred ?? false,
         cachedAt: claim.billingAuditAt.toISOString(),
       };
     }
@@ -186,6 +189,17 @@ export class DiagnosisBillingService {
       return this.unknownAssessment('No invoice billing items to audit for this claim', diagnosis);
     }
 
+    // Backfill the claim's diagnosis from what the audit read off the document
+    // when the claim itself has none. Invoices rarely state the diagnosis as an
+    // indexed field, so without this the published claim shows "Not recorded" and
+    // the rest of the app (clinical tab, fraud signals) has nothing to work with.
+    // Only fills when empty — never overwrites a recorded diagnosis. The returned
+    // flag drives the "inferred from billing" provenance note in the UI.
+    const inferred = await this.backfillDiagnosis(
+      claimId, claim.diagnosis || claim.ocrData?.diagnosis || '', result.diagnosis,
+    );
+    result.diagnosisInferred = inferred;
+
     // Persist to DB so subsequent requests are instant (no Gemini call needed)
     this.prisma.claim.update({
       where: { id: claimId },
@@ -195,16 +209,10 @@ export class DiagnosisBillingService {
         billingAuditSummary: result.summary,
         billingAuditItems:   result.items as any,
         billingAuditTotals:  (result.totals ?? null) as any,
+        billingAuditDxInferred: inferred,
         billingAuditAt:      new Date(),
       },
     }).catch(err => this.logger.warn(`Failed to cache billing audit for ${claimId}: ${err.message}`));
-
-    // Backfill the claim's diagnosis from what the audit read off the document
-    // when the claim itself has none. Invoices rarely state the diagnosis as an
-    // indexed field, so without this the published claim shows "Not recorded" and
-    // the rest of the app (clinical tab, fraud signals) has nothing to work with.
-    // Only fills when empty — never overwrites a recorded diagnosis.
-    await this.backfillDiagnosis(claimId, claim.diagnosis || claim.ocrData?.diagnosis || '', result.diagnosis);
 
     // Reconcile the recorded invoice amount with the validated line-item sum.
     // The itemised total (read line-by-line) is more reliable than a single OCR
@@ -428,17 +436,19 @@ export class DiagnosisBillingService {
    * when the claim has none. Guarded: only fills an empty diagnosis, and ignores
    * placeholder/non-diagnostic strings. Best-effort — never throws.
    */
-  private async backfillDiagnosis(claimId: string, existing: string, derived: string): Promise<void> {
-    if (existing && existing.trim()) return; // never overwrite a recorded diagnosis
+  private async backfillDiagnosis(claimId: string, existing: string, derived: string): Promise<boolean> {
+    if (existing && existing.trim()) return false; // never overwrite a recorded diagnosis
     const dx = (derived || '').trim();
-    if (dx.length < 3) return;
-    if (/^(see raw|not recorded|n\/?a|none|unknown)\b/i.test(dx)) return;
+    if (dx.length < 3) return false;
+    if (/^(see raw|not recorded|n\/?a|none|unknown)\b/i.test(dx)) return false;
     try {
       await this.prisma.claim.update({ where: { id: claimId }, data: { diagnosis: dx } });
       await this.prisma.ocrExtraction.updateMany({ where: { claimId }, data: { diagnosis: dx } }).catch(() => {});
       this.logger.log(`Backfilled diagnosis for claim ${claimId} from billing audit: "${dx}"`);
+      return true;
     } catch (err: any) {
       this.logger.warn(`Failed to backfill diagnosis for ${claimId}: ${err.message}`);
+      return false;
     }
   }
 
