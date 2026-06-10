@@ -119,11 +119,14 @@ export class DiagnosisBillingService {
     }
 
     const diagnosis = claim.diagnosis || claim.ocrData?.diagnosis || '';
-    // Use a generous window so the invoice charges table (often further down a
-    // multi-page document) is included — line items are easy to miss with a small slice.
+    // Use a generous window so the FULL charges table of a long multi-page
+    // invoice is included — a small slice truncates later pages and under-counts.
     const rawTextSnippet = claim.ocrData?.rawText
-      ? claim.ocrData.rawText.slice(0, 16000)
+      ? claim.ocrData.rawText.slice(0, 40000)
       : '';
+    // The recorded invoice total is the reconciliation target: it tells the model
+    // when its extracted lines are incomplete, and decides text-vs-vision below.
+    const invoiceHint = claim.invoiceAmount ?? null;
 
     if (!diagnosis && !rawTextSnippet && !claim.treatment) {
       return this.unknownAssessment('No clinical data found for this claim', '');
@@ -157,14 +160,21 @@ export class DiagnosisBillingService {
         // a diagnosis with empty invoice text, or the model invents illustrative
         // items. With no text we go straight to reading the document image.
         if (rawTextSnippet) {
-          result = await this.runExtraction(diagnosis, claim.treatment, procedureCodes, rawTextSnippet, `claim ${claimId}`, model);
+          result = await this.runExtraction(diagnosis, claim.treatment, procedureCodes, rawTextSnippet, `claim ${claimId}`, model, invoiceHint);
         }
 
-        // Vision fallback — when the OCR text yields no items (common with poor
-        // scans), read the invoice document image directly.
-        if (!result || result.items.length === 0) {
-          const visionResult = await this.extractViaVision(claimId, diagnosis, claim.treatment, procedureCodes, model);
-          if (visionResult && visionResult.items.length > 0) result = visionResult;
+        // Escalate to full-document vision when text extraction found nothing OR
+        // its line amounts fall materially short of the invoice total — the usual
+        // cause of "items fall short" is truncated OCR text or charges on later
+        // pages that the text slice missed. Vision reads the whole document.
+        const textSum = this.sumAmounts(result);
+        const shortfall = invoiceHint != null && invoiceHint > 0 && textSum > 0 && textSum < invoiceHint * 0.9;
+        if (!result || result.items.length === 0 || shortfall) {
+          const visionResult = await this.extractViaVision(claimId, diagnosis, claim.treatment, procedureCodes, model, invoiceHint);
+          if (visionResult && visionResult.items.length > 0) {
+            // Keep whichever extraction reconciles best with the invoice total.
+            result = this.pickCloserToTotal(result, visionResult, invoiceHint);
+          }
         }
       } catch (err: any) {
         if (err?.isQuota) return this.quotaAssessment(diagnosis);
@@ -406,6 +416,33 @@ export class DiagnosisBillingService {
     return { diagnosis, items: [], overall: 'uncertain', overallScore: 0, summary, fromLineItems: false };
   }
 
+  /** Sum of the priced line amounts in an assessment (0 when none/null). */
+  private sumAmounts(a: ClaimBillingAssessment | null): number {
+    if (!a) return 0;
+    return a.items.reduce((s, i) => s + (typeof i.amount === 'number' ? i.amount : 0), 0);
+  }
+
+  /**
+   * Choose the extraction that best reconciles with the invoice total. With a
+   * known total, the closer itemised sum wins; without one, prefer the richer
+   * extraction (larger sum, then more items).
+   */
+  private pickCloserToTotal(
+    a: ClaimBillingAssessment | null,
+    b: ClaimBillingAssessment | null,
+    total: number | null,
+  ): ClaimBillingAssessment | null {
+    if (!a) return b;
+    if (!b) return a;
+    const sa = this.sumAmounts(a);
+    const sb = this.sumAmounts(b);
+    if (total != null && total > 0) {
+      return Math.abs(sb - total) < Math.abs(sa - total) ? b : a;
+    }
+    if (sb !== sa) return sb > sa ? b : a;
+    return b.items.length > a.items.length ? b : a;
+  }
+
   /**
    * Reconcile the claim's recorded invoice amount with the validated line-item
    * sum. The itemised total (read line-by-line) is more trustworthy than a single
@@ -470,14 +507,25 @@ export class DiagnosisBillingService {
     treatment: string | null | undefined,
     procedureCodes: string[],
     rawTextSnippet: string,
+    invoiceTotalHint?: number | null,
   ): string {
+    const hint =
+      invoiceTotalHint && invoiceTotalHint > 0
+        ? `\nIMPORTANT — the invoice's grand total is approximately ${invoiceTotalHint.toLocaleString('en-KE', { minimumFractionDigits: 2 })}. ` +
+          `The "amount" values of the lines you extract should SUM to about this figure. ` +
+          `If your extracted lines sum to materially less, you have MISSED rows — re-scan every page and include them all before answering.\n`
+        : '';
     return (
       `You are a senior medical claims auditor reviewing an insurance claim.\n\n` +
       (diagnosis ? `Patient diagnosis (their medical condition): ${diagnosis}\n\n` : '') +
       (treatment ? `Treatment notes: ${treatment}\n\n` : '') +
       (procedureCodes.length ? `Procedure codes on file: ${procedureCodes.join(', ')}\n\n` : '') +
       (rawTextSnippet ? `Raw invoice / clinical document text:\n${rawTextSnippet}\n\n` : '') +
-      `TASK — extract the invoice's BILLING TABLE, then assess each line clinically.\n\n` +
+      `TASK — extract the invoice's BILLING TABLE, then assess each line clinically.\n` +
+      hint + `\n` +
+      `COMPLETENESS — list EVERY charged row. Do NOT summarise, sample, deduplicate, or truncate. ` +
+      `Multi-page invoices repeat charges (e.g. the same bed/ward charge on each day of admission) — include each occurrence as its own line. ` +
+      `A long bill may have dozens of rows; return them all.\n\n` +
       `CRITICAL — extract ONLY what literally appears in the invoice provided above ` +
       `(and/or the attached document image). This is real patient billing data:\n` +
       `   • Do NOT invent, infer, assume, or list "typical", "example" or "illustrative" ` +
@@ -528,8 +576,9 @@ export class DiagnosisBillingService {
     rawTextSnippet: string,
     label: string,
     model?: string,
+    invoiceTotalHint?: number | null,
   ): Promise<ClaimBillingAssessment | null> {
-    const prompt = this.buildExtractionPrompt(diagnosis, treatment, procedureCodes, rawTextSnippet);
+    const prompt = this.buildExtractionPrompt(diagnosis, treatment, procedureCodes, rawTextSnippet, invoiceTotalHint);
     const system = 'You are a senior medical claims auditor extracting and assessing billed services from invoice documents. Always reply with valid JSON only.';
 
     // generateWithFallback walks the cloud provider chain (preferred model
@@ -538,7 +587,9 @@ export class DiagnosisBillingService {
       const raw = await this.llm.generateWithFallback(system, prompt, {
         temperature: 0,
         json: true,
-        maxOutputTokens: 4096,
+        // Long, multi-page itemised bills need a large budget — a small cap
+        // truncates the JSON and drops line items, under-counting the total.
+        maxOutputTokens: 8192,
         model,
       });
       this.logger.debug(`Billing audit (${label}) raw (first 200): ${raw.slice(0, 200)}`);
@@ -562,6 +613,7 @@ export class DiagnosisBillingService {
     treatment: string | null | undefined,
     procedureCodes: string[],
     model?: string,
+    invoiceTotalHint?: number | null,
   ): Promise<ClaimBillingAssessment | null> {
     // Prefer the invoice document; fall back to any image/PDF attached to the claim.
     const docs = await this.prisma.document.findMany({
@@ -593,7 +645,7 @@ export class DiagnosisBillingService {
       ? invoice.mimetype
       : /\.pdf$/i.test(invoice.originalName ?? '') ? 'application/pdf' : 'image/png';
 
-    return this.runVisionExtraction(bytes, mime, diagnosis, treatment, procedureCodes, `claim ${claimId}`, model);
+    return this.runVisionExtraction(bytes, mime, diagnosis, treatment, procedureCodes, `claim ${claimId}`, model, invoiceTotalHint);
   }
 
   /** Core vision extraction — read a document buffer and parse its billing table. */
@@ -605,16 +657,17 @@ export class DiagnosisBillingService {
     procedureCodes: string[],
     label: string,
     model?: string,
+    invoiceTotalHint?: number | null,
   ): Promise<ClaimBillingAssessment | null> {
     if (bytes.length > VISION_MAX_BYTES) {
       this.logger.warn(`Vision extraction (${label}): file too large (${bytes.length} bytes) — skipping`);
       return null;
     }
-    const prompt = this.buildExtractionPrompt(diagnosis, treatment, procedureCodes, '');
+    const prompt = this.buildExtractionPrompt(diagnosis, treatment, procedureCodes, '', invoiceTotalHint);
     const system = 'You are a senior medical claims auditor. Read the attached invoice document image and extract its billing table. Reply with valid JSON only.';
     try {
       const raw = await this.llm.generateFromImageWithFallback(system, prompt, bytes.toString('base64'), mime, {
-        temperature: 0, json: true, maxOutputTokens: 4096, model,
+        temperature: 0, json: true, maxOutputTokens: 8192, model,
       });
       this.logger.debug(`Billing audit (${label}) vision raw (first 200): ${raw.slice(0, 200)}`);
       const parsed = this.parseAssessment(raw, diagnosis);
