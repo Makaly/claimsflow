@@ -43,12 +43,22 @@ interface AssessedItem {
   enriched?:     boolean
 }
 
+interface BillingTotals {
+  currency?:        string | null
+  gross?:           number | null
+  discount?:        number | null
+  tax?:             number | null
+  sponsorCoverage?: number | null
+  netPayable?:      number | null
+}
+
 interface Assessment {
   diagnosis:    string
   items:        AssessedItem[]
   overall:      'match' | 'partial' | 'mismatch' | 'uncertain'
   overallScore: number
   summary:      string
+  totals?:      BillingTotals | null   // invoice-level gross/deductions/net
   cachedAt?:    string   // ISO string if served from DB cache
 }
 
@@ -322,8 +332,16 @@ export default function InvoiceBillingAudit({
   // padded total) is visible at a glance.
   const itemsTotal      = displayRows.reduce((s, r) => s + (r.totalPrice ?? 0), 0)
   const itemsWithAmount = displayRows.filter(r => r.totalPrice != null).length
-  const recDiff         = invoiceAmount != null ? itemsTotal - invoiceAmount : null
+  // Invoice totals block (gross/deductions/net) parsed off the document, if present.
+  const totals          = assessment?.totals ?? null
+  const hasTotals       = !!totals && [totals.gross, totals.discount, totals.tax, totals.sponsorCoverage, totals.netPayable].some(v => v != null)
+  // Reconcile the line-item sum against the invoice's gross (preferred) or the
+  // claim's recorded amount.
+  const grossRef        = totals?.gross ?? invoiceAmount ?? null
+  const recDiff         = grossRef != null ? itemsTotal - grossRef : null
   const reconciles      = recDiff != null && Math.abs(recDiff) < 1
+  const cur             = totals?.currency || 'KES'
+  const fmtCur          = (n?: number | null) => n == null ? null : `${cur} ` + n.toLocaleString('en-KE', { minimumFractionDigits: 2 })
 
   const hasAnyData = claimId || diagnosis || treatment || rawText || (lineItems && lineItems.length > 0)
   if (!hasAnyData) return null
@@ -653,8 +671,8 @@ export default function InvoiceBillingAudit({
         </div>
       )}
 
-      {/* ── Itemised total ⇄ invoice reconciliation ──────────────────────── */}
-      {!loading && assessment && itemsWithAmount > 0 && (
+      {/* ── Itemised total ⇄ invoice reconciliation + deductions/net ─────── */}
+      {!loading && assessment && (itemsWithAmount > 0 || hasTotals) && (
         <div className={`rounded-xl border px-4 py-2.5 ${
           recDiff == null      ? 'border-border bg-muted/30' :
           reconciles           ? 'border-emerald-200/70 dark:border-emerald-800/40 bg-emerald-50/50 dark:bg-emerald-950/15' :
@@ -683,6 +701,42 @@ export default function InvoiceBillingAudit({
               {reconciles
                 ? <><CheckCircle2 className="h-3.5 w-3.5" /> Line items reconcile with the invoice total</>
                 : <><AlertTriangle className="h-3.5 w-3.5" /> {recDiff > 0 ? 'Items exceed' : 'Items fall short of'} the invoice by {fmtKES(Math.abs(recDiff))}</>}
+            </div>
+          )}
+
+          {/* Deductions / rebates / net payable — the invoice's totals block */}
+          {hasTotals && (
+            <div className="mt-2 pt-2 border-t border-black/[0.06] dark:border-white/[0.06] space-y-1 text-[11px]">
+              {totals!.gross != null && (
+                <div className="flex items-center justify-between text-muted-foreground">
+                  <span>Gross billed</span>
+                  <span className="font-mono tabular-nums">{fmtCur(totals!.gross)}</span>
+                </div>
+              )}
+              {totals!.tax != null && totals!.tax > 0 && (
+                <div className="flex items-center justify-between text-muted-foreground">
+                  <span>VAT / tax</span>
+                  <span className="font-mono tabular-nums">+ {fmtCur(totals!.tax)}</span>
+                </div>
+              )}
+              {totals!.discount != null && totals!.discount > 0 && (
+                <div className="flex items-center justify-between text-emerald-700 dark:text-emerald-400">
+                  <span>Discount / rebate</span>
+                  <span className="font-mono tabular-nums">− {fmtCur(totals!.discount)}</span>
+                </div>
+              )}
+              {totals!.sponsorCoverage != null && totals!.sponsorCoverage > 0 && (
+                <div className="flex items-center justify-between text-sky-700 dark:text-sky-400">
+                  <span>Sponsor / insurer coverage</span>
+                  <span className="font-mono tabular-nums">− {fmtCur(totals!.sponsorCoverage)}</span>
+                </div>
+              )}
+              {totals!.netPayable != null && (
+                <div className="flex items-center justify-between pt-1 mt-1 border-t border-black/[0.06] dark:border-white/[0.06] text-foreground font-bold">
+                  <span>Final amount payable</span>
+                  <span className="font-mono tabular-nums text-base">{fmtCur(totals!.netPayable)}</span>
+                </div>
+              )}
             </div>
           )}
         </div>
