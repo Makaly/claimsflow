@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Patch,
   Delete,
   Body,
@@ -23,8 +24,8 @@ export class JobSetupController {
   // ── Read (any authenticated user — needed to pick a setup at upload) ────────
 
   @Get()
-  list(@Query('active') active?: string) {
-    return this.service.list(active === 'true');
+  list(@Query('active') active?: string, @Request() req?: any) {
+    return this.service.list(active === 'true', req?.user?.userId, req?.user?.role);
   }
 
   @Get('slug/:slug')
@@ -80,6 +81,22 @@ export class JobSetupController {
   @Get(':id/knowledge/stats')
   knowledgeStats(@Param('id') id: string) {
     return this.service.knowledgeStats(id);
+  }
+
+  // ── User assignments ─────────────────────────────────────────────────────────
+
+  @Get(':id/assignments')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'claims_officer')
+  getAssignments(@Param('id') id: string) {
+    return this.service.getAssignments(id);
+  }
+
+  @Put(':id/assignments')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'claims_officer')
+  setAssignments(@Param('id') id: string, @Body() body: { userIds: string[] }) {
+    return this.service.setAssignments(id, body?.userIds ?? []);
   }
 
   // ── Management (admin / claims_officer) ─────────────────────────────────────

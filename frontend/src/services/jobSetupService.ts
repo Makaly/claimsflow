@@ -209,6 +209,14 @@ export const jobSetupApi = {
       )
       .then((r) => r.data),
   resetKnowledge: (id: string) => api.delete(`/job-setups/${id}/knowledge`).then((r) => r.data),
+  getAssignments: (id: string) =>
+    api
+      .get<{ id: string; userId: string; assignedAt: string; user: { id: string; name: string; email: string; role: string } }[]>(
+        `/job-setups/${id}/assignments`,
+      )
+      .then((r) => r.data),
+  setAssignments: (id: string, userIds: string[]) =>
+    api.put(`/job-setups/${id}/assignments`, { userIds }).then((r) => r.data),
 }
 
 export const lookupApi = {

@@ -2256,6 +2256,7 @@ export default function BatchUpload() {
   const [isProviderUser, setIsProviderUser] = useState(false)  // true when logged-in user is provider staff
   // Job setup chosen at the start of the upload: drives custom index fields,
   // lookups and the per-setup (isolated) learning for this batch.
+  const [batchLabel, setBatchLabel] = useState('')
   const [jobSetup, setJobSetup] = useState<JobSetup | null>(null)
   const jobSetupRef = useRef<string | null>(null)
   const [step, setStep] = useState<Step>('upload')
@@ -3884,7 +3885,21 @@ export default function BatchUpload() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-5 pt-6">
-                {/* ── Job setup picker — choose what we're uploading first ── */}
+                {/* ── Step 1: Batch name ── */}
+                <div className="space-y-1.5">
+                  <Label className="flex items-center gap-1.5">
+                    <FileStack className="h-4 w-4 text-muted-foreground" />
+                    Batch name <span className="text-muted-foreground font-normal text-xs">(optional — auto-generated if blank)</span>
+                  </Label>
+                  <input
+                    className="w-full border rounded-md px-3 py-2 text-sm bg-background"
+                    placeholder="e.g. June 2026 Inpatient Claims"
+                    value={batchLabel}
+                    onChange={(e) => setBatchLabel(e.target.value)}
+                  />
+                </div>
+
+                {/* ── Step 2: Job setup picker — choose what we're uploading first ── */}
                 <div className="rounded-lg border bg-muted/30 p-4">
                   <JobSetupPicker
                     selectedId={jobSetup?.id}
@@ -3992,6 +4007,20 @@ export default function BatchUpload() {
                     )}
                   </div>
                 )}
+
+                {/* ── Step 3: Browse / scan — only unlocked after a setup is chosen ── */}
+                {!jobSetup && (
+                  <div className="flex items-center justify-center rounded-lg border-2 border-dashed border-muted py-8 text-center">
+                    <div className="space-y-1">
+                      <Layers className="h-8 w-8 text-muted-foreground/50 mx-auto" />
+                      <p className="text-sm font-medium text-muted-foreground">Select a job setup above to continue</p>
+                      <p className="text-xs text-muted-foreground/70">Upload and scan options will appear once a setup is chosen</p>
+                    </div>
+                  </div>
+                )}
+
+                {jobSetup && (
+                <Fragment>
 
                 {/* ── Input source tabs: Upload vs. Scanner ── */}
                 <div className="flex rounded-xl border-2 border-violet-100/70 dark:border-violet-900/30 bg-gradient-to-r from-violet-50/50 via-background to-blue-50/50 dark:from-violet-950/10 dark:via-background dark:to-blue-950/10 p-1.5 gap-1.5 shadow-inner">
@@ -4770,6 +4799,9 @@ export default function BatchUpload() {
                       Manual entry
                     </Button>
                   </div>
+                )}
+
+                </Fragment>
                 )}
               </CardContent>
             </Card>

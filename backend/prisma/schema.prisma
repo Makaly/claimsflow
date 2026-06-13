@@ -110,6 +110,7 @@ model User {
   caseComments            CaseComment[]            @relation("CaseCommentAuthor")
   providerRulesAsMaker    ProviderAssignmentRule[] @relation("ProviderRuleMaker")
   providerRulesAsOfficer  ProviderAssignmentRule[] @relation("ProviderRuleOfficer")
+  jobSetupAssignments     JobSetupAssignment[]
 
   @@index([providerId])
   @@index([email])
@@ -2003,6 +2004,7 @@ model JobSetup {
   fields                  JobSetupField[]
   knowledge               JobSetupKnowledge[]
   counters                JobSetupCounter[]
+  assignments             JobSetupAssignment[]
 
   @@index([slug])
   @@index([isActive])
@@ -2135,4 +2137,20 @@ model JobSetupKnowledge {
   @@unique([jobSetupId, fieldKey, valueNorm])
   @@index([jobSetupId, fieldKey])
   @@map("job_setup_knowledge")
+}
+
+/// Which users are allowed to see and use a given job setup.
+/// Admins and claims_officers always see all setups regardless of assignments.
+model JobSetupAssignment {
+  id         String   @id @default(uuid())
+  jobSetupId String
+  userId     String
+  assignedAt DateTime @default(now())
+  jobSetup   JobSetup @relation(fields: [jobSetupId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([jobSetupId, userId])
+  @@index([jobSetupId])
+  @@index([userId])
+  @@map("job_setup_assignments")
 }

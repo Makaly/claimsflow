@@ -1,8 +1,9 @@
-import { useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useState, useEffect, useRef, type MouseEvent as ReactMouseEvent } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Layers, Plus, Trash2, Copy, ChevronUp, ChevronDown, Brain, GripVertical,
-  Settings2, Scan, Scissors, ListChecks, Crop, FileOutput,
+  Settings2, Scan, Scissors, ListChecks, Crop, FileOutput, Users, X, Search,
+  UserCheck,
 } from 'lucide-react'
 import {
   jobSetupApi,
@@ -19,6 +20,7 @@ import {
   type OutputTarget,
   type OutputFormat,
 } from '@/services/jobSetupService'
+import { userService } from '@/services/userService'
 
 const FIELD_TYPES: FieldType[] = ['text', 'number', 'date', 'select', 'currency', 'boolean', 'textarea']
 const FIELD_SOURCES: FieldSource[] = ['manual', 'extraction', 'lookup', 'system', 'barcode', 'ocrZone']
@@ -26,14 +28,15 @@ const SYSTEM_VALUES = Object.keys(SYSTEM_VALUE_LABELS) as SystemValue[]
 const SEPARATION_METHODS: SeparationMethod[] = ['none', 'fixedCount', 'blankPage', 'barcode', 'patchcode', 'ocrPhrase']
 const OUTPUT_FORMATS: OutputFormat[] = ['csv', 'xml', 'json', 'searchablePdf']
 
-type TabKey = 'general' | 'capture' | 'separation' | 'fields' | 'zones' | 'output'
+type TabKey = 'general' | 'capture' | 'separation' | 'fields' | 'zones' | 'output' | 'users'
 const TABS: { key: TabKey; label: string; icon: typeof Settings2 }[] = [
-  { key: 'general',    label: 'General',     icon: Settings2 },
-  { key: 'capture',    label: 'Capture',     icon: Scan },
-  { key: 'separation', label: 'Separation',  icon: Scissors },
+  { key: 'general',    label: 'General',      icon: Settings2 },
+  { key: 'capture',    label: 'Capture',      icon: Scan },
+  { key: 'separation', label: 'Separation',   icon: Scissors },
   { key: 'fields',     label: 'Index Fields', icon: ListChecks },
-  { key: 'zones',      label: 'OCR Zones',   icon: Crop },
-  { key: 'output',     label: 'Output',      icon: FileOutput },
+  { key: 'zones',      label: 'OCR Zones',    icon: Crop },
+  { key: 'output',     label: 'Output',       icon: FileOutput },
+  { key: 'users',      label: 'Assigned Users', icon: Users },
 ]
 
 const blankField = (i: number): JobSetupField => ({
@@ -150,9 +153,17 @@ export default function JobSetups() {
               ))}
             </div>
             <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <Brain className="h-3 w-3" />
-                {s.learningEnabled ? `learning on · ${s._count?.knowledge ?? 0} values` : 'learning off'}
+              <span className="flex items-center gap-2">
+                <span className="flex items-center gap-1">
+                  <Brain className="h-3 w-3" />
+                  {s.learningEnabled ? `learning on · ${s._count?.knowledge ?? 0} values` : 'learning off'}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Users className="h-3 w-3" />
+                  {(s._count as any)?.assignments > 0
+                    ? `${(s._count as any).assignments} user${(s._count as any).assignments !== 1 ? 's' : ''}`
+                    : 'all users'}
+                </span>
               </span>
               <button onClick={() => setEditing(s)} className="text-primary hover:underline">
                 Configure
@@ -186,7 +197,7 @@ function SetupEditor({
   onCancel: () => void
   saving: boolean
   error?: string
-}) {
+  }) {
   const [tab, setTab] = useState<TabKey>('general')
   const fields = value.fields ?? []
   const set = (patch: Partial<JobSetup>) => onChange({ ...value, ...patch })
@@ -212,7 +223,7 @@ function SetupEditor({
         {TABS.map((t) => {
           const Icon = t.icon
           const active = tab === t.key
-          const count = t.key === 'fields' ? fields.length : t.key === 'zones' ? zoneFields.length : undefined
+          const count = t.key === 'fields' ? fields.length : t.key === 'zones' ? zoneFields.length : t.key === 'users' ? (value._count as any)?.assignments : undefined
           return (
             <button
               key={t.key}
@@ -245,6 +256,7 @@ function SetupEditor({
         <ZonesTab zoneFields={zoneFields} fields={fields} updateField={updateField} />
       )}
       {tab === 'output' && <OutputTab value={value} set={set} fields={fields} />}
+      {tab === 'users' && <UsersTab setupId={value.id} />}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
       <div className="flex gap-2 border-t pt-3">
@@ -625,6 +637,145 @@ function OutputTab({
         </div>
       ))}
       {targets.length === 0 && <p className="text-xs text-muted-foreground">No export targets configured.</p>}
+    </div>
+  )
+}
+
+// ── Users / assignment tab ────────────────────────────────────────────────────
+function UsersTab({ setupId }: { setupId?: string }) {
+  const qc = useQueryClient()
+  const [search, setSearch] = useState('')
+  const [open, setOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement | null>(null)
+
+  const { data: assignments = [], isLoading: loadingAssign } = useQuery({
+    queryKey: ['job-setup-assignments', setupId],
+    queryFn: () => jobSetupApi.getAssignments(setupId!),
+    enabled: !!setupId,
+  })
+
+  const { data: allUsers = [], isLoading: loadingUsers } = useQuery({
+    queryKey: ['users-list'],
+    queryFn: () => userService.getAll().then((r: any) => r?.users ?? r ?? []),
+  })
+
+  const saveMutation = useMutation({
+    mutationFn: (userIds: string[]) => jobSetupApi.setAssignments(setupId!, userIds),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['job-setup-assignments', setupId] })
+      qc.invalidateQueries({ queryKey: ['job-setups'] })
+    },
+  })
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  if (!setupId) {
+    return <p className="text-sm text-muted-foreground">Save the setup first, then come back to assign users.</p>
+  }
+
+  if (loadingAssign || loadingUsers)
+    return <p className="text-sm text-muted-foreground">Loading…</p>
+
+  const assignedIds = new Set(assignments.map((a) => a.userId))
+  const filtered = (allUsers as any[]).filter(
+    (u) =>
+      !assignedIds.has(u.id) &&
+      (!search ||
+        u.name.toLowerCase().includes(search.toLowerCase()) ||
+        u.email.toLowerCase().includes(search.toLowerCase())),
+  )
+
+  const remove = (userId: string) => {
+    saveMutation.mutate(assignments.filter((a) => a.userId !== userId).map((a) => a.userId))
+  }
+
+  const add = (u: any) => {
+    saveMutation.mutate([...Array.from(assignedIds), u.id])
+    setSearch('')
+    setOpen(false)
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-muted-foreground">
+        Restrict this setup to specific users. If no users are assigned, all authenticated users can see it.
+      </p>
+
+      {/* Assigned list */}
+      {assignments.length === 0 ? (
+        <p className="text-sm text-muted-foreground italic">No restrictions — visible to all users.</p>
+      ) : (
+        <div className="space-y-1">
+          {assignments.map((a) => (
+            <div key={a.userId} className="flex items-center justify-between rounded-md border bg-background px-3 py-2">
+              <div className="flex items-center gap-2">
+                <UserCheck className="h-4 w-4 text-primary shrink-0" />
+                <div>
+                  <p className="text-sm font-medium">{a.user.name}</p>
+                  <p className="text-xs text-muted-foreground">{a.user.email} · {a.user.role}</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => remove(a.userId)} className="text-muted-foreground hover:text-destructive" title="Remove">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Dropdown search picker */}
+      <div className="border-t pt-3">
+        <p className="text-xs font-medium text-muted-foreground mb-2">Add user</p>
+        <div className="relative" ref={dropdownRef}>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <input
+              className="w-full border rounded-md pl-8 pr-3 py-1.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+              placeholder="Search by name or email…"
+              value={search}
+              onFocus={() => setOpen(true)}
+              onChange={(e) => { setSearch(e.target.value); setOpen(true) }}
+            />
+          </div>
+
+          {open && (
+            <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-lg max-h-56 overflow-y-auto">
+              {filtered.length === 0 ? (
+                <p className="px-3 py-2.5 text-xs text-muted-foreground">
+                  {search ? 'No matching users' : 'All users already assigned'}
+                </p>
+              ) : (
+                filtered.slice(0, 30).map((u: any) => (
+                  <button
+                    type="button"
+                    key={u.id}
+                    onMouseDown={(e) => { e.preventDefault(); add(u) }}
+                    className="w-full text-left px-3 py-2 hover:bg-muted/60 text-sm flex items-center gap-3 border-b last:border-0"
+                  >
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-xs font-semibold shrink-0">
+                      {u.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{u.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                    </div>
+                    <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded-full shrink-0">{u.role}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

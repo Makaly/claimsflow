@@ -48,12 +48,58 @@ export class JobSetupService {
 
   // ── Setup CRUD ───────────────────────────────────────────────────────────────
 
-  list(activeOnly = false) {
+  private isPrivilegedRole(role?: string) {
+    return role === 'admin' || role === 'claims_officer';
+  }
+
+  list(activeOnly = false, userId?: string, userRole?: string) {
+    const baseWhere: any = activeOnly ? { isActive: true } : {};
+    // Admins/claims_officers always see everything. Other users only see setups
+    // assigned to them; if a setup has no assignments at all it remains visible
+    // to everyone (backwards-compat before assignments are configured).
+    const where =
+      !userId || this.isPrivilegedRole(userRole)
+        ? baseWhere
+        : {
+            ...baseWhere,
+            OR: [
+              { assignments: { some: { userId } } },
+              { assignments: { none: {} } },
+            ],
+          };
     return this.prisma.jobSetup.findMany({
-      where: activeOnly ? { isActive: true } : undefined,
+      where,
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-      include: { fields: { orderBy: { sortOrder: 'asc' } }, _count: { select: { knowledge: true } } },
+      include: {
+        fields: { orderBy: { sortOrder: 'asc' } },
+        _count: { select: { knowledge: true, assignments: true } },
+      },
     });
+  }
+
+  // ── User assignments ─────────────────────────────────────────────────────────
+
+  async getAssignments(id: string) {
+    await this.get(id);
+    return this.prisma.jobSetupAssignment.findMany({
+      where: { jobSetupId: id },
+      include: { user: { select: { id: true, name: true, email: true, role: true } } },
+      orderBy: { assignedAt: 'asc' },
+    });
+  }
+
+  async setAssignments(id: string, userIds: string[]) {
+    await this.get(id);
+    const unique = [...new Set(userIds)];
+    await this.prisma.$transaction(async (tx) => {
+      await tx.jobSetupAssignment.deleteMany({ where: { jobSetupId: id } });
+      if (unique.length > 0) {
+        await tx.jobSetupAssignment.createMany({
+          data: unique.map((userId) => ({ jobSetupId: id, userId })),
+        });
+      }
+    });
+    return this.getAssignments(id);
   }
 
   async get(id: string) {
