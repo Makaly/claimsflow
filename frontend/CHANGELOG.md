@@ -10,6 +10,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 
 ### Added
 
+- **Job Setup user assignments** — admins can now restrict which users or providers see a given job setup via a new **Assigned Users** tab in the setup editor. A searchable dropdown (opens on focus, filters by name / email) lists all available users; assigned users are displayed with a badge chip and can be removed inline. Job setup cards show the assigned user count (`N users` / `all users`). Setups with no assignments remain visible to everyone for backwards compatibility.
+
+- **Gated batch upload flow** — the Upload page now enforces a structured three-step entry: (1) optional batch name, (2) job setup selection, (3) file browse / scan. The dropzone and scanner panel are locked behind a placeholder until a job setup is chosen, preventing accidental uploads without a classification context.
+
+- **Billing audit `pending` state** — `InvoiceBillingAudit` accepts a new `pending` flag from the API. When the backend is still computing the audit in the background the component displays a loading indicator and polls until the result is ready, eliminating the previous indefinite blank state on first open.
+
+### Changed
+
+- **`BatchUpload`** — added a "Batch name" input field at the top of the upload card so operators can label a batch before selecting files.
+
+### Added
+
 - **Checker Queue — inline OCR field editor, zone capture, and document audit
   trail** (`src/pages/CheckerQueue.tsx`, `src/components/InlinePdfViewer.tsx`)
   — all nine standard OCR fields are now shown in the detail panel regardless

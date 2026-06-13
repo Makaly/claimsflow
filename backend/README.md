@@ -10,8 +10,10 @@ A production-ready REST API for end-to-end medical insurance claims processing b
 - **Document Management** — Secure upload, storage, watermarking, barcode/QR generation, PDF operations, TIFF conversion
 - **OCR Engine** — Multi-model extraction pipeline: Gemini Vision, AI Vision API, Ollama (local), and Tesseract fallback; circuit-breaker quota management; model-agnostic page pre-scan for consistent claim splitting across all backends
 - **Batch Submissions** — Bulk claim submission via CSV/Excel with async processing
+- **Job Setups** — Document-type profiles with custom index fields, OCR zones, pluggable lookup sources, isolated per-setup learning, and configurable capture / separation / output settings. Assignments restrict which users and providers can access each setup
+- **Billing Audit** — Diagnosis-vs-billing fraud check with non-blocking cached results; audit pre-computed during OCR processing and served instantly from the DB cache on subsequent requests
 - **Notifications** — Email (SMTP/Nodemailer) and SMS (Africa's Talking) delivery with queue-backed retries
-- **Workflow Engine** — Completeness validation, auto-assignment, escalation, and audit trail
+- **Workflow Engine** — Completeness validation, auto-assignment (provider pins + strategy + reliever), escalation, and audit trail
 - **Activity Logging** — Request-level interceptor writing structured logs to the database
 - **External Integrations** — EDMS and eOxegen connectors
 
@@ -171,14 +173,18 @@ docker run -p 4000:4000 --env-file .env cic-claims-backend
 
 | Module | Base Path | Description |
 |---|---|---|
-| Auth | `/api/auth` | Login, register, token refresh |
-| Providers | `/api/providers` | Provider CRUD and approval |
-| Claims | `/api/claims` | Claim lifecycle management |
-| Documents | `/api/documents` | Upload, download, watermark |
-| OCR | `/api/ocr` | Invoice data extraction |
-| Batch | `/api/batch-submission` | Bulk claim uploads |
+| Auth | `/api/auth` | Login, register, token refresh, profile |
+| Users | `/api/users` | User CRUD, role management |
+| Providers | `/api/providers` | Provider CRUD and approval workflow |
+| Claims | `/api/claims` | Full claim lifecycle, billing audit |
+| Documents | `/api/documents` | Upload, download, watermark, barcode |
+| OCR | `/api/ocr` | Multi-model invoice extraction |
+| Batch | `/api/batch-submissions` | Bulk claim uploads and draft management |
+| Job Setups | `/api/job-setups` | Document profiles, fields, assignments |
+| Lookups | `/api/lookups` | Pluggable lookup sources (DB / Excel / CSV) |
 | Notifications | `/api/notifications` | Email / SMS delivery |
-| Workflow | `/api/workflow` | Assignment and escalation |
+| Workflow | `/api/workflow` | Assignment, escalation, maker-checker |
+| Fraud | `/api/fraud` | Signal evaluation and case management |
 
 ## Available Scripts
 
@@ -212,28 +218,30 @@ npm run prisma:seed      # Seed the database
 
 ```
 src/
-├── auth/                   # JWT auth, guards, strategies
-├── claims/                 # Claims CRUD, processor, DTOs
-├── batch-submission/       # Bulk upload and async processing
+├── auth/                   # JWT auth, guards, strategies, user controller
+├── claims/                 # Claims CRUD, billing audit, diagnosis-billing service
+├── batch-submission/       # Bulk upload, async processing, draft claims
 ├── common/
 │   ├── interceptors/       # Activity logging
 │   └── services/           # PDF, barcode, EDMS, OCR helpers
 ├── documents/              # Document storage and management
+├── job-setup/              # Document profiles, index fields, OCR zones, user assignments
+├── lookup/                 # Pluggable lookup sources (DB / Excel / CSV / Provider)
 ├── notifications/          # Email + SMS services and processor
-├── ocr/                    # Multi-model invoice extraction (Gemini, AI Vision, Ollama, Tesseract)
-│   ├── gemini-vision.service.ts  # Gemini Vision + shared model-agnostic page pre-scan
-│   ├── claude-vision.service.ts  # AI Vision backend (single + multi-claim)
-│   ├── ollama-ocr.service.ts     # Local Ollama inference with text-layer fast-path
-│   ├── vision-router.service.ts  # Quota-aware circuit-breaker + fallback chain
-│   ├── ocr.service.ts            # Tesseract pipeline + claim grouping logic
-│   └── invoice-patterns.ts       # Regex knowledge base for field extraction
+├── ocr/                    # Multi-model invoice extraction
+│   ├── gemini-vision.service.ts    # Gemini Vision + model-agnostic page pre-scan
+│   ├── vision.service.ts           # AI Vision backend (single + multi-claim)
+│   ├── ollama-ocr.service.ts       # Local Ollama inference with text-layer fast-path
+│   ├── vision-router.service.ts    # Quota-aware circuit-breaker + fallback chain
+│   ├── ocr.service.ts              # Tesseract pipeline + claim grouping logic
+│   └── invoice-patterns.ts         # Regex knowledge base for field extraction
 ├── prisma/                 # Prisma service and module
-├── providers/              # Provider management
-├── workflow/               # Assignment, maker-checker, validation
+├── providers/              # Provider management and assignment rules
+├── workflow/               # Assignment resolver, maker-checker, validation
 ├── app.module.ts
 └── main.ts
 prisma/
-├── schema.prisma           # Database schema
+├── schema.prisma           # Database schema (Prisma 7)
 └── migrations/             # Migration history
 ```
 

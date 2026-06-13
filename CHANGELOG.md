@@ -9,6 +9,37 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **Non-blocking billing audit with background caching**
+  (`backend/src/claims/diagnosis-billing.service.ts`,
+  `backend/src/claims/claims.controller.ts`,
+  `frontend/src/components/InvoiceBillingAudit.tsx`) — the Billing tab no longer
+  blocks or times out on long multi-page invoices. `DiagnosisBillingService` now
+  exposes two new methods:
+  - `readCache(claimId)` — reads the pre-computed audit from the DB (valid for
+    30 days) without triggering any LLM call.
+  - `assessCachedOrQueue(claimId, force?, model?)` — returns the cached result
+    instantly when present; falls back to a full run for claims processed before
+    the caching feature was introduced. A `pending` boolean is available on the
+    `ClaimBillingAssessment` interface so the UI can show a spinner and
+    auto-refresh rather than waiting on an open HTTP connection.
+  - The `GET /claims/:id/billing-validation` endpoint now calls
+    `assessCachedOrQueue` instead of `assessFromClaimData`, eliminating the
+    timeout risk on large claims.
+
+### Fixed
+
+- **Sequential OCR post-processing pipeline**
+  (`backend/src/ocr/ocr.processor.ts`) — the fraud analysis, diagnosis-billing
+  line-item check, and holistic billing audit were previously chained with
+  fire-and-forget `.then()` calls, creating a race condition where the billing
+  cache could be incomplete by the time a claims officer opened the Billing tab.
+  All three steps are now `await`-ed in sequence (fraud persistence → line-item
+  validation → billing audit) so the DB cache is always ready before the claim
+  reaches the publish step. Error handling is preserved: a failure in any step is
+  logged as a warning without aborting claim indexing.
+
+### Added
+
 - **Per-page document categories on the Gemini path**
   (`backend/src/ocr/gemini-vision.service.ts`) — Gemini's extraction schema
   doesn't classify pages, so its `documentPages` always came back empty and
