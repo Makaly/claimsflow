@@ -26,6 +26,7 @@ organized into tabs that mirror the pipeline stages.
 | **Index Fields** | The custom fields, their source, validation, mask, default, double-key | `JobSetupField[]` |
 | **OCR Zones** | Page regions bound to `ocrZone` fields (drag-to-draw on a sample page) | `JobSetupField.zone` |
 | **Output** | Export targets (format, name pattern, subfolder) | `JobSetup.outputTargets` |
+| **Assigned Users** | Users and providers allowed to see and use this setup | `JobSetupAssignment[]` |
 
 ---
 
@@ -123,9 +124,34 @@ through to the scan agent where supported.
 
 ---
 
+## User assignment
+
+By default every active setup is visible to all authenticated users. To restrict a setup to specific users or providers, open its **Assigned Users** tab and add one or more users via the searchable dropdown. Once at least one user is assigned, only those users (and users with the `admin` or `claims_officer` role) can see the setup.
+
+**API endpoints** (admin / claims_officer only):
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/job-setups/:id/assignments` | List assigned users |
+| `PUT` | `/api/job-setups/:id/assignments` | Replace the full assignment list — body `{ userIds: string[] }` |
+
+The `list` endpoint (`GET /api/job-setups`) automatically filters results based on the authenticated user's role and their assignment membership. Admin and claims_officer always receive the full list.
+
+---
+
+## Batch upload flow
+
+When an operator starts a batch upload the UI enforces this order:
+
+1. **Batch name** — optional label; a system number is auto-generated at publish if left blank.
+2. **Select job setup** — required before files can be browsed or scanned.
+3. **Browse / scan** — the dropzone and scanner panel unlock after a setup is chosen.
+
+---
+
 ## Data model
 
-`JobSetup`, `JobSetupField`, `JobSetupCounter`, `JobSetupKnowledge` —
+`JobSetup`, `JobSetupField`, `JobSetupCounter`, `JobSetupKnowledge`, `JobSetupAssignment` —
 see `backend/prisma/schema.prisma`. Migrations:
 
 - `20260530000001_job_setups` — base feature.
@@ -133,8 +159,8 @@ see `backend/prisma/schema.prisma`. Migrations:
   system value, zone, double-key; setup naming; `JobSetupCounter`.
 - `20260609131000_add_jobsetup_pipeline_config` — `captureSettings`,
   `separationRules`, `outputTargets`.
+- `20260613000000_add_job_setup_assignments` — per-user access control via `job_setup_assignments`.
 
-> Dev-database note: this project's migration history is applied with
-> `prisma migrate deploy` (hand-authored SQL in date-stamped folders). Do **not**
-> use `prisma migrate dev` against an existing dev database — it diffs against a
-> shadow schema and will request a destructive reset.
+> Dev-database note: this project uses `prisma db push` for schema synchronisation in
+> development. Do **not** use `prisma migrate dev` against an existing dev database
+> — it diffs against a shadow schema and will request a destructive reset.
