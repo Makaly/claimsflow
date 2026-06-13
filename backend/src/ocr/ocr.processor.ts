@@ -538,37 +538,29 @@ export class OcrProcessor extends WorkerHost {
               this.logger.warn(`Anomaly scoring failed for ${claimId}: ${e.message}`)
             );
 
-            // Line item fraud analysis — fire-and-forget
+            // Line item fraud analysis + billing audit — awaited so the results
+            // are fully cached before the claim reaches the publish step.
             const allLineItems = invoices.flatMap(inv => inv.lineItems ?? []);
-            // Holistic billing audit: pre-compute + cache the diagnosis-vs-billing
-            // audit (line items, invoice totals, deductions/net) DURING processing so
-            // the Billing tab is ready without a separate manual run. Best-effort —
-            // never blocks indexing. Claims uploaded before this change have no cache
-            // and fall back to the on-demand run when their Billing tab is opened.
-            const runBillingAudit = () =>
-              this.diagnosisBillingService.assessFromClaimData(claimId).catch(e =>
-                this.logger.warn(`Billing audit (auto) failed for ${claimId}: ${e.message}`)
-              );
             if (allLineItems.length > 0) {
-              this.lineItemFraudService.analyseAndPersist(
-                claimId,
-                mergedProviderName || 'Unknown',
-                allLineItems,
-                mergedInvoiceAmount ?? 0,
-              ).then(() =>
-                // Diagnosis-billing validation runs after fraud persistence so it
-                // operates on the saved InvoiceLineItem rows.
-                this.diagnosisBillingService.validateLineItems(claimId).catch(e =>
+              try {
+                await this.lineItemFraudService.analyseAndPersist(
+                  claimId,
+                  mergedProviderName || 'Unknown',
+                  allLineItems,
+                  mergedInvoiceAmount ?? 0,
+                );
+                // Diagnosis-billing validation operates on saved InvoiceLineItem rows.
+                await this.diagnosisBillingService.validateLineItems(claimId).catch(e =>
                   this.logger.warn(`Diagnosis-billing check failed for ${claimId}: ${e.message}`)
-                )
-              ).then(() => runBillingAudit()).catch(e =>
-                this.logger.warn(`Line item fraud analysis failed for ${claimId}: ${e.message}`)
-              );
-            } else {
-              // No structured line items — still pre-compute the audit (text/vision
-              // extraction), which is what captures invoice totals + deductions.
-              runBillingAudit();
+                );
+              } catch (e: any) {
+                this.logger.warn(`Line item fraud analysis failed for ${claimId}: ${e.message}`);
+              }
             }
+            // Billing audit always runs (uses text/vision even without structured items).
+            await this.diagnosisBillingService.assessFromClaimData(claimId).catch(e =>
+              this.logger.warn(`Billing audit (auto) failed for ${claimId}: ${e.message}`)
+            );
           }
         } catch (fraudErr: any) {
           this.logger.warn(`Fraud detection post-OCR failed for claim ${claimId}: ${fraudErr.message}`);

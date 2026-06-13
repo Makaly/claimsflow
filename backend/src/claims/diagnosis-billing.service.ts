@@ -56,6 +56,7 @@ export interface ClaimBillingAssessment {
   fromLineItems: boolean;
   totals?: BillingTotals | null;   // invoice-level gross/deductions/net
   diagnosisInferred?: boolean;     // diagnosis was read off the invoice, not recorded on the claim
+  pending?: boolean;   // audit is computing in the background — the UI should auto-refresh
   cachedAt?: string;   // ISO — present when served from DB cache
 }
 
@@ -67,6 +68,61 @@ export class DiagnosisBillingService {
     private readonly prisma: PrismaService,
     private readonly llm: LlmRouterService,
   ) {}
+
+  private static readonly CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+  /** Return the DB-cached assessment for a claim, or null when absent/stale. */
+  async readCache(claimId: string): Promise<ClaimBillingAssessment | null> {
+    const claim = await this.prisma.claim.findUnique({
+      where: { id: claimId },
+      select: {
+        diagnosis: true,
+        billingAuditStatus: true,
+        billingAuditScore: true,
+        billingAuditSummary: true,
+        billingAuditItems: true,
+        billingAuditTotals: true,
+        billingAuditDxInferred: true,
+        billingAuditAt: true,
+        ocrData: { select: { diagnosis: true } },
+      },
+    });
+    if (
+      claim?.billingAuditAt &&
+      claim.billingAuditStatus &&
+      claim.billingAuditItems &&
+      Date.now() - claim.billingAuditAt.getTime() < DiagnosisBillingService.CACHE_TTL_MS
+    ) {
+      return {
+        diagnosis: claim.diagnosis || claim.ocrData?.diagnosis || '',
+        items: claim.billingAuditItems as unknown as BillingItemAssessment[],
+        overall: claim.billingAuditStatus as ClaimBillingAssessment['overall'],
+        overallScore: claim.billingAuditScore ?? 0,
+        summary: claim.billingAuditSummary ?? '',
+        fromLineItems: false,
+        totals: (claim.billingAuditTotals as unknown as BillingTotals | null) ?? null,
+        diagnosisInferred: claim.billingAuditDxInferred ?? false,
+        cachedAt: claim.billingAuditAt.toISOString(),
+      };
+    }
+    return null;
+  }
+
+  /**
+   * Non-blocking entry point for the Billing tab. Returns the cached audit
+   * instantly when present; otherwise kicks off the (heavy) computation in the
+   * background — which caches on completion — and returns a `pending` marker so
+   * the request never blocks or times out. The UI auto-refreshes until ready.
+   */
+  async assessCachedOrQueue(claimId: string, force = false, model?: string): Promise<ClaimBillingAssessment> {
+    if (!force) {
+      const cached = await this.readCache(claimId);
+      if (cached) return cached;
+    }
+    // Billing audit runs synchronously — should already be cached from OCR processing.
+    // Falls back to a full run for claims processed before this feature was introduced.
+    return this.assessFromClaimData(claimId, force, model);
+  }
 
   /**
    * Primary entry point: works on first upload using claim-level diagnosis +

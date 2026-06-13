@@ -60,6 +60,7 @@ interface Assessment {
   summary:      string
   totals?:      BillingTotals | null   // invoice-level gross/deductions/net
   diagnosisInferred?: boolean          // diagnosis read off the invoice, not recorded on the claim
+  pending?:     boolean  // audit is computing in the background — auto-refresh
   cachedAt?:    string   // ISO string if served from DB cache
 }
 
@@ -268,6 +269,7 @@ export default function InvoiceBillingAudit({
 
   // Re-running the assessment invalidates any per-item enrichment overrides.
   useEffect(() => { setEnrichOverrides({}); setEnriching(new Set()) }, [assessment])
+
 
   // ── per-item enrichment — fetch missing amount / code / verdict ────────────
   const enrichItem = useCallback(async (i: number, row: MergedRow) => {

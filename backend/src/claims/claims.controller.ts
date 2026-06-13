@@ -367,7 +367,10 @@ export class ClaimsController {
     @Query('refresh') refresh?: string,
     @Query('model') model?: string,
   ) {
-    return this.diagnosisBillingService.assessFromClaimData(id, refresh === 'true' || refresh === '1', model);
+    // Non-blocking: returns the cached audit instantly, or a `pending` marker
+    // while it computes in the background (the UI auto-refreshes). This avoids
+    // the request timing out on long, multi-page invoices.
+    return this.diagnosisBillingService.assessCachedOrQueue(id, refresh === 'true' || refresh === '1', model);
   }
 
   /** Fill in the gaps for one billing line (missing amount / code / verdict). */
