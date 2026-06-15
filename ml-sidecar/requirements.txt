@@ -1,6 +1,6 @@
 # Python 3.14-compatible pins. Upper bound on numpy/scipy/cv2/sklearn keeps
 # us inside a known-good wheel set without chasing breaking releases.
-fastapi>=0.136.3,<1.0
+fastapi>=0.137.0,<1.0
 uvicorn[standard]>=0.48.0,<1.0
 scikit-learn>=1.9.0,<2.0
 numpy>=2.4.6,<3.0
