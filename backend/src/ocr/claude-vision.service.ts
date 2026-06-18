@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import * as fs from 'fs';
 import { ParsedInvoice } from './ocr.service';
 import { buildPageContextHints } from './gemini-vision.service';
+import { TokenUsage } from './provider-profile.service';
 
 /**
  * Analyse the page-hints string to detect documents that will almost certainly
@@ -269,7 +270,7 @@ For documentPages, classify EVERY page in the packet with its absolute PDF page 
 Record pageRange as "start-end" (e.g. "1-2") covering ALL pages in the packet. Ranges must not overlap.
 Call record_all_claims with one entry per claim. Never merge two different patients' invoices into one entry.`;
 
-const USER_PROMPT = `Extract every field visible in this Kenyan medical claim document.
+const USER_PROMPT = `Extract every field visible in this Kenyan medical claim document. Return complete results — do NOT truncate or abbreviate any section.
 
 PRIORITY — search the entire document for these fields:
 • patientName: look in the document header, "Patient:", "Patient Name:", "Member Name:", "Insured:", "Name:", "Name of Patient:", claim-form sections, and signature/authorization blocks. Never return "Unknown".
@@ -277,7 +278,7 @@ PRIORITY — search the entire document for these fields:
 • invoiceAmount: the GRAND TOTAL or AMOUNT DUE — the largest "total" figure on the page
 • diagnosis: look for "Diagnosis:", "Presenting Complaint:", "Assessment:", "Clinical Impression:", or ICD-10 codes (letter + 2-3 digits, e.g. E39, J06.9)
 • membershipNumber: look near "Member No.", "Policy No.", "NHIF No.", "AK No.", "Scheme No."
-• lineItems: extract EVERY row from the billing / charges table — description, quantity, unit price, and line total. If no billing table exists, leave lineItems empty.
+• lineItems: extract EVERY single row from the billing / charges table — include all rows even if there are 50+. Output the complete array with no omissions. If no billing table exists, leave lineItems empty.
 
 Copy all values character-for-character. Leave fields empty if genuinely absent — never guess or approximate.
 Rate your confidence 0.0–1.0 on how clearly all priority fields were visible. Call record_invoice_fields with your results.`;
@@ -435,7 +436,12 @@ export class ClaudeVisionService {
    * Prepends a page pre-scan table to the prompt so Claude has an authoritative
    * split map before reading the document visually.
    */
-  async extractMulti(filePath: string, mimetype: string, modelOverride?: string): Promise<ParsedInvoice[]> {
+  async extractMulti(
+    filePath: string,
+    mimetype: string,
+    modelOverride?: string,
+    providerHints?: string,
+  ): Promise<{ invoices: ParsedInvoice[]; tokenUsage: TokenUsage }> {
     const client = this.getClient();
     if (!client) throw new Error('ANTHROPIC_API_KEY not set');
 
@@ -449,12 +455,12 @@ export class ClaudeVisionService {
 
     // Build page-type roadmap from the digital text layer (shared utility)
     const pageHints = isPdf ? await buildPageContextHints(filePath) : '';
-    const fullUserPrompt = pageHints
-      ? `${pageHints}\n\n${MULTI_USER_PROMPT}`
-      : MULTI_USER_PROMPT;
+    const base = pageHints ? `${pageHints}\n\n${MULTI_USER_PROMPT}` : MULTI_USER_PROMPT;
+    const fullUserPrompt = providerHints ? `${base}\n\n---\n${providerHints}` : base;
 
-    this.logger.log(`Claude multi-claim extract with model=${model} (${isPdf ? 'pdf' : 'image'}, pageHints=${pageHints ? 'yes' : 'no'})`);
+    this.logger.log(`Claude multi-claim extract with model=${model} (${isPdf ? 'pdf' : 'image'}, pageHints=${pageHints ? 'yes' : 'no'}, providerHints=${providerHints ? 'yes' : 'no'})`);
 
+    const t0 = Date.now();
     const response = await client.messages.create({
       model,
       max_tokens: 8192,
@@ -467,16 +473,32 @@ export class ClaudeVisionService {
       tool_choice: { type: 'tool', name: MULTI_EXTRACT_TOOL.name },
       messages: [{ role: 'user', content: [document, { type: 'text', text: fullUserPrompt }] }],
     });
+    const processingMs = Date.now() - t0;
+
+    if (response.stop_reason === 'max_tokens') {
+      this.logger.warn(
+        `Claude multi-extract hit max_tokens (8192) for ${filePath} — output may be truncated. ` +
+        `Input: ${response.usage.input_tokens}, output: ${response.usage.output_tokens}.`
+      );
+    }
+
+    const tokenUsage: TokenUsage = {
+      modelName:      model,
+      inputTokens:    response.usage.input_tokens,
+      outputTokens:   response.usage.output_tokens,
+      cacheReadTokens: (response.usage as any).cache_read_input_tokens ?? 0,
+      processingMs,
+    };
 
     const toolUse = response.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
     if (!toolUse) throw new Error('Claude returned no tool_use block for multi-claim extraction');
 
     const { claims } = toolUse.input as { claims: any[] };
-    if (!claims?.length) return [];
+    if (!claims?.length) return { invoices: [], tokenUsage };
 
     this.logger.log(`Claude identified ${claims.length} claim packet(s) in the document`);
 
-    return claims.map((c: any): ParsedInvoice => {
+    const invoices = claims.map((c: any): ParsedInvoice => {
       const confidence = Math.max(0, Math.min(1, Number(c.confidence) || 0.8));
 
       // Prefer per-page documentPages array (new schema); fall back to legacy documentTypes list
@@ -545,9 +567,16 @@ export class ClaudeVisionService {
         lineItems,
       };
     });
+
+    return { invoices, tokenUsage };
   }
 
-  async extract(filePath: string, mimetype: string, modelOverride?: string): Promise<ParsedInvoice> {
+  async extract(
+    filePath: string,
+    mimetype: string,
+    modelOverride?: string,
+    providerHints?: string,
+  ): Promise<{ invoice: ParsedInvoice; tokenUsage: TokenUsage }> {
     const client = this.getClient();
     if (!client) throw new Error('ANTHROPIC_API_KEY not set');
 
@@ -575,13 +604,16 @@ export class ClaudeVisionService {
       : model;
     if (complex) this.logger.log(`Complex document detected — routing directly to claude-opus-4-7 (skipping ${model})`);
 
-    this.logger.log(`Claude extracting with model=${effectiveModel} (${isPdf ? 'pdf' : 'image'})`);
+    const userText = providerHints ? `${USER_PROMPT}\n\n---\n${providerHints}` : USER_PROMPT;
+    this.logger.log(`Claude extracting with model=${effectiveModel} (${isPdf ? 'pdf' : 'image'}, providerHints=${providerHints ? 'yes' : 'no'})`);
 
+    const t0 = Date.now();
     const response = await client.messages.create({
       model: effectiveModel,
-      max_tokens: 2048,
-      // Cache the system block + tool schema. They are large and identical
-      // across every claim, so caching cuts input tokens ~90% on repeats.
+      // 8192 matches the multi-claim limit. 2048 was too tight: an invoice with
+      // 25+ line items produces ~3,000 output tokens and would silently truncate
+      // the lineItems array mid-way through, losing line items with no error.
+      max_tokens: 8192,
       system: [
         { type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
       ],
@@ -590,10 +622,27 @@ export class ClaudeVisionService {
       messages: [
         {
           role: 'user',
-          content: [document, { type: 'text', text: USER_PROMPT }],
+          content: [document, { type: 'text', text: userText }],
         },
       ],
     });
+    const processingMs = Date.now() - t0;
+
+    // Warn when the model hit the output token ceiling — output is truncated.
+    if (response.stop_reason === 'max_tokens') {
+      this.logger.warn(
+        `Claude single-extract hit max_tokens (8192) for ${filePath} — output may be truncated. ` +
+        `Input tokens: ${response.usage.input_tokens}, output: ${response.usage.output_tokens}.`
+      );
+    }
+
+    const tokenUsage: TokenUsage = {
+      modelName:       effectiveModel,
+      inputTokens:     response.usage.input_tokens,
+      outputTokens:    response.usage.output_tokens,
+      cacheReadTokens: (response.usage as any).cache_read_input_tokens ?? 0,
+      processingMs,
+    };
 
     const toolUse = response.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
     if (!toolUse) {
@@ -608,7 +657,7 @@ export class ClaudeVisionService {
     if (confidence < 0.70 && effectiveModel !== 'claude-opus-4-7') {
       this.logger.log(`Low confidence (${confidence.toFixed(2)}) from ${effectiveModel} — retrying with claude-opus-4-7`);
       try {
-        return await this.extract(filePath, mimetype, 'claude-opus-4-7');
+        return await this.extract(filePath, mimetype, 'claude-opus-4-7', providerHints);
       } catch (opusErr: any) {
         this.logger.warn(`Opus retry failed: ${opusErr?.message} — keeping original result`);
       }
@@ -630,7 +679,7 @@ export class ClaudeVisionService {
         }))
       : undefined;
 
-    return {
+    const invoice: ParsedInvoice = {
       patientName:      fields.patientName      || '',
       patientId:        fields.patientId        || '',
       membershipNumber: fields.membershipNumber || '',
@@ -655,5 +704,7 @@ export class ClaudeVisionService {
       documentPages:    [],
       lineItems,
     };
+
+    return { invoice, tokenUsage };
   }
 }

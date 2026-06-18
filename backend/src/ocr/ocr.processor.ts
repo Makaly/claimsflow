@@ -15,6 +15,7 @@ import { ProviderResolverService } from '../common/services/provider-resolver.se
 import { InvoiceFanoutService } from './invoice-fanout.service';
 import { DocumentSeparationService } from './document-separation.service';
 import { ImagePreprocessorService, PreprocessOptions } from './image-preprocessor.service';
+import { ProviderProfileService } from './provider-profile.service';
 import * as fs from 'fs';
 
 // concurrency: 2 — OCR is CPU-bound via Tesseract; more than 2 saturates the process
@@ -35,6 +36,7 @@ export class OcrProcessor extends WorkerHost {
     private invoiceFanout: InvoiceFanoutService,
     private documentSeparation: DocumentSeparationService,
     private imagePreprocessor: ImagePreprocessorService,
+    private providerProfile: ProviderProfileService,
   ) {
     super();
   }
@@ -139,7 +141,7 @@ export class OcrProcessor extends WorkerHost {
 
       // ── Step 2: Tesseract/Ollama — fills any gaps the classifier missed ────
       // Route through the batch's chosen vision model when one was supplied.
-      const { invoices, pageCount } = await this.ocrService.extractAndParseInvoice(workPath, mimetype, model);
+      const { invoices, pageCount, tokenUsage } = await this.ocrService.extractAndParseInvoice(workPath, mimetype, model);
       const primary = invoices[0];
 
       // ── Step 3: Merge — classifier claimFieldMap takes priority ────────────
@@ -215,6 +217,10 @@ export class OcrProcessor extends WorkerHost {
         // model produced — surfaced as tags on the DocumentViewer thumbnails.
         const perDocumentPages = primary?.documentPages?.length ? primary.documentPages : undefined;
 
+        const providerSlug = mergedProviderName
+          ? (await import('./provider-profile.service')).ProviderProfileService.detectSlug(mergedProviderName)
+          : undefined;
+
         await this.prisma.ocrExtraction.upsert({
           where: { claimId },
           create: {
@@ -240,6 +246,12 @@ export class OcrProcessor extends WorkerHost {
             fieldConfidences:  perFieldConf as any ?? undefined,
             fieldAnnotations:  perFieldAnnotations as any ?? undefined,
             documentPages:     perDocumentPages as any ?? undefined,
+            modelName:         tokenUsage?.modelName    ?? undefined,
+            inputTokens:       tokenUsage?.inputTokens  ?? undefined,
+            outputTokens:      tokenUsage?.outputTokens ?? undefined,
+            cacheReadTokens:   tokenUsage?.cacheReadTokens ?? undefined,
+            processingMs:      tokenUsage?.processingMs ?? undefined,
+            providerSlug,
           },
           update: {
             memberNumber:      mergedMemberNumber  || undefined,
@@ -261,8 +273,25 @@ export class OcrProcessor extends WorkerHost {
             fieldConfidences:  perFieldConf as any ?? undefined,
             fieldAnnotations:  perFieldAnnotations as any ?? undefined,
             documentPages:     perDocumentPages as any ?? undefined,
+            modelName:         tokenUsage?.modelName    ?? undefined,
+            inputTokens:       tokenUsage?.inputTokens  ?? undefined,
+            outputTokens:      tokenUsage?.outputTokens ?? undefined,
+            cacheReadTokens:   tokenUsage?.cacheReadTokens ?? undefined,
+            processingMs:      tokenUsage?.processingMs ?? undefined,
+            providerSlug,
           },
         });
+
+        // ── Provider intelligence — fire-and-forget ──────────────────────
+        if (providerSlug && mergedProviderName && primary && tokenUsage) {
+          this.providerProfile.upsertAfterExtraction(
+            providerSlug,
+            mergedProviderName,
+            primary,
+            tokenUsage,
+            undefined,
+          ).catch((e: any) => this.logger.warn(`Provider profile upsert failed: ${e?.message ?? e}`));
+        }
 
         // ── Job-setup custom index fields ──────────────────────────────────
         // When the batch was uploaded under a Job Setup, copy its extraction-

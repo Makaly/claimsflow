@@ -1,9 +1,10 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ClaudeVisionService } from './claude-vision.service';
-import { GeminiVisionService } from './gemini-vision.service';
+import { GeminiVisionService, buildPageContextHints } from './gemini-vision.service';
 import { OllamaOcrService } from './ollama-ocr.service';
 import { ParsedInvoice } from './ocr.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ProviderProfileService, TokenUsage } from './provider-profile.service';
 
 export type VisionProvider = 'claude' | 'gemini' | 'ollama' | 'tesseract';
 
@@ -49,6 +50,7 @@ export class VisionRouterService implements OnModuleInit {
     private readonly gemini: GeminiVisionService,
     private readonly ollama: OllamaOcrService,
     private readonly prisma: PrismaService,
+    private readonly providerProfile: ProviderProfileService,
   ) {}
 
   /**
@@ -112,7 +114,8 @@ export class VisionRouterService implements OnModuleInit {
     let geminiResult: ParsedInvoice | null = null;
     if (this.gemini.isAvailable() && !this.isCircuitOpen('gemini')) {
       try {
-        geminiResult = await this.gemini.extract(filePath, mimetype, modelOverride);
+        const { invoice } = await this.gemini.extract(filePath, mimetype, modelOverride);
+        geminiResult = invoice;
       } catch (err: any) {
         if (isQuotaOrBillingError(err)) this.tripCircuit('gemini');
         this.logger.warn(`Gemini primary pass failed: ${err?.message}`);
@@ -283,38 +286,37 @@ export class VisionRouterService implements OnModuleInit {
     modelId: string,
     filePath: string,
     mimetype: string,
-  ): Promise<ParsedInvoice[]> {
+  ): Promise<{ results: ParsedInvoice[]; tokenUsage: TokenUsage | null }> {
     const [provider, model] = modelId.includes(':') ? modelId.split(':', 2) : [modelId, undefined];
     this.logger.log(`VisionRouter.extractMulti — modelId=${modelId}, provider=${provider}, geminiAvail=${this.gemini.isAvailable()}, claudeAvail=${this.claude.isAvailable()}`);
 
-    // Build ordered list of providers to try for multi-claim splitting.
-    // Splitting is model-agnostic: we always use the best available vision
-    // model (Gemini → Claude) regardless of what model was chosen for extraction.
-    const tryOrder: Array<{ p: VisionProvider; fn: () => Promise<ParsedInvoice[]> }> = [];
+    // Detect provider from page pre-scan and fetch hints (cached, cheap)
+    const isPdf = mimetype === 'application/pdf' || filePath.endsWith('.pdf');
+    const providerHints = await this.resolveProviderHints(filePath, isPdf);
 
-    // Selected provider first (if it supports multi-extraction)
+    // Build ordered list of providers to try for multi-claim splitting.
+    const tryOrder: Array<{ p: VisionProvider; fn: () => Promise<{ invoices: ParsedInvoice[]; tokenUsage: TokenUsage }> }> = [];
+
     if (provider === 'gemini' && this.gemini.isAvailable()) {
-      tryOrder.push({ p: 'gemini', fn: () => this.gemini.extractMulti(filePath, mimetype, model) });
+      tryOrder.push({ p: 'gemini', fn: () => this.gemini.extractMulti(filePath, mimetype, model, providerHints ?? undefined) });
     }
     if (provider === 'claude' && this.claude.isAvailable()) {
-      tryOrder.push({ p: 'claude', fn: () => this.claude.extractMulti(filePath, mimetype, model) });
+      tryOrder.push({ p: 'claude', fn: () => this.claude.extractMulti(filePath, mimetype, model, providerHints ?? undefined) });
     }
-
-    // Always add capable providers as fallbacks, even when Tesseract is selected
     if (provider !== 'gemini' && this.gemini.isAvailable()) {
-      tryOrder.push({ p: 'gemini', fn: () => this.gemini.extractMulti(filePath, mimetype) });
+      tryOrder.push({ p: 'gemini', fn: () => this.gemini.extractMulti(filePath, mimetype, undefined, providerHints ?? undefined) });
     }
     if (provider !== 'claude' && this.claude.isAvailable()) {
-      tryOrder.push({ p: 'claude', fn: () => this.claude.extractMulti(filePath, mimetype) });
+      tryOrder.push({ p: 'claude', fn: () => this.claude.extractMulti(filePath, mimetype, undefined, providerHints ?? undefined) });
     }
 
     const raceTasks = tryOrder
       .filter(({ p }) => !this.isCircuitOpen(p))
       .map(({ p, fn }) =>
         fn()
-          .then(results => {
-            if (!results || results.length === 0) throw new Error(`${p} returned empty`);
-            return results;
+          .then(({ invoices, tokenUsage }) => {
+            if (!invoices || invoices.length === 0) throw new Error(`${p} returned empty`);
+            return { results: invoices, tokenUsage };
           })
           .catch(err => {
             if (isQuotaOrBillingError(err)) this.tripCircuit(p);
@@ -323,12 +325,12 @@ export class VisionRouterService implements OnModuleInit {
           })
       );
 
-    if (raceTasks.length === 0) return [];
+    if (raceTasks.length === 0) return { results: [], tokenUsage: null };
 
     try {
       return await Promise.any(raceTasks);
     } catch {
-      return [];
+      return { results: [], tokenUsage: null };
     }
   }
 
@@ -341,11 +343,15 @@ export class VisionRouterService implements OnModuleInit {
     filePath: string,
     mimetype: string,
     allowFallback = true,
-  ): Promise<ParsedInvoice | null> {
+  ): Promise<{ result: ParsedInvoice | null; tokenUsage: TokenUsage | null }> {
     const [provider, model] = modelId.includes(':') ? modelId.split(':', 2) : [modelId, undefined];
     const chain = allowFallback
       ? this.fallbackChainFrom(provider as VisionProvider, model)
       : [{ provider: provider as VisionProvider, model }];
+
+    // Detect provider from page pre-scan (cached) and fetch learned hints
+    const isPdf = mimetype === 'application/pdf' || filePath.endsWith('.pdf');
+    const providerHints = await this.resolveProviderHints(filePath, isPdf);
 
     let lastErr: unknown = null;
     for (const step of chain) {
@@ -354,8 +360,8 @@ export class VisionRouterService implements OnModuleInit {
         continue;
       }
       try {
-        const result = await this.runProvider(step.provider, filePath, mimetype, step.model);
-        if (result && this.isUsable(result)) return result;
+        const { result, tokenUsage } = await this.runProvider(step.provider, filePath, mimetype, step.model, providerHints ?? undefined);
+        if (result && this.isUsable(result)) return { result, tokenUsage };
         this.logger.warn(`${step.provider} returned unusable result, trying next provider`);
       } catch (err: any) {
         if (isQuotaOrBillingError(err)) this.tripCircuit(step.provider);
@@ -365,7 +371,7 @@ export class VisionRouterService implements OnModuleInit {
     }
 
     if (lastErr) throw lastErr;
-    return null;
+    return { result: null, tokenUsage: null };
   }
 
   private fallbackChainFrom(
@@ -387,25 +393,47 @@ export class VisionRouterService implements OnModuleInit {
     filePath: string,
     mimetype: string,
     model?: string,
-  ): Promise<ParsedInvoice | null> {
+    providerHints?: string,
+  ): Promise<{ result: ParsedInvoice | null; tokenUsage: TokenUsage | null }> {
     switch (provider) {
-      case 'claude':
-        if (!this.claude.isAvailable()) return null;
-        return this.claude.extract(filePath, mimetype, model);
-      case 'gemini':
-        if (!this.gemini.isAvailable()) return null;
-        if (!(await this.gemini.isReachable())) return null;
-        return this.gemini.extract(filePath, mimetype, model);
-      case 'ollama':
-        if (!(await this.ollama.isAvailable())) return null;
-        return (mimetype === 'application/pdf' || filePath.endsWith('.pdf'))
-          ? this.ollama.extractFromPdf(filePath, model)
-          : this.ollama.extractFromImageFile(filePath, model);
+      case 'claude': {
+        if (!this.claude.isAvailable()) return { result: null, tokenUsage: null };
+        const { invoice, tokenUsage } = await this.claude.extract(filePath, mimetype, model, providerHints);
+        return { result: invoice, tokenUsage };
+      }
+      case 'gemini': {
+        if (!this.gemini.isAvailable()) return { result: null, tokenUsage: null };
+        if (!(await this.gemini.isReachable())) return { result: null, tokenUsage: null };
+        const { invoice, tokenUsage } = await this.gemini.extract(filePath, mimetype, model, providerHints);
+        return { result: invoice, tokenUsage };
+      }
+      case 'ollama': {
+        if (!(await this.ollama.isAvailable())) return { result: null, tokenUsage: null };
+        const result = (mimetype === 'application/pdf' || filePath.endsWith('.pdf'))
+          ? await this.ollama.extractFromPdf(filePath, model)
+          : await this.ollama.extractFromImageFile(filePath, model);
+        return { result, tokenUsage: null };
+      }
       case 'tesseract':
-        // Signal to caller to fall through to OcrService's Tesseract path
-        return null;
+        return { result: null, tokenUsage: null };
       default:
         throw new Error(`Unknown vision provider: ${provider}`);
+    }
+  }
+
+  /**
+   * Use the page pre-scan (cached) to detect the provider and fetch any learned
+   * structural hints for it. Returns null when no profile exists yet.
+   */
+  private async resolveProviderHints(filePath: string, isPdf: boolean): Promise<string | null> {
+    try {
+      if (!isPdf) return null;
+      const pageHints = await buildPageContextHints(filePath);
+      const slug = ProviderProfileService.slugFromPageHints(pageHints);
+      if (!slug) return null;
+      return this.providerProfile.getHints(slug);
+    } catch {
+      return null;
     }
   }
 

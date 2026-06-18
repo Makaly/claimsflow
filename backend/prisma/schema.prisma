@@ -755,6 +755,12 @@ model OcrExtraction {
   anomalyScore      Float?
   possibleFraud     Boolean   @default(false)
   anomalyReasons    String[]
+  modelName         String?   // e.g. "claude-sonnet-4-6"
+  inputTokens       Int?
+  outputTokens      Int?
+  cacheReadTokens   Int?
+  processingMs      Int?
+  providerSlug      String?   // normalized provider name for indexing
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   processedAt       DateTime?
@@ -766,6 +772,7 @@ model OcrExtraction {
   @@index([status])
   @@index([requiresReview])
   @@index([tenantId])
+  @@index([providerSlug])
   @@map("ocr_extractions")
 }
 
@@ -1439,8 +1446,9 @@ model Tenant {
   documents        Document[]
   paymentAdvices   PaymentAdvice[]
   activityLogs     ActivityLog[]
-  ocrExtractions   OcrExtraction[]
-  batchSubmissions BatchSubmission[]
+  ocrExtractions           OcrExtraction[]
+  batchSubmissions         BatchSubmission[]
+  providerExtractionProfiles ProviderExtractionProfile[]
 
   @@index([slug])
   @@index([active])
@@ -2153,4 +2161,35 @@ model JobSetupAssignment {
   @@index([jobSetupId])
   @@index([userId])
   @@map("job_setup_assignments")
+}
+
+/// Per-provider intelligence built up over time.
+/// Each row accumulates rolling-average token/confidence stats and learned
+/// structural hints so future extractions for the same provider can inject
+/// a targeted context block instead of the generic hospital/insurer list.
+model ProviderExtractionProfile {
+  id               String   @id @default(uuid())
+  providerSlug     String   @unique
+  displayName      String
+
+  extractionCount  Int      @default(0)
+  avgConfidence    Float    @default(0)
+  avgInputTokens   Int      @default(0)
+  avgOutputTokens  Int      @default(0)
+  avgCacheHitPct   Float    @default(0)
+  preferredModel   String?
+
+  // Learned structural intelligence: membershipPrefix, invoiceNumberFormat,
+  // currencySymbol, reliableFields, unreliableFields, structureNotes
+  invoiceHints     Json     @default("{}")
+
+  lastSeenAt       DateTime @updatedAt
+  createdAt        DateTime @default(now())
+
+  tenantId         String?
+  tenant           Tenant?  @relation(fields: [tenantId], references: [id])
+
+  @@index([providerSlug])
+  @@index([tenantId])
+  @@map("provider_extraction_profiles")
 }

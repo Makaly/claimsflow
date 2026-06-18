@@ -17,6 +17,7 @@ import { VisionRouterService } from './vision-router.service';
 import { DocumentClassifierService } from '../document-classifier/document-classifier.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { buildPageHintsMap, PageHintEntry } from './gemini-vision.service';
+import { TokenUsage } from './provider-profile.service';
 
 export interface ExtractedLineItem {
   description: string
@@ -356,6 +357,7 @@ export class OcrService {
     invoices: ParsedInvoice[];
     pageCount: number;
     modelUsed?: string;
+    tokenUsage?: TokenUsage | null;
   }> {
     const result = await this._extractAndParseInvoiceRaw(filePath, mimetype, modelId);
     // Run the document classifier in parallel (best-effort) and merge zone-mapped fields
@@ -508,26 +510,19 @@ export class OcrService {
     invoices: ParsedInvoice[];
     pageCount: number;
     modelUsed?: string;
+    tokenUsage?: TokenUsage | null;
   }> {
     const chosen = modelId || process.env.VISION_DEFAULT_PROVIDER || 'claude';
 
     // ── Multi-claim splitting runs for ALL models including Tesseract ────────
-    // Splitting (finding claim boundaries) is handled by the page pre-scan +
-    // Gemini/Claude. This is separate from field extraction and must always run
-    // so that merged PDFs are correctly split regardless of the chosen model.
     try {
-      const multiResults = await this.visionRouter.extractMulti(chosen, filePath, mimetype);
+      const { results: multiResults, tokenUsage } = await this.visionRouter.extractMulti(chosen, filePath, mimetype);
       if (multiResults && multiResults.length > 0) {
-        // Quality-gate: reject batches where every extracted amount looks like a
-        // patient co-pay (> 0 but < 100 KES).  This catches the Aga Khan inpatient
-        // pattern where NHIF+sponsor leaves the patient owing KES 0–50, but the
-        // gross bill is hundreds of thousands.  Fall through so the Tesseract path
-        // can read the summary/totals page and find the real gross total.
         const hasUsableAmount = multiResults.some(r => r.invoiceAmount === 0 || r.invoiceAmount >= 100);
         if (hasUsableAmount) {
           this.logger.log(`Multi-claim extraction returned ${multiResults.length} claim(s) via ${chosen}`);
           const realPageCount = await this.getPdfPageCount(filePath, mimetype);
-          return { invoices: multiResults, pageCount: realPageCount, modelUsed: chosen };
+          return { invoices: multiResults, pageCount: realPageCount, modelUsed: chosen, tokenUsage };
         }
         this.logger.warn(`Multi-claim extract returned only co-pay-level amounts (< KES 100) — falling through to Tesseract`);
       } else {
@@ -540,13 +535,12 @@ export class OcrService {
     // ── Single-claim AI extraction (non-tesseract models) ────────────────────
     if (chosen !== 'tesseract') {
       try {
-        const result = await this.visionRouter.extract(chosen, filePath, mimetype, true);
+        const { result, tokenUsage } = await this.visionRouter.extract(chosen, filePath, mimetype, true);
         if (result) {
-          // Same quality gate as multi-claim path: skip co-pay-level amounts
           if (result.invoiceAmount > 0 && result.invoiceAmount < 100) {
             this.logger.warn(`Single-claim extract returned co-pay-level amount (${result.invoiceAmount}) — falling through to Tesseract`);
           } else {
-            return { invoices: [result], pageCount: 1, modelUsed: chosen };
+            return { invoices: [result], pageCount: 1, modelUsed: chosen, tokenUsage };
           }
         } else {
           this.logger.warn(`Vision router returned null for ${chosen} — falling back to Tesseract regex pipeline`);

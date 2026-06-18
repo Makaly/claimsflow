@@ -18,6 +18,7 @@ import { ClaimTypeConfigService } from '../claims/claim-type-config.service';
 import { InvoiceFanoutService } from './invoice-fanout.service';
 import { DocumentSeparationService } from './document-separation.service';
 import { ImagePreprocessorService } from './image-preprocessor.service';
+import { ProviderProfileService } from './provider-profile.service';
 import { AssistantModule } from '../assistant/assistant.module';
 
 @Module({
@@ -44,6 +45,7 @@ import { AssistantModule } from '../assistant/assistant.module';
     InvoiceFanoutService,
     DocumentSeparationService,
     ImagePreprocessorService,
+    ProviderProfileService,
   ],
   exports: [OcrService, OllamaOcrService, VisionRouterService, ImagePreprocessService],
 })

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import * as fs from 'fs';
 import { ParsedInvoice } from './ocr.service';
+import { TokenUsage } from './provider-profile.service';
 
 // ── Structured page-hint contract ────────────────────────────────────────────
 // This is the "master classifier" output.  Both the AI path (Gemini / Claude)
@@ -446,7 +447,12 @@ export class GeminiVisionService {
    * Extract ALL claim packets from a multi-claim PDF using Gemini.
    * Uses the same page pre-scan roadmap as Claude for consistent splitting.
    */
-  async extractMulti(filePath: string, mimetype: string, modelOverride?: string): Promise<ParsedInvoice[]> {
+  async extractMulti(
+    filePath: string,
+    mimetype: string,
+    modelOverride?: string,
+    providerHints?: string,
+  ): Promise<{ invoices: ParsedInvoice[]; tokenUsage: TokenUsage }> {
     this.logger.log(`GeminiVisionService.extractMulti() called — filePath=${filePath}, model=${modelOverride || process.env.GEMINI_MODEL || 'gemini-2.5-pro'}`);
     const client = this.getClient();
     if (!client) throw new Error('GEMINI_API_KEY not set');
@@ -459,7 +465,7 @@ export class GeminiVisionService {
     // Build page-type roadmap from digital text layer (model-agnostic)
     const pageHints = isPdf ? await buildPageContextHints(filePath) : '';
 
-    const MULTI_PROMPT = `${pageHints ? pageHints + '\n\n' : ''}This PDF is a merged batch of Kenyan insurance claim documents. Split it into individual claims using these rules:
+    const basePrompt = `${pageHints ? pageHints + '\n\n' : ''}This PDF is a merged batch of Kenyan insurance claim documents. Split it into individual claims using these rules:
 
 RULE 1 — Never split "Page X of Y" sequences — all pages belong to the same invoice.
 RULE 2 — Medical Claim Form (MCF) ALWAYS belongs with its invoice — NEVER a standalone claim:
@@ -470,10 +476,13 @@ RULE 3b — A SCANNED/IMAGE page before a "Page 1 of N" sequence: if it shows a 
 RULE 4 — Discharge summaries, lab results, auth letters, referral letters attach to the nearest preceding invoice — do NOT create separate claim entries for them.
 
 For invoiceAmount: use the GROSS TOTAL charged by the hospital — the full bill BEFORE any insurance/NHIF/sponsor deduction. On Aga Khan inpatient bills this is "Grand Total", "Sponsor Amount Payable", or "Total Charges" (typically hundreds of thousands of KES). Do NOT use "Patient Balance", "Patient Co-pay", or "Amount Due from Patient" — those are residual amounts after coverage. Any value below KES 100 on a hospital bill is definitionally a co-pay, not an invoice total.
+Return the complete lineItems array for each claim — do NOT truncate or summarise even if there are many rows.
 pageRange must be "start-end" (e.g. "1-2") or single page (e.g. "5"). Ranges must not overlap.
 Return one entry per distinct claim.`;
 
-    this.logger.log(`Gemini multi-claim extract with model=${modelId} (pageHints=${pageHints ? 'yes' : 'no'})`);
+    const MULTI_PROMPT = providerHints ? `${basePrompt}\n\n---\n${providerHints}` : basePrompt;
+
+    this.logger.log(`Gemini multi-claim extract with model=${modelId} (pageHints=${pageHints ? 'yes' : 'no'}, providerHints=${providerHints ? 'yes' : 'no'})`);
 
     const model = client.getGenerativeModel({
       model: modelId,
@@ -482,12 +491,14 @@ Return one entry per distinct claim.`;
         responseMimeType: 'application/json',
         responseSchema: MULTI_RESPONSE_SCHEMA,
         temperature: 0.1,
+        maxOutputTokens: 8192,
       },
     });
 
     const timeout = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error('Gemini multi-claim timed out after 180s')), 180_000)
     );
+    const t0 = Date.now();
     const result = await Promise.race([
       model.generateContent([
         { inlineData: { mimeType: effectiveMime, data: b64 } },
@@ -495,13 +506,30 @@ Return one entry per distinct claim.`;
       ]),
       timeout,
     ]);
+    const processingMs = Date.now() - t0;
+
+    const usage = result.response.usageMetadata;
+    const candidate = result.response.candidates?.[0];
+    if (candidate?.finishReason === 'MAX_TOKENS') {
+      this.logger.warn(
+        `Gemini multi-extract hit maxOutputTokens (8192) for ${filePath} — output may be truncated. ` +
+        `Input: ${usage?.promptTokenCount ?? 0}, output: ${usage?.candidatesTokenCount ?? 0}.`
+      );
+    }
+    const tokenUsage: TokenUsage = {
+      modelName:       modelId,
+      inputTokens:     usage?.promptTokenCount ?? 0,
+      outputTokens:    usage?.candidatesTokenCount ?? 0,
+      cacheReadTokens: 0,
+      processingMs,
+    };
 
     const text = result.response.text();
     let parsed: { claims: any[] } = { claims: [] };
     try { parsed = JSON.parse(text); } catch { throw new Error(`Gemini multi-claim non-JSON: ${text.slice(0, 200)}`); }
 
     const { claims } = parsed;
-    if (!claims?.length) return [];
+    if (!claims?.length) return { invoices: [], tokenUsage };
     this.logger.log(`Gemini identified ${claims.length} claim packet(s)`);
 
     // Derive per-page categories from the page pre-scan so each split claim
@@ -509,7 +537,7 @@ Return one entry per distinct claim.`;
     const hintsMap = parsePageHints(pageHints);
 
     const DIAGNOSIS_NOISE = /\b(DETAILED\s+)?INVOICE\b|\bDETAILED\b|\bMEDICAL CLAIM FORM\b/gi;
-    return claims.map((c: any): ParsedInvoice => ({
+    const invoices = claims.map((c: any): ParsedInvoice => ({
       patientName:      c.patientName      || '',
       patientId:        c.patientId        || '',
       membershipNumber: c.membershipNumber || '',
@@ -533,9 +561,16 @@ Return one entry per distinct claim.`;
       pageRange:        c.pageRange || '1',
       documentPages:    documentPagesFromHints(hintsMap, pageRangeToNums(c.pageRange)),
     }));
+
+    return { invoices, tokenUsage };
   }
 
-  async extract(filePath: string, mimetype: string, modelOverride?: string): Promise<ParsedInvoice> {
+  async extract(
+    filePath: string,
+    mimetype: string,
+    modelOverride?: string,
+    providerHints?: string,
+  ): Promise<{ invoice: ParsedInvoice; tokenUsage: TokenUsage }> {
     const client = this.getClient();
     if (!client) throw new Error('GEMINI_API_KEY not set');
 
@@ -550,7 +585,8 @@ Return one entry per distinct claim.`;
       ? documentPagesFromHints(parsePageHints(await buildPageContextHints(filePath)))
       : [];
 
-    this.logger.log(`Gemini extracting with model=${modelId} (${isPdf ? 'pdf' : 'image'})`);
+    const promptText = providerHints ? `${PROMPT}\n\n---\n${providerHints}` : PROMPT;
+    this.logger.log(`Gemini extracting with model=${modelId} (${isPdf ? 'pdf' : 'image'}, providerHints=${providerHints ? 'yes' : 'no'})`);
 
     const model = client.getGenerativeModel({
       model: modelId,
@@ -559,19 +595,38 @@ Return one entry per distinct claim.`;
         responseMimeType: 'application/json',
         responseSchema: RESPONSE_SCHEMA,
         temperature: 0.1,
+        maxOutputTokens: 8192,
       },
     });
 
     const timeout = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error(`Gemini call timed out after ${CALL_TIMEOUT_MS / 1000}s`)), CALL_TIMEOUT_MS)
     );
+    const t0 = Date.now();
     const result = await Promise.race([
       model.generateContent([
         { inlineData: { mimeType: effectiveMime, data: b64 } },
-        { text: PROMPT },
+        { text: promptText },
       ]),
       timeout,
     ]);
+    const processingMs = Date.now() - t0;
+
+    const usage = result.response.usageMetadata;
+    const singleCandidate = result.response.candidates?.[0];
+    if (singleCandidate?.finishReason === 'MAX_TOKENS') {
+      this.logger.warn(
+        `Gemini single-extract hit maxOutputTokens (8192) for ${filePath} — output may be truncated. ` +
+        `Input: ${usage?.promptTokenCount ?? 0}, output: ${usage?.candidatesTokenCount ?? 0}.`
+      );
+    }
+    const tokenUsage: TokenUsage = {
+      modelName:       modelId,
+      inputTokens:     usage?.promptTokenCount ?? 0,
+      outputTokens:    usage?.candidatesTokenCount ?? 0,
+      cacheReadTokens: 0,
+      processingMs,
+    };
 
     const text = result.response.text();
     let fields: Record<string, any> = {};
@@ -581,7 +636,7 @@ Return one entry per distinct claim.`;
       throw new Error(`Gemini returned non-JSON response: ${text.slice(0, 200)}`);
     }
 
-    return {
+    const invoice: ParsedInvoice = {
       patientName:      fields.patientName      || '',
       patientId:        fields.patientId        || '',
       membershipNumber: fields.membershipNumber || '',
@@ -605,5 +660,7 @@ Return one entry per distinct claim.`;
       pageRange:        docPages.length ? `1-${docPages.length}` : '1',
       documentPages:    docPages,
     };
+
+    return { invoice, tokenUsage };
   }
 }
