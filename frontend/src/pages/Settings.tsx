@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -11,10 +11,24 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { Save, Mail, RefreshCw, CheckCircle, AlertTriangle, ExternalLink, ScanSearch, DollarSign } from 'lucide-react'
+import { Save, Mail, RefreshCw, CheckCircle, AlertTriangle, ExternalLink, ScanSearch, DollarSign, BrainCircuit } from 'lucide-react'
 import DocumentClassifiersTab from '@/components/DocumentClassifiersTab'
 import ScanMeteringTab from '@/components/ScanMeteringTab'
 import api from '@/services/api'
+
+interface ProviderProfile {
+  id: string
+  providerSlug: string
+  displayName: string
+  extractionCount: number
+  avgConfidence: number
+  avgInputTokens: number
+  avgOutputTokens: number
+  avgCacheHitPct: number
+  preferredModel: string | null
+  invoiceHints: Record<string, any>
+  lastSeenAt: string
+}
 
 export default function Settings() {
   const [searchParams] = useSearchParams()
@@ -32,6 +46,17 @@ export default function Settings() {
   const [oauthStatus, setOauthStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [pollStatus, setPollStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [lastPollResult, setLastPollResult] = useState<string | null>(null)
+
+  const [providerProfiles, setProviderProfiles] = useState<ProviderProfile[]>([])
+  const [profilesLoading, setProfilesLoading] = useState(false)
+
+  useEffect(() => {
+    setProfilesLoading(true)
+    api.get('/ocr/provider-profiles')
+      .then(({ data }) => setProviderProfiles(data.profiles ?? []))
+      .catch(() => setProviderProfiles([]))
+      .finally(() => setProfilesLoading(false))
+  }, [])
 
   const getAuthUrl = async () => {
     setOauthStatus('loading')
@@ -78,6 +103,7 @@ export default function Settings() {
           <TabsTrigger value="email-ingestion"><Mail className="mr-1 h-3.5 w-3.5" /> Email Ingestion</TabsTrigger>
           <TabsTrigger value="document-classifiers"><ScanSearch className="mr-1 h-3.5 w-3.5" /> Document Classifiers</TabsTrigger>
           <TabsTrigger value="scan-billing"><DollarSign className="mr-1 h-3.5 w-3.5" /> Scan Billing</TabsTrigger>
+          <TabsTrigger value="ai-intelligence"><BrainCircuit className="mr-1 h-3.5 w-3.5" /> AI Intelligence</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="space-y-6">
@@ -411,6 +437,79 @@ export default function Settings() {
         {/* ── SCAN BILLING ── */}
         <TabsContent value="scan-billing" className="space-y-6">
           <ScanMeteringTab />
+        </TabsContent>
+
+        {/* ── AI INTELLIGENCE ── */}
+        <TabsContent value="ai-intelligence" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BrainCircuit className="h-4 w-4" />
+                Provider Extraction Intelligence
+              </CardTitle>
+              <CardDescription>
+                Per-provider learning profiles built from past extractions. After 3 extractions the system
+                automatically injects targeted context into the AI prompt to reduce token usage and improve accuracy.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {profilesLoading ? (
+                <p className="text-sm text-muted-foreground">Loading profiles…</p>
+              ) : providerProfiles.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No provider profiles yet. Process a few invoices to start building intelligence.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b text-muted-foreground">
+                        <th className="text-left py-2 pr-3 font-medium">Provider</th>
+                        <th className="text-right py-2 pr-3 font-medium">Extractions</th>
+                        <th className="text-right py-2 pr-3 font-medium">Avg Confidence</th>
+                        <th className="text-right py-2 pr-3 font-medium">Avg Input Tokens</th>
+                        <th className="text-right py-2 pr-3 font-medium">Avg Output Tokens</th>
+                        <th className="text-right py-2 pr-3 font-medium">Cache Hit %</th>
+                        <th className="text-left py-2 pr-3 font-medium">Model</th>
+                        <th className="text-left py-2 font-medium">Learned Hints</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/50">
+                      {providerProfiles.map(p => {
+                        const hints = p.invoiceHints ?? {}
+                        const hintParts: string[] = []
+                        if (hints.membershipPrefix) hintParts.push(`prefix: ${hints.membershipPrefix}`)
+                        if (hints.invoiceNumberFormat) hintParts.push(`inv#: ${hints.invoiceNumberFormat}`)
+                        if (hints.currencySymbol) hintParts.push(`currency: ${hints.currencySymbol}`)
+                        if (Array.isArray(hints.reliableFields) && hints.reliableFields.length)
+                          hintParts.push(`reliable: ${hints.reliableFields.slice(0, 3).join(', ')}`)
+                        return (
+                          <tr key={p.id} className="hover:bg-muted/30 transition-colors">
+                            <td className="py-2 pr-3 font-medium">{p.displayName}</td>
+                            <td className="py-2 pr-3 text-right">
+                              <Badge variant={p.extractionCount >= 3 ? 'default' : 'secondary'} className="text-[10px]">
+                                {p.extractionCount}
+                              </Badge>
+                            </td>
+                            <td className="py-2 pr-3 text-right">{(p.avgConfidence * 100).toFixed(0)}%</td>
+                            <td className="py-2 pr-3 text-right">{p.avgInputTokens.toLocaleString()}</td>
+                            <td className="py-2 pr-3 text-right">{p.avgOutputTokens.toLocaleString()}</td>
+                            <td className="py-2 pr-3 text-right">
+                              {p.avgCacheHitPct > 0
+                                ? <span className="text-green-600">{(p.avgCacheHitPct * 100).toFixed(0)}%</span>
+                                : <span className="text-muted-foreground">—</span>}
+                            </td>
+                            <td className="py-2 pr-3 text-muted-foreground">{p.preferredModel ?? '—'}</td>
+                            <td className="py-2 text-muted-foreground">
+                              {hintParts.length > 0 ? hintParts.join(' · ') : '—'}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
       </Tabs>

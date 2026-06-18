@@ -690,10 +690,14 @@ export class ClaimsService {
       anomalyScore: ocr?.anomalyScore ?? null,
       anomalyReasons,
       clinicalSections,
-      // Per-page document classification (Invoice / Auth Letter / Discharge
-      // Summary …) so the viewer can tag each thumbnail with its category.
       documentPages: Array.isArray(ocr?.documentPages) ? ocr.documentPages : [],
       status: ocr?.status ?? null,
+      modelName:       ocr?.modelName       ?? null,
+      inputTokens:     ocr?.inputTokens     ?? null,
+      outputTokens:    ocr?.outputTokens    ?? null,
+      cacheReadTokens: ocr?.cacheReadTokens ?? null,
+      processingMs:    ocr?.processingMs    ?? null,
+      providerSlug:    ocr?.providerSlug    ?? null,
     };
   }
 

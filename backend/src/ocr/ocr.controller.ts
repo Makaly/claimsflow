@@ -5,6 +5,7 @@ import {
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { OcrService } from './ocr.service';
 import { VisionRouterService } from './vision-router.service';
+import { PrismaService } from '../prisma/prisma.service';
 import * as multer from 'multer';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -16,6 +17,7 @@ export class OcrController {
   constructor(
     private readonly ocrService: OcrService,
     private readonly visionRouter: VisionRouterService,
+    private readonly prisma: PrismaService,
   ) {}
 
   /**
@@ -156,5 +158,30 @@ export class OcrController {
     } finally {
       try { fs.unlinkSync(file.path); } catch {}
     }
+  }
+
+  /**
+   * GET /api/ocr/provider-profiles
+   * Returns learned per-provider extraction intelligence (token stats, hints).
+   */
+  @Get('provider-profiles')
+  async listProviderProfiles() {
+    const profiles = await this.prisma.providerExtractionProfile.findMany({
+      orderBy: { extractionCount: 'desc' },
+      select: {
+        id: true,
+        providerSlug: true,
+        displayName: true,
+        extractionCount: true,
+        avgConfidence: true,
+        avgInputTokens: true,
+        avgOutputTokens: true,
+        avgCacheHitPct: true,
+        preferredModel: true,
+        invoiceHints: true,
+        lastSeenAt: true,
+      },
+    });
+    return { profiles };
   }
 }

@@ -93,6 +93,26 @@ export class ProviderProfileService {
     }
   }
 
+  /** Return all provider profiles ordered by extraction count descending. */
+  async listProfiles() {
+    return this.prisma.providerExtractionProfile.findMany({
+      orderBy: { extractionCount: 'desc' },
+      select: {
+        id: true,
+        providerSlug: true,
+        displayName: true,
+        extractionCount: true,
+        avgConfidence: true,
+        avgInputTokens: true,
+        avgOutputTokens: true,
+        avgCacheHitPct: true,
+        preferredModel: true,
+        invoiceHints: true,
+        lastSeenAt: true,
+      },
+    });
+  }
+
   /**
    * Update the provider profile after a successful extraction.
    * Called fire-and-forget — errors are logged but never thrown.

@@ -463,6 +463,12 @@ export default function Claims() {
     }
     documentPages?: Array<{ pageNumber: number; category: string; categoryLabel: string; confidence?: number; summary?: string }>
     status: string | null
+    modelName?: string | null
+    inputTokens?: number | null
+    outputTokens?: number | null
+    cacheReadTokens?: number | null
+    processingMs?: number | null
+    providerSlug?: string | null
   } | null>(null)
 
   useEffect(() => {
@@ -2264,11 +2270,22 @@ export default function Claims() {
 
                               {/* OCR engine badge */}
                               {ocrData?.ocrEngine && (
-                                <p className="text-[9px] text-muted-foreground/50 flex items-center gap-1">
-                                  <ScanLine className="h-2.5 w-2.5" />
-                                  Extracted by {ocrData.ocrEngine}
-                                  {ocrData.overallConfidence != null && ` · ${(ocrData.overallConfidence * 100).toFixed(0)}% confidence`}
-                                </p>
+                                <div className="text-[9px] text-muted-foreground/50 space-y-0.5">
+                                  <p className="flex items-center gap-1">
+                                    <ScanLine className="h-2.5 w-2.5" />
+                                    Extracted by {ocrData.modelName ?? ocrData.ocrEngine}
+                                    {ocrData.overallConfidence != null && ` · ${(ocrData.overallConfidence * 100).toFixed(0)}% confidence`}
+                                    {ocrData.processingMs != null && ` · ${(ocrData.processingMs / 1000).toFixed(1)}s`}
+                                  </p>
+                                  {(ocrData.inputTokens != null || ocrData.outputTokens != null) && (
+                                    <p className="flex items-center gap-1 pl-3.5">
+                                      {ocrData.inputTokens != null && `↑${ocrData.inputTokens.toLocaleString()} in`}
+                                      {ocrData.outputTokens != null && ` ↓${ocrData.outputTokens.toLocaleString()} out`}
+                                      {ocrData.cacheReadTokens != null && ocrData.cacheReadTokens > 0 &&
+                                        ` · ${Math.round((ocrData.cacheReadTokens / (ocrData.inputTokens ?? 1)) * 100)}% cached`}
+                                    </p>
+                                  )}
+                                </div>
                               )}
                             </div>
                           </Section>
