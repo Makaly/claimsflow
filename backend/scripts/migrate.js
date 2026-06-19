@@ -42,13 +42,23 @@ function run(cmd) {
 async function main() {
   console.log('[migrate] checking for failed migrations…');
 
-  const failed = await prisma.$queryRawUnsafe(`
-    SELECT migration_name
-    FROM "_prisma_migrations"
-    WHERE finished_at    IS NULL
-      AND rolled_back_at IS NULL
-      AND started_at     IS NOT NULL
-  `);
+  let failed = [];
+  try {
+    failed = await prisma.$queryRawUnsafe(`
+      SELECT migration_name
+      FROM "_prisma_migrations"
+      WHERE finished_at    IS NULL
+        AND rolled_back_at IS NULL
+        AND started_at     IS NOT NULL
+    `);
+  } catch (err) {
+    // 42P01 = undefined_table: fresh DB has no _prisma_migrations yet — that's fine
+    if (err.message?.includes('42P01') || err.message?.includes('does not exist')) {
+      console.log('[migrate] _prisma_migrations not found — fresh database, skipping check');
+    } else {
+      throw err;
+    }
+  }
 
   if (failed.length === 0) {
     console.log('[migrate] no failed migrations — proceeding to deploy');
