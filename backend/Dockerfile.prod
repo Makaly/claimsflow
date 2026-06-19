@@ -10,9 +10,17 @@ RUN npm ci --legacy-peer-deps
 COPY . .
 RUN npx prisma generate
 RUN npm run build && test -f dist/main.js || (echo "ERROR: dist/main.js not produced by build" && exit 1)
-# Compile seed separately (tsconfig excludes prisma/ so nest build skips it)
+# Compile seed separately (tsconfig excludes prisma/ so nest build skips it).
+# --rootDir . is required: without it tsc infers rootDir=prisma/ and rejects the
+# import '../src/generated/prisma/client' (TS6059 — above rootDir). With rootDir=.
+# and outDir=dist the output lands at dist/prisma/seed.js (matching the CMD below).
 RUN npx tsc --skipLibCheck --esModuleInterop --allowSyntheticDefaultImports \
-    --target ES2021 --module commonjs --outDir dist/prisma prisma/seed.ts 2>/dev/null || true
+    --target ES2021 --module commonjs --moduleResolution node --rootDir . --outDir dist \
+    prisma/seed.ts 2>/dev/null || true
+# seed.js requires('../src/generated/prisma/client') at runtime. The Nest build
+# compiles src/generated/prisma/ → dist/generated/prisma/ (strips the src/ prefix).
+# Mirror it to dist/src/generated/ so the require resolves correctly:
+RUN mkdir -p dist/src && cp -r dist/generated dist/src/
 
 # ---- runtime ----
 FROM node:26-alpine
