@@ -1,6 +1,14 @@
 /* Seed default lookup sources + job setups. Idempotent (upsert by slug). */
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+// Prisma 7: the client is generated into src/generated/prisma and compiled to
+// dist/generated/prisma; connections go through the pg driver adapter. This
+// runs in production after `npm run build`, so the compiled client exists at
+// ../dist/generated/prisma relative to this file (prisma/). DATABASE_URL is
+// provided by the container environment.
+const { PrismaClient } = require('../dist/generated/prisma/client');
+const { PrismaPg } = require('@prisma/adapter-pg');
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+});
 
 async function source(slug, data) {
   return prisma.lookupSource.upsert({
