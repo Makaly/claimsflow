@@ -9,6 +9,7 @@ import { GeminiVisionService } from './gemini-vision.service';
 import { VisionRouterService } from './vision-router.service';
 import { DocumentClassifierModule } from '../document-classifier/document-classifier.module';
 import { PrismaModule } from '../prisma/prisma.module';
+import { LicensingModule } from '../licensing/licensing.module';
 import { ImagePreprocessService } from './image-preprocess.service';
 import { AnomalyScoringService } from '../claims/anomaly-scoring.service';
 import { ProviderFraudThresholdsService } from '../claims/provider-fraud-thresholds.service';
@@ -27,6 +28,7 @@ import { AssistantModule } from '../assistant/assistant.module';
     DocumentClassifierModule,
     PrismaModule,
     AssistantModule,
+    LicensingModule,
   ],
   controllers: [OcrController],
   providers: [
