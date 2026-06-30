@@ -50,6 +50,8 @@ site/
 # Generated audit and compliance reports (binary/HTML artifacts — store in secure drive)
 *.pdf
 audit_report.html
+# Generated end-to-end data-flow capture (run artifact — store in secure drive)
+ClaimsFlow_E2E_DataFlow_*.json
 
 # Downloaded installer artifacts from testing the curl|bash one-liner
 /claimsflow-install.sh
