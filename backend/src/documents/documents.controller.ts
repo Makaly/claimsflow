@@ -12,6 +12,7 @@ import { assertAllowedFileSignature } from './file-signature';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { ScanMeteringService } from '../scan-metering/scan-metering.service';
 
 // Resolve upload directory from env (Render sets UPLOAD_DIR=/tmp/uploads) with
 // a fallback for local dev. Create it eagerly so multer never fails on a fresh
@@ -22,7 +23,10 @@ fs.mkdirSync(DOCUMENTS_UPLOAD_DIR, { recursive: true });
 @Controller('documents')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class DocumentsController {
-  constructor(private readonly documentsService: DocumentsService) {}
+  constructor(
+    private readonly documentsService: DocumentsService,
+    private readonly metering: ScanMeteringService,
+  ) {}
 
   // ─────────────────────────────────────────────────────────────
   // Upload / CRUD
@@ -47,8 +51,9 @@ export class DocumentsController {
       },
     }),
   )
-  uploadDocument(
+  async uploadDocument(
     @UploadedFile() file: Express.Multer.File,
+    @Request() req: any,
     @Query('claimId') claimId?: string,
     @Query('branchName') branchName?: string,
   ) {
@@ -56,7 +61,25 @@ export class DocumentsController {
     // filename extension. Confirm the real file header matches an allowed type
     // before the document is persisted/processed; rejects + deletes otherwise.
     if (file?.path) assertAllowedFileSignature(file.path);
-    return this.documentsService.uploadDocument(file, claimId, branchName);
+    const document = await this.documentsService.uploadDocument(file, claimId, branchName);
+
+    // Meter the upload as a billable "scan" so invoice uploads show up on the
+    // Scan Metering dashboard exactly like physical scans. Best-effort: never
+    // let metering (or a disabled/exempt provider) fail the upload itself.
+    const userAgent = req?.headers?.['user-agent'];
+    await this.metering.recordEvent({
+      userId: req.user.userId,
+      providerId: req.user.providerId ?? null,
+      branchId: req.user.branchId ?? null,
+      deviceClass: 'web',
+      os: 'web',
+      userAgent: typeof userAgent === 'string' ? userAgent : null,
+      scannerName: 'Upload',
+      pages: (document as { pageCount?: number | null })?.pageCount ?? null,
+      success: true,
+    }).catch(() => {});
+
+    return document;
   }
 
   @Get()

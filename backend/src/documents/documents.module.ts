@@ -7,9 +7,10 @@ import { ImagePreprocessorService } from '../ocr/image-preprocessor.service';
 import { BarcodeService } from '../common/services/barcode.service';
 import { PdfWatermarkService } from '../common/services/pdf-watermark.service';
 import { DocumentClassifierModule } from '../document-classifier/document-classifier.module';
+import { ScanMeteringModule } from '../scan-metering/scan-metering.module';
 
 @Module({
-  imports: [OcrModule, DocumentClassifierModule],
+  imports: [OcrModule, DocumentClassifierModule, ScanMeteringModule],
   controllers: [DocumentsController],
   providers: [
     DocumentsService,
