@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import {
-  Activity, ScanLine, DollarSign, Building2, Smartphone, Laptop, Camera,
+  Activity, ScanLine, DollarSign, Building2, Smartphone, Laptop, Camera, Globe,
   CheckCircle, XCircle, RefreshCw, Save, AlertCircle,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -15,18 +15,19 @@ import api from '@/services/api'
 import { useAuthStore } from '@/store/authStore'
 import { formatCurrency } from '@/lib/utils'
 
-interface AggregateBucket { scans: number; charges: number }
+interface AggregateBucket { scans: number; charges: number; foregone: number }
 interface PerProviderRow {
   providerId: string
   providerName: string
   scansThisMonth: number
   chargesThisMonth: number
+  foregoneThisMonth: number
   currency: string
 }
 interface RecentEvent {
   id: string
   createdAt: string
-  deviceClass: 'desktop' | 'mobile' | 'camera'
+  deviceClass: 'desktop' | 'mobile' | 'camera' | 'web'
   os: string | null
   machineHostname: string | null
   scannerName: string | null
@@ -50,6 +51,7 @@ interface SettingsRow {
   providerName: string
   providerType: string
   enabled: boolean
+  billingExempt: boolean
   costPerScan: number
   currency: string
   updatedAt: string
@@ -59,6 +61,7 @@ const DEVICE_ICON: Record<RecentEvent['deviceClass'], typeof Laptop> = {
   desktop: Laptop,
   mobile: Smartphone,
   camera: Camera,
+  web: Globe,
 }
 
 function KpiCard({
@@ -133,6 +136,20 @@ export default function ScanMeteringDashboard() {
     }
   }
 
+  const toggleExempt = async (row: SettingsRow, next: boolean) => {
+    setSavingId(row.providerId)
+    try {
+      await api.patch(`/scan-metering/settings/${row.providerId}`, { billingExempt: next })
+      setSettings((prev) => prev.map((r) =>
+        r.providerId === row.providerId ? { ...r, billingExempt: next } : r,
+      ))
+    } catch (e: any) {
+      setError(e?.response?.data?.message ?? 'Failed to update billing exemption')
+    } finally {
+      setSavingId(null)
+    }
+  }
+
   const savePrice = async (row: SettingsRow) => {
     const raw = draftPrice[row.providerId]
     if (raw === undefined) return
@@ -191,9 +208,9 @@ export default function ScanMeteringDashboard() {
 
       {/* ── KPIs ───────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KpiCard icon={Activity}    label="Scans today"      value={data?.today.scans ?? '—'}  sublabel={data ? `${formatCurrency(data.today.charges, currency)} billed` : undefined} accent="violet" />
-        <KpiCard icon={ScanLine}    label="Last 7 days"      value={data?.week.scans  ?? '—'}  sublabel={data ? `${formatCurrency(data.week.charges,  currency)} billed` : undefined} accent="blue"   />
-        <KpiCard icon={DollarSign}  label="Last 30 days"     value={data?.month.scans ?? '—'}  sublabel={data ? `${formatCurrency(data.month.charges, currency)} billed` : undefined} accent="green"  />
+        <KpiCard icon={Activity}    label="Scans today"      value={data?.today.scans ?? '—'}  sublabel={data ? `${formatCurrency(data.today.charges, currency)} billed${data.today.foregone > 0 ? ` · ${formatCurrency(data.today.foregone, currency)} waived` : ''}` : undefined} accent="violet" />
+        <KpiCard icon={ScanLine}    label="Last 7 days"      value={data?.week.scans  ?? '—'}  sublabel={data ? `${formatCurrency(data.week.charges,  currency)} billed${data.week.foregone > 0 ? ` · ${formatCurrency(data.week.foregone, currency)} waived` : ''}` : undefined} accent="blue"   />
+        <KpiCard icon={DollarSign}  label="Last 30 days"     value={data?.month.scans ?? '—'}  sublabel={data ? `${formatCurrency(data.month.charges, currency)} billed${data.month.foregone > 0 ? ` · ${formatCurrency(data.month.foregone, currency)} waived` : ''}` : undefined} accent="green"  />
         <KpiCard icon={Building2}   label={canSeeAll ? 'Organizations' : 'Your branches'}
                  value={canSeeAll ? (data?.perProvider.length ?? '—') : (data?.recentEvents.reduce((acc, e) => acc + (e.branch ? 1 : 0), 0) ?? '—')}
                  sublabel={canSeeAll ? 'with recent activity' : 'with recent scans'} accent="amber" />
@@ -207,7 +224,7 @@ export default function ScanMeteringDashboard() {
               <Building2 className="h-4 w-4 text-violet-600" />
               Organizations
             </CardTitle>
-            <CardDescription>Enable/disable scanning, set price, view this month's usage.</CardDescription>
+            <CardDescription>Enable/disable scanning, exempt an org from billing, set price, and view this month's usage. "Waived" is revenue foregone by exempt orgs — what we'd be billing them.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -218,13 +235,15 @@ export default function ScanMeteringDashboard() {
                     <TableHead>Type</TableHead>
                     <TableHead className="text-right">Scans (30 days)</TableHead>
                     <TableHead className="text-right">Charges (30 days)</TableHead>
+                    <TableHead className="text-right">Waived (30 days)</TableHead>
                     <TableHead>Price per scan</TableHead>
                     <TableHead className="text-center">Enabled</TableHead>
+                    <TableHead className="text-center">Exempt</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {settings.length === 0 && (
-                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                       {loading ? 'Loading…' : 'No organizations configured yet. Settings are created on first scan.'}
                     </TableCell></TableRow>
                   )}
@@ -239,6 +258,11 @@ export default function ScanMeteringDashboard() {
                         <TableCell className="text-right tabular-nums">{usage?.scansThisMonth ?? 0}</TableCell>
                         <TableCell className="text-right tabular-nums">
                           {formatCurrency(usage?.chargesThisMonth ?? 0, row.currency)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {(usage?.foregoneThisMonth ?? 0) > 0
+                            ? <span className="text-amber-600 dark:text-amber-400">{formatCurrency(usage!.foregoneThisMonth, row.currency)}</span>
+                            : <span className="text-muted-foreground">—</span>}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
@@ -264,6 +288,13 @@ export default function ScanMeteringDashboard() {
                             checked={row.enabled}
                             disabled={!isAdmin || savingId === row.providerId}
                             onCheckedChange={(v) => toggleEnabled(row, v)}
+                          />
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Switch
+                            checked={row.billingExempt}
+                            disabled={!isAdmin || savingId === row.providerId}
+                            onCheckedChange={(v) => toggleExempt(row, v)}
                           />
                         </TableCell>
                       </TableRow>
