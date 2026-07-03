@@ -8,6 +8,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- **CIC Group corporate rebrand** — the whole UI now carries the CIC Insurance
+  Group identity. Design tokens (`--primary`, `--ring`, charts) and the
+  Tailwind `brand`/`cta` ramps switched from the blue/indigo palette to the
+  CIC maroon (`#AC202D`) and gold (`#F9BF13`) taken from the official logo;
+  every button, link, focus ring and gradient that used blue/indigo now uses
+  the brand ramp. The official CIC Group logo replaces the placeholder
+  "C"/shield marks in the sidebar, all auth pages and the landing page, and
+  the favicon, PWA manifest and `theme-color` were refreshed to match. Status
+  colours (red/amber/emerald) and the violet AI accents are unchanged. See
+  `docs/branding.md`.
+
 ### Added
 
 - **Job Setup user assignments** — admins can now restrict which users or providers see a given job setup via a new **Assigned Users** tab in the setup editor. A searchable dropdown (opens on focus, filters by name / email) lists all available users; assigned users are displayed with a badge chip and can be removed inline. Job setup cards show the assigned user count (`N users` / `all users`). Setups with no assignments remain visible to everyone for backwards compatibility.
