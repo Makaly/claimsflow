@@ -9,7 +9,7 @@
     --card-foreground: 224 71% 4%;
     --popover: 0 0% 100%;
     --popover-foreground: 224 71% 4%;
-    --primary: 220 70% 50%;
+    --primary: 354 69% 40%; /* CIC Group maroon #AC202D */
     --primary-foreground: 210 20% 98%;
     --secondary: 220 14% 96%;
     --secondary-foreground: 220 9% 46%;
@@ -21,7 +21,7 @@
     --destructive-foreground: 210 20% 98%;
     --border: 220 13% 91%;
     --input: 220 13% 91%;
-    --ring: 220 70% 50%;
+    --ring: 354 69% 40%;
     --radius: 0.5rem;
 
     --sidebar: 220 14% 97%;
@@ -30,11 +30,11 @@
     --sidebar-accent-foreground: 220 9% 15%;
     --sidebar-border: 220 13% 91%;
 
-    --chart-1: 220 70% 50%;
+    --chart-1: 354 69% 40%;
     --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
+    --chart-3: 45 92% 47%; /* CIC gold #F9BF13, darkened for white bg */
     --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+    --chart-5: 210 64% 50%;
   }
 
   .dark {
@@ -44,7 +44,7 @@
     --card-foreground: 210 20% 98%;
     --popover: 224 71% 6%;
     --popover-foreground: 210 20% 98%;
-    --primary: 220 70% 50%;
+    --primary: 354 65% 52%; /* CIC maroon, lifted for dark surfaces */
     --primary-foreground: 210 20% 98%;
     --secondary: 215 28% 17%;
     --secondary-foreground: 210 20% 98%;
@@ -56,7 +56,7 @@
     --destructive-foreground: 210 20% 98%;
     --border: 215 28% 17%;
     --input: 215 28% 17%;
-    --ring: 220 70% 50%;
+    --ring: 354 65% 52%;
 
     --sidebar: 224 71% 5%;
     --sidebar-foreground: 210 20% 98%;
@@ -64,11 +64,11 @@
     --sidebar-accent-foreground: 210 20% 98%;
     --sidebar-border: 215 28% 17%;
 
-    --chart-1: 220 70% 60%;
+    --chart-1: 354 70% 60%;
     --chart-2: 160 60% 55%;
-    --chart-3: 30 80% 65%;
+    --chart-3: 45 95% 55%;
     --chart-4: 280 65% 70%;
-    --chart-5: 340 75% 65%;
+    --chart-5: 210 70% 62%;
   }
 }
 
