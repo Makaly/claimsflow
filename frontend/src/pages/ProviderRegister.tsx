@@ -202,9 +202,7 @@ export default function ProviderRegister() {
         {/* Brand bar */}
         <header className="mb-8 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-cyan-600 shadow-lg shadow-emerald-500/30">
-              <ShieldCheck className="h-6 w-6 text-white" />
-            </div>
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white p-1 shadow-lg shadow-brand-900/20 ring-1 ring-brand-100"><img src="/cic-logo.png" alt="CIC Group" className="h-full w-full object-contain" /></div>
             <div>
               <p className="text-sm font-semibold tracking-wide text-slate-100">ClaimsFlow</p>
               <p className="text-xs text-slate-400">Provider onboarding</p>

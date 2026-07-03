@@ -100,9 +100,7 @@ export default function Landing() {
         {/* ── Nav ─────────────────────────────────────────────────────────── */}
         <header className="sticky top-0 z-30 -mx-6 mb-4 flex items-center justify-between gap-4 border-b border-slate-200/70 bg-[#F8FAFC]/80 px-6 py-4 backdrop-blur-xl dark:border-white/5 dark:bg-slate-950/70 lg:-mx-10 lg:px-10">
           <Link to="/" className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand-600 to-brand-700 shadow-lg shadow-brand-600/30">
-              <ShieldCheck className="h-5 w-5 text-white" />
-            </div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white p-1 shadow-lg shadow-brand-900/20 ring-1 ring-brand-100"><img src="/cic-logo.png" alt="CIC Group" className="h-full w-full object-contain" /></div>
             <div className="leading-tight">
               <p className="font-heading text-sm font-semibold tracking-wide text-slate-900 dark:text-slate-100">ClaimsFlow</p>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">Medical Claims Automation</p>
@@ -417,9 +415,7 @@ export default function Landing() {
         {/* ── Footer ──────────────────────────────────────────────────────── */}
         <footer className="flex flex-col items-center justify-between gap-4 border-t border-slate-200 py-10 text-sm text-slate-500 dark:border-white/5 dark:text-slate-500 sm:flex-row">
           <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-brand-600 to-brand-700">
-              <ShieldCheck className="h-4 w-4 text-white" />
-            </div>
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white p-1 shadow-lg shadow-brand-900/20 ring-1 ring-brand-100"><img src="/cic-logo.png" alt="CIC Group" className="h-full w-full object-contain" /></div>
             <span>© {year} ClaimsFlow · CIC Insurance Group PLC</span>
           </div>
           <div className="flex items-center gap-6">

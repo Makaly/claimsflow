@@ -144,8 +144,8 @@ export default function Login() {
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
       {/* Ambient background */}
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-40 -left-40 h-[500px] w-[500px] rounded-full bg-blue-600/20 blur-3xl" />
-        <div className="absolute -bottom-40 -right-20 h-[500px] w-[500px] rounded-full bg-indigo-600/20 blur-3xl" />
+        <div className="absolute -top-40 -left-40 h-[500px] w-[500px] rounded-full bg-brand-600/20 blur-3xl" />
+        <div className="absolute -bottom-40 -right-20 h-[500px] w-[500px] rounded-full bg-brand-800/20 blur-3xl" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.05)_1px,transparent_0)] [background-size:32px_32px]" />
       </div>
 
@@ -153,9 +153,7 @@ export default function Login() {
         {/* Brand panel */}
         <aside className="hidden flex-1 flex-col justify-between p-10 lg:flex xl:p-14">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/30">
-              <ShieldCheck className="h-6 w-6 text-white" />
-            </div>
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white p-1 shadow-lg shadow-brand-900/20 ring-1 ring-brand-100"><img src="/cic-logo.png" alt="CIC Group" className="h-full w-full object-contain" /></div>
             <div>
               <p className="text-sm font-semibold tracking-wide text-slate-100">ClaimsFlow</p>
               <p className="text-xs text-slate-400">Medical Claims Automation</p>
@@ -164,7 +162,7 @@ export default function Login() {
 
           <div className="space-y-8">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-slate-300 backdrop-blur">
-              <Sparkles className="h-3.5 w-3.5 text-blue-400" />
+              <Sparkles className="h-3.5 w-3.5 text-brand-400" />
               Enterprise claims, simplified
             </div>
             <h1 className="text-4xl font-semibold leading-tight tracking-tight text-white xl:text-5xl">
@@ -193,9 +191,7 @@ export default function Login() {
         <main className="flex flex-1 items-center justify-center p-6 sm:p-10">
           <div className="w-full max-w-md">
             <div className="mb-8 flex items-center justify-center gap-3 lg:hidden">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/30">
-                <ShieldCheck className="h-5 w-5 text-white" />
-              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white p-1 shadow-lg shadow-brand-900/20 ring-1 ring-brand-100"><img src="/cic-logo.png" alt="CIC Group" className="h-full w-full object-contain" /></div>
               <span className="text-lg font-semibold text-white">ClaimsFlow</span>
             </div>
 
@@ -224,7 +220,7 @@ export default function Login() {
                       type="email"
                       autoComplete="email"
                       placeholder="you@company.com"
-                      className="h-11 border-white/10 bg-white/5 pl-9 text-slate-100 placeholder:text-slate-500 focus-visible:ring-blue-500/60"
+                      className="h-11 border-white/10 bg-white/5 pl-9 text-slate-100 placeholder:text-slate-500 focus-visible:ring-brand-500/60"
                       {...form.register('email')}
                     />
                   </div>
@@ -238,7 +234,7 @@ export default function Login() {
                     <Label htmlFor="login-password" className="text-slate-200">Password</Label>
                     <Link
                       to="/forgot-password"
-                      className="text-xs font-medium text-blue-400 transition-colors hover:text-blue-300"
+                      className="text-xs font-medium text-brand-400 transition-colors hover:text-brand-300"
                     >
                       Forgot password?
                     </Link>
@@ -250,7 +246,7 @@ export default function Login() {
                       type={showPassword ? 'text' : 'password'}
                       autoComplete="current-password"
                       placeholder="Enter your password"
-                      className="h-11 border-white/10 bg-white/5 pl-9 pr-10 text-slate-100 placeholder:text-slate-500 focus-visible:ring-blue-500/60"
+                      className="h-11 border-white/10 bg-white/5 pl-9 pr-10 text-slate-100 placeholder:text-slate-500 focus-visible:ring-brand-500/60"
                       {...form.register('password')}
                     />
                     <button
@@ -271,7 +267,7 @@ export default function Login() {
                   <Checkbox
                     checked={rememberMe}
                     onCheckedChange={(v) => setRememberMe(Boolean(v))}
-                    className="border-white/20 data-[state=checked]:border-blue-500 data-[state=checked]:bg-blue-500"
+                    className="border-white/20 data-[state=checked]:border-brand-500 data-[state=checked]:bg-brand-500"
                   />
                   Remember me on this device
                 </label>
@@ -279,7 +275,7 @@ export default function Login() {
                 <Button
                   type="submit"
                   disabled={loading}
-                  className="group h-11 w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/20 transition-all hover:from-blue-500 hover:to-indigo-500 hover:shadow-blue-500/40"
+                  className="group h-11 w-full bg-gradient-to-r from-brand-600 to-brand-800 text-white shadow-lg shadow-brand-600/20 transition-all hover:from-brand-500 hover:to-brand-700 hover:shadow-brand-500/40"
                 >
                   {loading ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -313,22 +309,22 @@ export default function Login() {
                       className={cn(
                         'group flex flex-col items-center gap-1 rounded-lg border px-2 py-3 text-xs font-medium transition-all',
                         isWorkflowRole
-                          ? 'border-blue-500/30 bg-blue-500/5 text-slate-200 hover:border-blue-400/60 hover:bg-blue-500/15 hover:text-white'
+                          ? 'border-brand-500/30 bg-brand-500/5 text-slate-200 hover:border-brand-400/60 hover:bg-brand-500/15 hover:text-white'
                           : isFraud
                             ? 'border-red-500/30 bg-red-500/5 text-slate-200 hover:border-red-400/60 hover:bg-red-500/15 hover:text-white'
-                            : 'border-white/10 bg-white/[0.02] text-slate-300 hover:border-blue-500/40 hover:bg-blue-500/10 hover:text-white',
+                            : 'border-white/10 bg-white/[0.02] text-slate-300 hover:border-brand-500/40 hover:bg-brand-500/10 hover:text-white',
                         'disabled:cursor-not-allowed disabled:opacity-50'
                       )}
                     >
                       {isLoading ? (
-                        <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
+                        <Loader2 className="h-4 w-4 animate-spin text-brand-400" />
                       ) : (
                         <Icon
                           className={cn(
                             'h-4 w-4 transition-colors',
-                            isWorkflowRole ? 'text-blue-400 group-hover:text-blue-300'
+                            isWorkflowRole ? 'text-brand-400 group-hover:text-brand-300'
                             : isFraud ? 'text-red-400 group-hover:text-red-300'
-                            : 'text-slate-400 group-hover:text-blue-400',
+                            : 'text-slate-400 group-hover:text-brand-400',
                           )}
                         />
                       )}
@@ -347,7 +343,7 @@ export default function Login() {
                 Don't have an account?{' '}
                 <Link
                   to="/register"
-                  className="font-medium text-blue-400 transition-colors hover:text-blue-300"
+                  className="font-medium text-brand-400 transition-colors hover:text-brand-300"
                 >
                   Create one
                 </Link>

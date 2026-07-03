@@ -50,9 +50,7 @@ export default function ResetPassword() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-[#0f1e3d] to-[#1a2f5f] px-4">
       <div className="w-full max-w-md">
         <div className="flex items-center gap-3 mb-8 justify-center">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg">
-            <ShieldCheck className="h-5 w-5 text-white" />
-          </div>
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white p-1 shadow-lg shadow-brand-900/20 ring-1 ring-brand-100"><img src="/cic-logo.png" alt="CIC Group" className="h-full w-full object-contain" /></div>
           <span className="text-xl font-bold text-white">ClaimsFlow</span>
         </div>
 
@@ -82,7 +80,7 @@ export default function ResetPassword() {
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
                       type={showPw ? 'text' : 'password'}
-                      className="h-11 border-white/10 bg-white/5 pl-9 pr-9 text-slate-100 placeholder:text-slate-500 focus-visible:ring-blue-500/60"
+                      className="h-11 border-white/10 bg-white/5 pl-9 pr-9 text-slate-100 placeholder:text-slate-500 focus-visible:ring-brand-500/60"
                       {...form.register('password')}
                     />
                     <button type="button" onClick={() => setShowPw(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200">
@@ -98,21 +96,21 @@ export default function ResetPassword() {
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
                       type="password"
-                      className="h-11 border-white/10 bg-white/5 pl-9 text-slate-100 placeholder:text-slate-500 focus-visible:ring-blue-500/60"
+                      className="h-11 border-white/10 bg-white/5 pl-9 text-slate-100 placeholder:text-slate-500 focus-visible:ring-brand-500/60"
                       {...form.register('confirm')}
                     />
                   </div>
                   {form.formState.errors.confirm && <p className="text-xs text-red-400">{form.formState.errors.confirm.message}</p>}
                 </div>
 
-                <Button type="submit" disabled={loading || !token} className="w-full h-11 bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
+                <Button type="submit" disabled={loading || !token} className="w-full h-11 bg-gradient-to-r from-brand-600 to-brand-800 text-white">
                   {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                   Reset Password
                 </Button>
               </form>
 
               <div className="mt-5 text-center">
-                <Link to="/login" className="text-sm text-blue-400 hover:text-blue-300">Back to login</Link>
+                <Link to="/login" className="text-sm text-brand-400 hover:text-brand-300">Back to login</Link>
               </div>
             </>
           )}

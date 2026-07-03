@@ -101,13 +101,13 @@ export function Sidebar() {
       >
         {/* Logo */}
         <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-4">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm">
-            C
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white p-0.5 ring-1 ring-sidebar-border">
+            <img src="/cic-logo.png" alt="CIC Group" className="h-full w-full object-contain" />
           </div>
           {!sidebarCollapsed && (
             <div className="flex flex-col">
               <span className="text-sm font-semibold">ClaimsFlow</span>
-              <span className="text-[10px] text-muted-foreground">Medical Automation</span>
+              <span className="text-[10px] text-muted-foreground">CIC Insurance Group</span>
             </div>
           )}
         </div>
