@@ -79,8 +79,8 @@ const DOC_TYPE_META: Record<string, {
   inpatient_invoice: {
     label: 'Inpatient Invoice',
     icon: ActivitySquare,
-    color: 'text-indigo-300',
-    bg: 'bg-indigo-500/10 border-indigo-500/25',
+    color: 'text-brand-300',
+    bg: 'bg-brand-700/10 border-brand-700/25',
     fields: ['invoiceNumber', 'invoiceAmount', 'serviceDate'],
   },
   discharge_summary: {

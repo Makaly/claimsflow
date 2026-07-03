@@ -54,8 +54,8 @@ const LANGUAGES = [
 
 const ROLE_COLORS: Record<string, string> = {
   admin: 'from-red-500 to-orange-500',
-  claims_officer: 'from-blue-500 to-cyan-500',
-  maker_checker: 'from-indigo-500 to-blue-500',
+  claims_officer: 'from-brand-500 to-brand-700',
+  maker_checker: 'from-brand-700 to-brand-500',
   fraud_officer: 'from-orange-500 to-red-500',
   finance: 'from-purple-500 to-pink-500',
   provider_admin: 'from-emerald-500 to-teal-500',
@@ -138,7 +138,7 @@ export default function Profile() {
   const displayName = user?.name || 'User'
   const roleLabel = user?.role?.replace(/_/g, ' ') || '—'
   const memberSince = user?.createdAt
-  const roleGradient = ROLE_COLORS[user?.role ?? ''] ?? 'from-blue-500 to-indigo-500'
+  const roleGradient = ROLE_COLORS[user?.role ?? ''] ?? 'from-brand-500 to-brand-700'
 
   // ── Fetch the authoritative per-user profile from the backend on mount ─
   useEffect(() => {
@@ -405,7 +405,7 @@ export default function Profile() {
         <TabsContent value="general" className="mt-6 space-y-6">
           <Card className="overflow-hidden">
             <CardHeader className="bg-muted/30">
-              <CardTitle className="flex items-center gap-2"><User className="h-4 w-4 text-blue-500" /> Profile Information</CardTitle>
+              <CardTitle className="flex items-center gap-2"><User className="h-4 w-4 text-brand-500" /> Profile Information</CardTitle>
               <CardDescription>This information will be displayed on your account and in shared audit logs.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6 pt-6">
@@ -543,7 +543,7 @@ export default function Profile() {
           {/* Password card */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Lock className="h-4 w-4 text-blue-500" /> Change password</CardTitle>
+              <CardTitle className="flex items-center gap-2"><Lock className="h-4 w-4 text-brand-500" /> Change password</CardTitle>
               <CardDescription>Use a strong password with at least 8 characters including numbers and symbols.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 max-w-lg">
@@ -695,7 +695,7 @@ export default function Profile() {
             <CardHeader>
               <div className="flex items-start justify-between">
                 <div>
-                  <CardTitle className="flex items-center gap-2"><Monitor className="h-4 w-4 text-blue-500" /> Active sessions</CardTitle>
+                  <CardTitle className="flex items-center gap-2"><Monitor className="h-4 w-4 text-brand-500" /> Active sessions</CardTitle>
                   <CardDescription>Devices currently signed in to your account.</CardDescription>
                 </div>
                 {sessions.filter(s => !s.current).length > 0 && (
@@ -741,7 +741,7 @@ export default function Profile() {
         <TabsContent value="notifications" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Mail className="h-4 w-4 text-blue-500" /> Notification preferences</CardTitle>
+              <CardTitle className="flex items-center gap-2"><Mail className="h-4 w-4 text-brand-500" /> Notification preferences</CardTitle>
               <CardDescription>Choose how and when ClaimsFlow reaches you.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-1">
@@ -854,7 +854,7 @@ function PrivacyAndDataTab() {
     <>
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Upload className="h-4 w-4 text-blue-500" /> Download your data</CardTitle>
+          <CardTitle className="flex items-center gap-2"><Upload className="h-4 w-4 text-brand-500" /> Download your data</CardTitle>
           <CardDescription>
             Request a machine-readable copy of all personal data ClaimsFlow holds about you
             (GDPR Art. 15 &amp; 20; Kenya Data Protection Act 2019 ss. 26 &amp; 38).

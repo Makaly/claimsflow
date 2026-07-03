@@ -349,7 +349,7 @@ export default function Branches() {
           </Button>
           <div className="flex-1">
             <div className="flex items-center gap-3">
-              <Building2 className="h-6 w-6 text-blue-500" />
+              <Building2 className="h-6 w-6 text-brand-500" />
               <div>
                 <h1 className="text-2xl font-bold">{selectedBranch.name}</h1>
                 <p className="text-sm text-muted-foreground font-mono">{selectedBranch.code} &middot; {selectedBranch.providerName}</p>
@@ -642,7 +642,7 @@ export default function Branches() {
         <TabsContent value="overview" className="mt-4">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
             {[
-              { label: 'Total Branches', value: stats.total, icon: Network, color: 'text-blue-500' },
+              { label: 'Total Branches', value: stats.total, icon: Network, color: 'text-brand-500' },
               { label: 'Active', value: stats.active, icon: CheckCircle, color: 'text-emerald-500' },
               { label: 'Pending Approval', value: stats.pending, icon: AlertTriangle, color: 'text-amber-500' },
               { label: 'Total Claims', value: stats.totalClaims.toLocaleString(), icon: FileText, color: 'text-violet-500' },
@@ -712,7 +712,7 @@ export default function Branches() {
                     {/* Header */}
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-2">
-                        <Building2 className="h-5 w-5 text-blue-500" />
+                        <Building2 className="h-5 w-5 text-brand-500" />
                         <div>
                           <p className="font-semibold text-sm">{branch.name}</p>
                           <p className="text-[10px] font-mono text-muted-foreground">{branch.code}</p>

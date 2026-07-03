@@ -77,7 +77,7 @@ const STATUS_STYLES: Record<string, string> = {
   SUSPENDED: 'bg-amber-100 text-amber-800',
   revoked: 'bg-gray-200 text-gray-600',
   REVOKED: 'bg-gray-200 text-gray-600',
-  unlicensed: 'bg-blue-100 text-blue-800',
+  unlicensed: 'bg-brand-100 text-brand-800',
 };
 
 const UNLIMITED = 999999;

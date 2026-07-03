@@ -90,7 +90,7 @@ export default function NPSDashboard() {
         <>
           <div className="grid gap-4 sm:grid-cols-3">
             {[
-              { label: 'Total Responses', value: data.total, icon: BarChart3, color: 'text-blue-600' },
+              { label: 'Total Responses', value: data.total, icon: BarChart3, color: 'text-brand-600' },
               { label: 'Avg Score', value: data.avgScore, icon: TrendingUp, color: 'text-amber-600' },
               { label: 'NPS Score', value: `${data.npsScore > 0 ? '+' : ''}${data.npsScore}`, icon: TrendingUp, color: data.npsScore >= 50 ? 'text-emerald-600' : data.npsScore >= 0 ? 'text-amber-600' : 'text-red-600' },
             ].map(s => (

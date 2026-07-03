@@ -503,7 +503,7 @@ ${unknownPat.slice(0,30).map(c => `<tr><td class="flag-cell">${c.claimNumber}</t
       {liveData.approvalsRejections && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: 'Total Claims', value: liveData.approvalsRejections.total, color: 'text-blue-700' },
+            { label: 'Total Claims', value: liveData.approvalsRejections.total, color: 'text-brand-700' },
             { label: 'Approved', value: liveData.approvalsRejections.approved, color: 'text-green-700' },
             { label: 'Rejected', value: liveData.approvalsRejections.rejected, color: 'text-red-700' },
             { label: 'Approval Rate', value: `${liveData.approvalsRejections.approvalRate}%`, color: 'text-purple-700' },
@@ -609,7 +609,7 @@ ${unknownPat.slice(0,30).map(c => `<tr><td class="flag-cell">${c.claimNumber}</t
                 <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="excel"><div className="flex items-center gap-2"><FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" /> Excel (.xlsx)</div></SelectItem>
-                  <SelectItem value="csv"><div className="flex items-center gap-2"><FileCode className="h-3.5 w-3.5 text-blue-600" /> CSV</div></SelectItem>
+                  <SelectItem value="csv"><div className="flex items-center gap-2"><FileCode className="h-3.5 w-3.5 text-brand-600" /> CSV</div></SelectItem>
                   <SelectItem value="pdf"><div className="flex items-center gap-2"><Printer className="h-3.5 w-3.5 text-red-600" /> PDF (Print)</div></SelectItem>
                 </SelectContent>
               </Select>
@@ -624,7 +624,7 @@ ${unknownPat.slice(0,30).map(c => `<tr><td class="flag-cell">${c.claimNumber}</t
       {/* Summary Stats */}
       <div className="grid gap-4 md:grid-cols-4">
         {[
-          { label: 'Total Claims', value: stats.total, icon: FileText, color: 'text-blue-500', sub: `${stats.aiExtracted} AI extracted` },
+          { label: 'Total Claims', value: stats.total, icon: FileText, color: 'text-brand-500', sub: `${stats.aiExtracted} AI extracted` },
           { label: 'Approved / Paid', value: stats.approved, icon: CheckCircle, color: 'text-emerald-500', sub: formatCurrency(stats.approvedAmount) },
           { label: 'Pending', value: stats.pending, icon: Clock, color: 'text-amber-500', sub: 'Awaiting review' },
           { label: 'Rejected', value: stats.rejected, icon: XCircle, color: 'text-red-500', sub: `${stats.total > 0 ? ((stats.rejected / stats.total) * 100).toFixed(0) : 0}% rejection rate` },
@@ -783,7 +783,7 @@ ${unknownPat.slice(0,30).map(c => `<tr><td class="flag-cell">${c.claimNumber}</t
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base flex items-center gap-2">
-                      <Building2 className="h-4 w-4 text-blue-500" /> Provider Performance — Live Detail
+                      <Building2 className="h-4 w-4 text-brand-500" /> Provider Performance — Live Detail
                     </CardTitle>
                     <CardDescription>Server-computed metrics per provider. Click "View Claims" to drill into that provider's claims list.</CardDescription>
                   </CardHeader>
@@ -895,7 +895,7 @@ ${unknownPat.slice(0,30).map(c => `<tr><td class="flag-cell">${c.claimNumber}</t
         <TabsContent value="trends" className="mt-4 space-y-4">
           <div className="grid gap-4 sm:grid-cols-3">
             {[
-              { label: 'Avg Monthly Submissions', value: monthlyTrend.length > 0 ? Math.round(monthlyTrend.reduce((s,m)=>s+m.submitted,0)/monthlyTrend.length) : 0, icon: TrendingUp, color: 'text-blue-500' },
+              { label: 'Avg Monthly Submissions', value: monthlyTrend.length > 0 ? Math.round(monthlyTrend.reduce((s,m)=>s+m.submitted,0)/monthlyTrend.length) : 0, icon: TrendingUp, color: 'text-brand-500' },
               { label: 'Avg Monthly Amount', value: monthlyTrend.length > 0 ? formatCurrency(monthlyTrend.reduce((s,m)=>s+m.amount,0)/monthlyTrend.length) : '—', icon: DollarSign, color: 'text-emerald-500' },
               { label: 'Next Month Forecast', value: predictions[0] ? `~${predictions[0].predicted} claims` : '—', icon: Eye, color: 'text-violet-500' },
             ].map(s => (
@@ -914,7 +914,7 @@ ${unknownPat.slice(0,30).map(c => `<tr><td class="flag-cell">${c.claimNumber}</t
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-blue-500" /> Monthly Claim Volume with 3-Month Forecast
+                <TrendingUp className="h-4 w-4 text-brand-500" /> Monthly Claim Volume with 3-Month Forecast
               </CardTitle>
               <CardDescription>
                 Historical submissions (solid) and linear regression predictions (dashed) for the next 3 months
@@ -1070,7 +1070,7 @@ ${unknownPat.slice(0,30).map(c => `<tr><td class="flag-cell">${c.claimNumber}</t
                   <CardDescription>{filtered.length} records matching current filters</CardDescription>
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={exportCsv}><FileCode className="mr-1 h-3.5 w-3.5 text-blue-600" /> CSV</Button>
+                  <Button variant="outline" size="sm" onClick={exportCsv}><FileCode className="mr-1 h-3.5 w-3.5 text-brand-600" /> CSV</Button>
                   <Button variant="outline" size="sm" onClick={exportExcel}><FileSpreadsheet className="mr-1 h-3.5 w-3.5 text-emerald-600" /> Excel</Button>
                   <Button variant="outline" size="sm" onClick={exportPdf}><Printer className="mr-1 h-3.5 w-3.5 text-red-600" /> PDF</Button>
                 </div>
@@ -1166,7 +1166,7 @@ ${unknownPat.slice(0,30).map(c => `<tr><td class="flag-cell">${c.claimNumber}</t
               <>
                 <div className="grid gap-4 sm:grid-cols-4">
                   {[
-                    { label: 'Total OCR Processed', value: ocrDone.length, icon: ScanLine, color: 'text-blue-500' },
+                    { label: 'Total OCR Processed', value: ocrDone.length, icon: ScanLine, color: 'text-brand-500' },
                     { label: 'Avg Confidence', value: `${(avgConf * 100).toFixed(1)}%`, icon: TrendingUp, color: 'text-emerald-500' },
                     { label: 'Manual Review Needed', value: lowConf.length, icon: AlertTriangle, color: 'text-amber-500' },
                     { label: 'OCR Omission Rate', value: `${omissionRate.toFixed(1)}%`, icon: TrendingDown, color: 'text-red-500' },

@@ -407,7 +407,7 @@ export default function ProviderDashboard() {
       {/* Stat cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {[
-          { title: 'Total Claims',  value: totalClaims,    icon: FileText,    color: 'text-blue-600',    bg: 'bg-blue-50 dark:bg-blue-950/30' },
+          { title: 'Total Claims',  value: totalClaims,    icon: FileText,    color: 'text-brand-600',    bg: 'bg-brand-50 dark:bg-brand-950/30' },
           { title: 'Approved',      value: approvedClaims, icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/30' },
           { title: 'Pending Review',value: pendingClaims,  icon: Clock,       color: 'text-amber-600',   bg: 'bg-amber-50 dark:bg-amber-950/30' },
           { title: 'Needs Action',  value: needsAction.length, icon: AlertTriangle, color: 'text-red-600', bg: 'bg-red-50 dark:bg-red-950/30' },
@@ -483,7 +483,7 @@ export default function ProviderDashboard() {
                   <CardHeader className="pb-2">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-2">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-100 dark:bg-blue-900/30 text-blue-600">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-brand-100 dark:bg-brand-900/30 text-brand-600">
                           <Building2 className="h-4 w-4" />
                         </div>
                         <div>

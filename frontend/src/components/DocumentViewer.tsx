@@ -83,13 +83,13 @@ interface DocumentViewerProps {
 
 // Thumbnail category colours — kept in sync with BatchUpload's strip.
 const THUMB_CAT_COLORS: Record<string, string> = {
-  invoice:          'bg-blue-500/80 text-white',
+  invoice:          'bg-brand-500/80 text-white',
   claim_form:       'bg-purple-500/80 text-white',
   prescription:     'bg-green-500/80 text-white',
   lab_result:       'bg-orange-500/80 text-white',
   medical_report:   'bg-teal-500/80 text-white',
   discharge_summary:'bg-cyan-500/80 text-white',
-  referral:         'bg-indigo-500/80 text-white',
+  referral:         'bg-brand-700/80 text-white',
   pre_auth:         'bg-amber-500/80 text-white',
 }
 
@@ -111,7 +111,7 @@ const HIGHLIGHT_COLORS = [
   { label: 'Yellow',  fill: 'rgba(251,191,36,0.35)',  stroke: '#fbbf24' },
   { label: 'Green',   fill: 'rgba(52,211,153,0.35)',  stroke: '#34d399' },
   { label: 'Pink',    fill: 'rgba(244,114,182,0.35)', stroke: '#f472b6' },
-  { label: 'Blue',    fill: 'rgba(96,165,250,0.35)',  stroke: '#60a5fa' },
+  { label: 'Blue',    fill: 'rgba(96,165,250,0.35)',  stroke: '#d14d5c' },
 ]
 
 const uid = () => `a-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
@@ -224,7 +224,7 @@ function SignModal({ userId, currentUser, onDone, onCancel }: {
       <div style={{ background:'white', borderRadius:20, width:520, boxShadow:'0 40px 100px rgba(0,0,0,0.4)', overflow:'hidden' }}>
 
         {/* Header */}
-        <div style={{ background:'linear-gradient(135deg,#1e3a5f,#2563eb)', padding:'20px 24px 0' }}>
+        <div style={{ background:'linear-gradient(135deg,#1e3a5f,#ac202d)', padding:'20px 24px 0' }}>
           <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:16 }}>
             <div>
               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
@@ -272,7 +272,7 @@ function SignModal({ userId, currentUser, onDone, onCancel }: {
               </div>
               <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:10 }}>
                 <input type="checkbox" id="doSave" checked={doSave} onChange={e => setDoSave(e.target.checked)}
-                  style={{ width:14, height:14, accentColor:'#2563eb', cursor:'pointer' }} />
+                  style={{ width:14, height:14, accentColor:'#ac202d', cursor:'pointer' }} />
                 <label htmlFor="doSave" style={{ fontSize:12, color:'#64748b', cursor:'pointer', userSelect:'none' }}>
                   Save for future use
                 </label>
@@ -283,7 +283,7 @@ function SignModal({ userId, currentUser, onDone, onCancel }: {
                   Clear
                 </button>
                 <button onClick={handleUse} disabled={isEmpty}
-                  style={{ fontSize:12, border:'none', background: isEmpty ? '#94a3b8' : 'linear-gradient(135deg,#1e3a5f,#2563eb)', color:'white', borderRadius:9, padding:'7px 20px', cursor: isEmpty ? 'not-allowed' : 'pointer', fontWeight:700, boxShadow: isEmpty ? 'none' : '0 4px 12px rgba(37,99,235,0.4)', transition:'all 0.15s' }}>
+                  style={{ fontSize:12, border:'none', background: isEmpty ? '#94a3b8' : 'linear-gradient(135deg,#1e3a5f,#ac202d)', color:'white', borderRadius:9, padding:'7px 20px', cursor: isEmpty ? 'not-allowed' : 'pointer', fontWeight:700, boxShadow: isEmpty ? 'none' : '0 4px 12px rgba(37,99,235,0.4)', transition:'all 0.15s' }}>
                   Place Signature
                 </button>
               </div>
@@ -298,7 +298,7 @@ function SignModal({ userId, currentUser, onDone, onCancel }: {
                   <p style={{ fontSize:13, fontWeight:600, margin:'0 0 4px' }}>No saved signatures</p>
                   <p style={{ fontSize:12, margin:0 }}>Draw a signature and check "Save for future use"</p>
                   <button onClick={() => setTab('draw')}
-                    style={{ marginTop:14, fontSize:12, border:'1px solid #2563eb', color:'#2563eb', background:'none', borderRadius:9, padding:'6px 16px', cursor:'pointer' }}>
+                    style={{ marginTop:14, fontSize:12, border:'1px solid #ac202d', color:'#ac202d', background:'none', borderRadius:9, padding:'6px 16px', cursor:'pointer' }}>
                     Draw New
                   </button>
                 </div>
@@ -313,7 +313,7 @@ function SignModal({ userId, currentUser, onDone, onCancel }: {
                           <img src={sig.dataUrl} alt="" style={{ maxHeight:40, maxWidth:260, objectFit:'contain', display:'block' }} />
                         </div>
                         <p style={{ margin:0, fontSize:10, color:'#94a3b8' }}>
-                          Signature {i+1} · Saved {new Date(sig.createdAt).toLocaleDateString()} · <strong style={{ color:'#2563eb' }}>click to use</strong>
+                          Signature {i+1} · Saved {new Date(sig.createdAt).toLocaleDateString()} · <strong style={{ color:'#ac202d' }}>click to use</strong>
                         </p>
                       </div>
                       <button onClick={e => { e.stopPropagation(); deleteSig(sig.id) }}
@@ -457,7 +457,7 @@ function AddCommentForm({ users, currentUser, onAdd, onCancel }: {
           boxSizing: 'border-box', lineHeight: 1.6, color: '#1e293b',
           background: '#f8fafc',
         }}
-        onFocus={e => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.background = '#fff' }}
+        onFocus={e => { e.currentTarget.style.borderColor = '#c22d3c'; e.currentTarget.style.background = '#fff' }}
         onBlur={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = '#f8fafc' }}
       />
 
@@ -469,9 +469,9 @@ function AddCommentForm({ users, currentUser, onAdd, onCancel }: {
           style={{
             display: 'flex', alignItems: 'center', gap: 6, fontSize: 12,
             background: assigned.length ? '#eff6ff' : '#f8fafc',
-            border: `1.5px solid ${assigned.length ? '#93c5fd' : '#e2e8f0'}`,
+            border: `1.5px solid ${assigned.length ? '#e2808b' : '#e2e8f0'}`,
             borderRadius: 8, padding: '5px 12px', cursor: 'pointer',
-            color: assigned.length ? '#1d4ed8' : '#64748b', fontWeight: 500,
+            color: assigned.length ? '#8e1a25' : '#64748b', fontWeight: 500,
             transition: 'all 0.15s',
           }}
         >
@@ -488,7 +488,7 @@ function AddCommentForm({ users, currentUser, onAdd, onCancel }: {
             {assigned.map(id => {
               const u = users.find(x => x.id === id)
               return (
-                <span key={id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, background: '#dbeafe', color: '#1d4ed8', borderRadius: 20, padding: '2px 8px 2px 6px', border: '1px solid #bfdbfe' }}>
+                <span key={id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, background: '#f6d5d9', color: '#8e1a25', borderRadius: 20, padding: '2px 8px 2px 6px', border: '1px solid #bfdbfe' }}>
                   <span style={{ width: 16, height: 16, borderRadius: '50%', background: '#6366f1', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: 'white' }}>
                     {(u?.name || u?.email || '?')[0].toUpperCase()}
                   </span>
@@ -496,7 +496,7 @@ function AddCommentForm({ users, currentUser, onAdd, onCancel }: {
                   <button
                     type="button"
                     onClick={e => { e.stopPropagation(); toggleUser(id) }}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#93c5fd', padding: 0, lineHeight: 1, fontSize: 13, marginLeft: 1 }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#e2808b', padding: 0, lineHeight: 1, fontSize: 13, marginLeft: 1 }}
                   >×</button>
                 </span>
               )
@@ -538,14 +538,14 @@ function AddCommentForm({ users, currentUser, onAdd, onCancel }: {
                     cursor: 'pointer', textAlign: 'left', transition: 'background 0.1s',
                   }}
                 >
-                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: assigned.includes(u.id) ? '#3b82f6' : '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'white', flexShrink: 0, transition: 'background 0.15s' }}>
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: assigned.includes(u.id) ? '#c22d3c' : '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'white', flexShrink: 0, transition: 'background 0.15s' }}>
                     {(u.name || u.email || '?')[0].toUpperCase()}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontSize: 12, fontWeight: 600, color: '#1e293b', margin: 0 }}>{u.name || u.email}</p>
                     {u.email && u.name && <p style={{ fontSize: 10, color: '#94a3b8', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</p>}
                   </div>
-                  <div style={{ width: 18, height: 18, borderRadius: '50%', border: `2px solid ${assigned.includes(u.id) ? '#3b82f6' : '#cbd5e1'}`, background: assigned.includes(u.id) ? '#3b82f6' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s' }}>
+                  <div style={{ width: 18, height: 18, borderRadius: '50%', border: `2px solid ${assigned.includes(u.id) ? '#c22d3c' : '#cbd5e1'}`, background: assigned.includes(u.id) ? '#c22d3c' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s' }}>
                     {assigned.includes(u.id) && <span style={{ color: 'white', fontSize: 10, fontWeight: 700 }}>✓</span>}
                   </div>
                 </button>
@@ -554,7 +554,7 @@ function AddCommentForm({ users, currentUser, onAdd, onCancel }: {
             {assigned.length > 0 && (
               <div style={{ padding: '8px 12px', borderTop: '1px solid #f1f5f9', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 11, color: '#64748b' }}>{assigned.length} selected</span>
-                <button type="button" onClick={() => setOpen(false)} style={{ fontSize: 11, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Done</button>
+                <button type="button" onClick={() => setOpen(false)} style={{ fontSize: 11, color: '#c22d3c', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Done</button>
               </div>
             )}
           </div>
@@ -575,7 +575,7 @@ function AddCommentForm({ users, currentUser, onAdd, onCancel }: {
         <button
           type="button"
           onClick={handlePost}
-          style={{ fontSize: 12, border: 'none', borderRadius: 8, padding: '6px 16px', cursor: 'pointer', background: '#3b82f6', color: 'white', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}
+          style={{ fontSize: 12, border: 'none', borderRadius: 8, padding: '6px 16px', cursor: 'pointer', background: '#c22d3c', color: 'white', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}
         >
           <Send size={11} /> Post
         </button>
@@ -1131,7 +1131,7 @@ export function DocumentViewer({ bytes, url, ready = true, filename = 'document'
       const fill = tool === 'highlight' ? highlightColor.fill : tool === 'redact' ? 'rgba(0,0,0,0.85)' : tool === 'whiteout' ? 'rgba(255,255,255,0.9)' : 'rgba(59,130,246,0.15)'
       ctx.fillStyle = fill; ctx.fillRect(drawStart.x, drawStart.y, p.x - drawStart.x, p.y - drawStart.y)
       if (tool === 'highlight') { ctx.strokeStyle = highlightColor.stroke; ctx.lineWidth = 1; ctx.strokeRect(drawStart.x, drawStart.y, p.x - drawStart.x, p.y - drawStart.y) }
-      if (tool === 'underline') { ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 2.5; const y2 = drawStart.y + Math.abs(p.y - drawStart.y); ctx.beginPath(); ctx.moveTo(drawStart.x, y2); ctx.lineTo(p.x, y2); ctx.stroke() }
+      if (tool === 'underline') { ctx.strokeStyle = '#c22d3c'; ctx.lineWidth = 2.5; const y2 = drawStart.y + Math.abs(p.y - drawStart.y); ctx.beginPath(); ctx.moveTo(drawStart.x, y2); ctx.lineTo(p.x, y2); ctx.stroke() }
       if (tool === 'strikethrough') { ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 2.5; const y2 = drawStart.y + Math.abs(p.y - drawStart.y)/2; ctx.beginPath(); ctx.moveTo(drawStart.x, y2); ctx.lineTo(p.x, y2); ctx.stroke() }
     }
     if (tool === 'draw') {
@@ -1224,7 +1224,7 @@ export function DocumentViewer({ bytes, url, ready = true, filename = 'document'
           <button onClick={() => setShowSidebar(o=>!o)} className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium hover:bg-accent transition-colors">
             <MessageSquare className="h-3.5 w-3.5" />
             {showSidebar ? 'Hide Panel' : 'Show Panel'}
-            {!showSidebar && (annotations.length + notes.length) > 0 && <span className="ml-1 bg-blue-500 text-white rounded-full text-[9px] px-1">{annotations.length + notes.length}</span>}
+            {!showSidebar && (annotations.length + notes.length) > 0 && <span className="ml-1 bg-brand-500 text-white rounded-full text-[9px] px-1">{annotations.length + notes.length}</span>}
           </button>
           {/* Download dropdown — click to open, click outside to close */}
           {(bytes || url) && (
@@ -1361,7 +1361,7 @@ export function DocumentViewer({ bytes, url, ready = true, filename = 'document'
               )}
               {tool === 'draw' && (
                 <div className="flex gap-1 ml-1 items-center">
-                  {['#ef4444','#3b82f6','#22c55e','#f59e0b','#8b5cf6','#000000'].map(c => (
+                  {['#ef4444','#c22d3c','#22c55e','#f59e0b','#8b5cf6','#000000'].map(c => (
                     <button key={c} onClick={() => setDrawColor(c)}
                       style={{ width:16, height:16, borderRadius:'50%', background:c, border: drawColor===c ? '2px solid currentColor' : '2px solid transparent' }} />
                   ))}
@@ -1370,7 +1370,7 @@ export function DocumentViewer({ bytes, url, ready = true, filename = 'document'
 
               {/* Active stamp badge */}
               {tool === 'stamp' && (
-                <span className="text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-200 rounded px-2 py-0.5">{activeStamp}</span>
+                <span className="text-[10px] font-bold text-brand-600 bg-brand-50 border border-brand-200 rounded px-2 py-0.5">{activeStamp}</span>
               )}
 
               <div className="ml-auto flex items-center gap-2">
@@ -1624,7 +1624,7 @@ export function DocumentViewer({ bytes, url, ready = true, filename = 'document'
               <div className="flex flex-col items-center justify-center h-full gap-3 p-6">
                 <AlertCircle className="h-12 w-12 text-muted-foreground/40" />
                 <p className="text-sm text-muted-foreground">Preview not available.</p>
-                <a href={url} download={filename} className="text-sm underline text-blue-600">Download to view</a>
+                <a href={url} download={filename} className="text-sm underline text-brand-600">Download to view</a>
               </div>
             )}
           </div>
@@ -1637,11 +1637,11 @@ export function DocumentViewer({ bytes, url, ready = true, filename = 'document'
             <div style={{ display: 'flex', borderBottom: '1px solid', borderColor: 'var(--border)', background: 'var(--card)', flexShrink: 0 }}>
               {(['annotations','comments'] as const).map(t => (
                 <button key={t} onClick={() => setTab(t)}
-                  style={{ flex: 1, padding: '9px 0', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer', background: tab===t ? 'var(--background)' : 'var(--card)', borderBottom: tab===t ? '2px solid #3b82f6' : '2px solid transparent', color: tab===t ? '#3b82f6' : 'var(--muted-foreground)', transition: 'all 0.15s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                  style={{ flex: 1, padding: '9px 0', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer', background: tab===t ? 'var(--background)' : 'var(--card)', borderBottom: tab===t ? '2px solid #c22d3c' : '2px solid transparent', color: tab===t ? '#c22d3c' : 'var(--muted-foreground)', transition: 'all 0.15s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
                   {t === 'annotations' ? <Highlighter size={12}/> : <MessageSquare size={12}/>}
                   {t.charAt(0).toUpperCase()+t.slice(1)}
                   {t==='annotations' && annotations.length>0 && <span style={{ background:'#6366f1',color:'white',borderRadius:10,fontSize:9,padding:'0 5px' }}>{annotations.length}</span>}
-                  {t==='comments' && notes.length>0 && <span style={{ background:'#3b82f6',color:'white',borderRadius:10,fontSize:9,padding:'0 5px' }}>{notes.length}</span>}
+                  {t==='comments' && notes.length>0 && <span style={{ background:'#c22d3c',color:'white',borderRadius:10,fontSize:9,padding:'0 5px' }}>{notes.length}</span>}
                 </button>
               ))}
             </div>
@@ -1687,7 +1687,7 @@ export function DocumentViewer({ bytes, url, ready = true, filename = 'document'
                 <div style={{ padding:'10px 12px', borderBottom:'1px solid', borderColor:'var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
                   <span style={{ fontSize:12, fontWeight:700 }}>Comments</span>
                   <button onClick={() => { setShowAddForm(true); setActiveNote(null) }}
-                    style={{ display:'flex', alignItems:'center', gap:4, background:'#3b82f6', color:'white', border:'none', borderRadius:7, padding:'4px 10px', cursor:'pointer', fontSize:11, fontWeight:700 }}>
+                    style={{ display:'flex', alignItems:'center', gap:4, background:'#c22d3c', color:'white', border:'none', borderRadius:7, padding:'4px 10px', cursor:'pointer', fontSize:11, fontWeight:700 }}>
                     <Plus size={12}/> Add
                   </button>
                 </div>
@@ -1704,7 +1704,7 @@ export function DocumentViewer({ bytes, url, ready = true, filename = 'document'
                   )}
                   {notes.map(note => (
                     <div key={note.id} data-note-id={note.id} onClick={() => setActiveNote(id=>id===note.id?null:note.id)}
-                      style={{ borderRadius:10, marginBottom:10, border:`1px solid ${note.id===activeNote?'#3b82f6':'var(--border)'}`, borderLeft:'4px solid #6366f1', background:'var(--card)', cursor:'pointer', overflow:'hidden', boxShadow: note.id===activeNote ? '0 2px 12px rgba(99,102,241,0.15)' : 'none' }}>
+                      style={{ borderRadius:10, marginBottom:10, border:`1px solid ${note.id===activeNote?'#c22d3c':'var(--border)'}`, borderLeft:'4px solid #6366f1', background:'var(--card)', cursor:'pointer', overflow:'hidden', boxShadow: note.id===activeNote ? '0 2px 12px rgba(99,102,241,0.15)' : 'none' }}>
                       <div style={{ padding:'10px 12px' }}>
                         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
                           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
@@ -1719,7 +1719,7 @@ export function DocumentViewer({ bytes, url, ready = true, filename = 'document'
                         <p style={{ fontSize:13, color:'var(--foreground)', margin:'0 0 6px', lineHeight:1.5 }}>{note.text}</p>
                         <div style={{ display:'flex', flexWrap:'wrap', gap:5, alignItems:'center' }}>
                           {note.pageRef && <span style={{ fontSize:10, background:'var(--muted)', color:'var(--muted-foreground)', borderRadius:5, padding:'1px 6px', border:'1px solid var(--border)' }}>Page {note.pageRef}</span>}
-                          {note.assignedNames.map((n,i) => <span key={i} style={{ fontSize:10, background:'#eff6ff', color:'#1d4ed8', borderRadius:5, padding:'1px 6px', border:'1px solid #bfdbfe', display:'flex', alignItems:'center', gap:2 }}><AtSign size={8}/>{n}</span>)}
+                          {note.assignedNames.map((n,i) => <span key={i} style={{ fontSize:10, background:'#eff6ff', color:'#8e1a25', borderRadius:5, padding:'1px 6px', border:'1px solid #bfdbfe', display:'flex', alignItems:'center', gap:2 }}><AtSign size={8}/>{n}</span>)}
                           {note.comments.length>0 && <span style={{ fontSize:10, color:'#6366f1', marginLeft:'auto' }}>{note.comments.length} repl{note.comments.length===1?'y':'ies'}</span>}
                         </div>
                       </div>
@@ -1729,7 +1729,7 @@ export function DocumentViewer({ bytes, url, ready = true, filename = 'document'
                             <div key={c.id} style={{ marginBottom:8, paddingBottom:8, borderBottom:'1px solid var(--border)' }}>
                               <div style={{ display:'flex', alignItems:'center', gap:5, marginBottom:2 }}>
                                 <div style={{ width:18,height:18,borderRadius:'50%',background:'#6366f1',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,color:'white' }}>{(c.authorName||'?')[0].toUpperCase()}</div>
-                                <span style={{ fontSize:11, fontWeight:600, color:'#3b82f6' }}>{c.authorName}</span>
+                                <span style={{ fontSize:11, fontWeight:600, color:'#c22d3c' }}>{c.authorName}</span>
                                 <span style={{ fontSize:10, color:'#94a3b8', marginLeft:'auto' }}>{fmt(c.createdAt)}</span>
                               </div>
                               <p style={{ fontSize:12, margin:'0 0 0 23px' }}>{c.text}</p>
@@ -1741,7 +1741,7 @@ export function DocumentViewer({ bytes, url, ready = true, filename = 'document'
                               style={{ flex:1,fontSize:12,border:'1px solid var(--border)',borderRadius:7,padding:'5px 8px',fontFamily:'inherit',outline:'none',background:'var(--background)' }}
                             />
                             <button onClick={()=>{const t=(newReply[note.id]||'').trim();if(!t)return;const c:NoteComment={id:uid(),authorName:currentUser,text:t,createdAt:new Date().toISOString()};setNotes(prev=>prev.map(n=>n.id===note.id?{...n,comments:[...n.comments,c]}:n));setNewReply(prev=>({...prev,[note.id]:''}))}}
-                              style={{ background:'#3b82f6',color:'white',border:'none',borderRadius:7,padding:'5px 10px',cursor:'pointer',display:'flex',alignItems:'center' }}>
+                              style={{ background:'#c22d3c',color:'white',border:'none',borderRadius:7,padding:'5px 10px',cursor:'pointer',display:'flex',alignItems:'center' }}>
                               <Send size={12}/>
                             </button>
                           </div>

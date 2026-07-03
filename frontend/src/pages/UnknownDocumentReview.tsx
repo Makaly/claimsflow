@@ -244,7 +244,7 @@ export default function UnknownDocumentReview() {
             doc.status === 'template_created'
               ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
               : doc.status === 'reviewed'
-              ? 'bg-blue-100 text-blue-800'
+              ? 'bg-brand-100 text-brand-800'
               : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
           }`}>
             {doc.status === 'template_created' ? 'Template Added' : doc.status === 'reviewed' ? 'Reviewed' : 'Pending Review'}
@@ -252,7 +252,7 @@ export default function UnknownDocumentReview() {
         )}
         <div className="ml-auto shrink-0">
           <Button
-            className="gap-1.5 h-8 text-sm bg-indigo-600 hover:bg-indigo-700 text-white"
+            className="gap-1.5 h-8 text-sm bg-brand-800 hover:bg-brand-900 text-white"
             disabled={openingEditor || fileMissing}
             onClick={openInZoneEditor}
           >
@@ -297,7 +297,7 @@ export default function UnknownDocumentReview() {
             )}
 
             <div className="ml-auto text-xs text-muted-foreground">
-              Use <span className="font-semibold text-indigo-600">Open in Zone Editor</span> to draw zones &amp; split pages
+              Use <span className="font-semibold text-brand-800">Open in Zone Editor</span> to draw zones &amp; split pages
             </div>
           </div>
 
@@ -364,15 +364,15 @@ export default function UnknownDocumentReview() {
             )}
 
             {/* Quick open in zone editor */}
-            <div className="rounded-xl border-2 border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/30 p-4 space-y-2">
-              <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-200 flex items-center gap-2">
+            <div className="rounded-xl border-2 border-brand-200 dark:border-brand-900 bg-brand-50 dark:bg-brand-950/30 p-4 space-y-2">
+              <p className="text-sm font-semibold text-brand-900 dark:text-brand-200 flex items-center gap-2">
                 <Wand2 className="h-4 w-4" /> Full Zone Editor
               </p>
-              <p className="text-xs text-indigo-700 dark:text-indigo-300 leading-relaxed">
+              <p className="text-xs text-brand-900 dark:text-brand-300 leading-relaxed">
                 Open the full zone editor to draw field zones, test OCR extraction, split multi-page documents, and use AI auto-suggest.
               </p>
               <Button
-                className="w-full gap-2 bg-indigo-600 hover:bg-indigo-700 text-white"
+                className="w-full gap-2 bg-brand-800 hover:bg-brand-900 text-white"
                 disabled={openingEditor || fileMissing}
                 onClick={openInZoneEditor}
               >

@@ -215,7 +215,7 @@ function ClinicalDiscrepanciesPanel({ claimId }: { claimId: string }) {
   if (!hasIssues && data.icd10Hints.length === 0 && data.drugMentions.length === 0) return null
 
   return (
-    <div className={`rounded-lg border p-3 space-y-2 text-xs ${hasIssues ? 'border-red-200 bg-red-50' : 'border-blue-100 bg-blue-50'}`}>
+    <div className={`rounded-lg border p-3 space-y-2 text-xs ${hasIssues ? 'border-red-200 bg-red-50' : 'border-brand-100 bg-brand-50'}`}>
       <p className="font-semibold flex items-center gap-1 text-sm">
         <Brain className="h-4 w-4 text-purple-500" />
         Clinical Discrepancies {data.usedGeminiFallback && <Badge variant="outline" className="text-[9px] ml-1">Gemini</Badge>}
@@ -718,7 +718,7 @@ export default function Claims() {
         <TableCell key={colId}>
           {claim.batchType === 'batch' ? (
             <div className="flex flex-col gap-0.5">
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 w-fit">Batch</Badge>
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300 w-fit">Batch</Badge>
               {claim.batchNumber && <span className="font-mono text-[10px] text-muted-foreground">{claim.batchNumber}</span>}
             </div>
           ) : (
@@ -1049,25 +1049,25 @@ export default function Claims() {
     <style>
       * { box-sizing: border-box; margin: 0; padding: 0; }
       body { font-family: -apple-system, Arial, sans-serif; font-size: 11px; color: #111; padding: 20px; }
-      .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 2px solid #2563eb; }
-      .header h1 { font-size: 20px; font-weight: 700; color: #1e40af; }
+      .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 2px solid #ac202d; }
+      .header h1 { font-size: 20px; font-weight: 700; color: #73151e; }
       .header p { font-size: 10px; color: #6b7280; margin-top: 2px; }
       .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 20px; }
       .stat { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; }
       .stat .label { font-size: 9px; text-transform: uppercase; letter-spacing: .05em; color: #64748b; margin-bottom: 4px; }
       .stat .value { font-size: 17px; font-weight: 700; color: #0f172a; }
       table { width: 100%; border-collapse: collapse; font-size: 10px; }
-      thead tr { background: #1e40af; color: white; }
+      thead tr { background: #73151e; color: white; }
       thead th { padding: 6px 8px; text-align: left; font-weight: 600; }
       tbody tr:nth-child(even) { background: #f8fafc; }
       tbody td { padding: 5px 8px; border-bottom: 1px solid #f1f5f9; }
       .badge { display: inline-block; padding: 1px 6px; border-radius: 9999px; font-size: 9px; font-weight: 600; text-transform: capitalize; }
       .badge-approved, .badge-paid { background: #dcfce7; color: #166534; }
       .badge-rejected { background: #fee2e2; color: #991b1b; }
-      .badge-under_review { background: #dbeafe; color: #1e40af; }
+      .badge-under_review { background: #f6d5d9; color: #73151e; }
       .badge-submitted { background: #fef9c3; color: #854d0e; }
       .badge-incomplete { background: #ffedd5; color: #9a3412; }
-      .badge-batch { background: #dbeafe; color: #1d4ed8; }
+      .badge-batch { background: #f6d5d9; color: #8e1a25; }
       .badge-single { background: #f1f5f9; color: #64748b; }
       .badge-fraud { background: #fee2e2; color: #991b1b; }
       .footer { margin-top: 16px; font-size: 9px; color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 8px; }
@@ -1075,7 +1075,7 @@ export default function Claims() {
     </style></head><body>
     <div class="header">
       <div><h1>ClaimsFlow — ${label} Report</h1><p>Generated ${new Date().toLocaleString()} · ${data.length} claims</p></div>
-      <div style="text-align:right"><p style="font-size:10px;color:#6b7280">Total Amount</p><p style="font-size:16px;font-weight:700;color:#1e40af">${fmt(totalAmt)}</p></div>
+      <div style="text-align:right"><p style="font-size:10px;color:#6b7280">Total Amount</p><p style="font-size:16px;font-weight:700;color:#73151e">${fmt(totalAmt)}</p></div>
     </div>
     <div class="stats">
       <div class="stat"><div class="label">Total Claims</div><div class="value">${data.length}</div></div>
@@ -1155,14 +1155,14 @@ export default function Claims() {
 
       {/* ── Stats cards ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <Card className="border-0 bg-gradient-to-br from-blue-50 to-blue-100/60 dark:from-blue-950/40 dark:to-blue-900/20">
+        <Card className="border-0 bg-gradient-to-br from-brand-50 to-brand-100/60 dark:from-brand-950/40 dark:to-brand-900/20">
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-blue-700 dark:text-blue-300 uppercase tracking-wide">Total Claims</span>
-              <FileText className="h-4 w-4 text-blue-500" />
+              <span className="text-xs font-medium text-brand-700 dark:text-brand-300 uppercase tracking-wide">Total Claims</span>
+              <FileText className="h-4 w-4 text-brand-500" />
             </div>
-            <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">{totalClaims}</p>
-            <p className="text-xs text-blue-600/70 dark:text-blue-400 mt-0.5">{batchGroups.length} batch{batchGroups.length !== 1 ? 'es' : ''}</p>
+            <p className="text-2xl font-bold text-brand-900 dark:text-brand-100">{totalClaims}</p>
+            <p className="text-xs text-brand-600/70 dark:text-brand-400 mt-0.5">{batchGroups.length} batch{batchGroups.length !== 1 ? 'es' : ''}</p>
           </CardContent>
         </Card>
         <Card className="border-0 bg-gradient-to-br from-emerald-50 to-emerald-100/60 dark:from-emerald-950/40 dark:to-emerald-900/20">
@@ -1742,9 +1742,9 @@ export default function Claims() {
 
                   if (signals.length === 0) return null
 
-                  const bgMap = { critical: 'bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-800', warning: 'bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-800', info: 'bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-800' }
-                  const textMap = { critical: 'text-red-700 dark:text-red-300', warning: 'text-amber-700 dark:text-amber-300', info: 'text-blue-700 dark:text-blue-300' }
-                  const dotMap = { critical: 'bg-red-500', warning: 'bg-amber-500', info: 'bg-blue-500' }
+                  const bgMap = { critical: 'bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-800', warning: 'bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-800', info: 'bg-brand-50 border-brand-200 dark:bg-brand-950/20 dark:border-brand-800' }
+                  const textMap = { critical: 'text-red-700 dark:text-red-300', warning: 'text-amber-700 dark:text-amber-300', info: 'text-brand-700 dark:text-brand-300' }
+                  const dotMap = { critical: 'bg-red-500', warning: 'bg-amber-500', info: 'bg-brand-500' }
 
                   const crit = signals.filter(s => s.level === 'critical').length
                   const warn = signals.filter(s => s.level === 'warning').length
@@ -1768,22 +1768,22 @@ export default function Claims() {
                             ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800/50'
                             : s.level === 'warning'
                             ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/50'
-                            : 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800/50'
+                            : 'bg-brand-50 dark:bg-brand-950/30 border-brand-200 dark:border-brand-800/50'
                         }`}>
                           <div className={`flex items-center gap-2 px-3 py-1.5 border-b ${
                             s.level === 'critical' ? 'border-red-200 dark:border-red-800/40 bg-red-100/50 dark:bg-red-500/10' :
                             s.level === 'warning'  ? 'border-amber-200 dark:border-amber-800/40 bg-amber-100/50 dark:bg-amber-500/10' :
-                                                      'border-blue-200 dark:border-blue-800/40 bg-blue-100/50 dark:bg-blue-500/10'
+                                                      'border-brand-200 dark:border-brand-800/40 bg-brand-100/50 dark:bg-brand-500/10'
                           }`}>
                             <span className={`text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded ${
                               s.level === 'critical' ? 'bg-red-500 text-white' :
                               s.level === 'warning'  ? 'bg-amber-500 text-white' :
-                                                        'bg-blue-500 text-white'
+                                                        'bg-brand-500 text-white'
                             }`}>{s.level}</span>
                             <p className={`text-xs font-bold flex-1 leading-tight ${
                               s.level === 'critical' ? 'text-red-800 dark:text-red-200' :
                               s.level === 'warning'  ? 'text-amber-800 dark:text-amber-200' :
-                                                        'text-blue-800 dark:text-blue-200'
+                                                        'text-brand-800 dark:text-brand-200'
                             }`}>{s.title}</p>
                             {(s as any).detectedAt && (
                               <span className="text-[9px] text-muted-foreground/50 shrink-0">{formatDate((s as any).detectedAt)}</span>
@@ -1792,7 +1792,7 @@ export default function Claims() {
                           <p className={`text-[11px] leading-relaxed px-3 py-2 ${
                             s.level === 'critical' ? 'text-red-700/90 dark:text-red-200/80' :
                             s.level === 'warning'  ? 'text-amber-700/90 dark:text-amber-200/80' :
-                                                      'text-blue-700/90 dark:text-blue-200/80'
+                                                      'text-brand-700/90 dark:text-brand-200/80'
                           }`}>{s.detail}</p>
                         </div>
                       ))}
@@ -1853,7 +1853,7 @@ export default function Claims() {
                                 <Pencil className="h-2.5 w-2.5 text-muted-foreground" />
                               </button>
                               <button type="button" title="View change history" onClick={() => loadFieldHistory(fieldKey)}
-                                className={`ml-0.5 p-0.5 rounded hover:bg-muted transition-opacity ${isShowingHistory ? 'opacity-100 text-blue-500' : 'opacity-0 group-hover:opacity-100'}`}>
+                                className={`ml-0.5 p-0.5 rounded hover:bg-muted transition-opacity ${isShowingHistory ? 'opacity-100 text-brand-500' : 'opacity-0 group-hover:opacity-100'}`}>
                                 <History className="h-2.5 w-2.5" />
                               </button>
                             </>
@@ -1866,10 +1866,10 @@ export default function Claims() {
                               value={editValue}
                               onChange={e => setEditValue(e.target.value)}
                               onKeyDown={e => { if (e.key === 'Enter') saveFieldEdit(fieldKey!); if (e.key === 'Escape') cancelFieldEdit() }}
-                              className="flex-1 text-xs border rounded-md px-2 py-1 bg-background focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                              className="flex-1 text-xs border rounded-md px-2 py-1 bg-background focus:outline-none focus:ring-2 focus:ring-brand-500/40"
                             />
                             <button type="button" onClick={() => saveFieldEdit(fieldKey!)} disabled={!!savingField}
-                              className="p-1 rounded-md bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50">
+                              className="p-1 rounded-md bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50">
                               {savingField === fieldKey ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
                             </button>
                             <button type="button" onClick={cancelFieldEdit} className="p-1 rounded-md hover:bg-muted text-muted-foreground">
@@ -1929,7 +1929,7 @@ export default function Claims() {
                       <TabsContent value="overview" className="px-2.5 pb-3 space-y-2.5 mt-2.5 data-[state=inactive]:hidden">
 
                       {/* Member & Patient */}
-                      <Section icon={<User className="h-3.5 w-3.5 text-blue-500" />} label="Member & Patient" color="bg-blue-500/5 border-blue-500/10">
+                      <Section icon={<User className="h-3.5 w-3.5 text-brand-500" />} label="Member & Patient" color="bg-brand-500/5 border-brand-500/10">
                         <div className="col-span-2">
                           <Field
                             label="Member Name"
@@ -2092,7 +2092,7 @@ export default function Claims() {
                           invoice:          { label: 'Invoice',        cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-400/30' },
                           prescription:     { label: 'Prescription',   cls: 'bg-violet-500/15 text-violet-700 dark:text-violet-300 border-violet-400/30' },
                           lab_result:       { label: 'Lab Results',    cls: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border-cyan-400/30' },
-                          medical_report:   { label: 'Medical Report', cls: 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-400/30' },
+                          medical_report:   { label: 'Medical Report', cls: 'bg-brand-500/15 text-brand-700 dark:text-brand-300 border-brand-400/30' },
                           discharge_summary:{ label: 'Discharge',      cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-400/30' },
                           referral:         { label: 'Referral',       cls: 'bg-pink-500/15 text-pink-700 dark:text-pink-300 border-pink-400/30' },
                           claim_form:       { label: 'Claim Form',     cls: 'bg-slate-500/15 text-slate-600 dark:text-slate-300 border-slate-400/30' },
@@ -2393,7 +2393,7 @@ export default function Claims() {
                         invoice:          { label: 'Invoice',        cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-400/30' },
                         prescription:     { label: 'Rx',             cls: 'bg-violet-500/15 text-violet-700 dark:text-violet-400 border-violet-400/30' },
                         lab_result:       { label: 'Lab',            cls: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-400 border-cyan-400/30' },
-                        medical_report:   { label: 'Report',         cls: 'bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-400/30' },
+                        medical_report:   { label: 'Report',         cls: 'bg-brand-500/15 text-brand-700 dark:text-brand-400 border-brand-400/30' },
                         discharge_summary:{ label: 'Discharge',      cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-400/30' },
                         referral:         { label: 'Referral',       cls: 'bg-pink-500/15 text-pink-700 dark:text-pink-400 border-pink-400/30' },
                         claim_form:       { label: 'Claim Form',     cls: 'bg-slate-500/15 text-slate-700 dark:text-slate-400 border-slate-400/30' },
@@ -2507,7 +2507,7 @@ export default function Claims() {
                   <Upload className="mr-2 h-3 w-3" /> Attach Document
                 </Button>
                 {attachedFiles.length > 0 && !aiExtracted && (
-                  <Button size="sm" className="bg-violet-600 hover:bg-violet-700" onClick={handleAiExtract} disabled={aiExtracting}>
+                  <Button size="sm" className="bg-brand-600 hover:bg-brand-700" onClick={handleAiExtract} disabled={aiExtracting}>
                     {aiExtracting ? <><Loader2 className="mr-2 h-3 w-3 animate-spin" /> Extracting...</> : <><Sparkles className="mr-2 h-3 w-3" /> Extract with AI</>}
                   </Button>
                 )}

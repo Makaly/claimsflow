@@ -96,7 +96,7 @@ export default function ScanMeteringTab() {
                   className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/40 transition-colors"
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="h-8 w-8 rounded-md bg-blue-500/10 text-blue-500 border border-blue-500/20 flex items-center justify-center shrink-0">
+                    <div className="h-8 w-8 rounded-md bg-brand-500/10 text-brand-500 border border-brand-500/20 flex items-center justify-center shrink-0">
                       <Building2 className="h-4 w-4" />
                     </div>
                     <div className="min-w-0">

@@ -458,7 +458,7 @@ export default function CameraScanner({ onCapture, onClose, meterEnabled = true 
               <polygon
                 points={corners.map(([cx, cy]) => `${cx},${cy}`).join(' ')}
                 fill="none"
-                stroke="#60a5fa"
+                stroke="#d14d5c"
                 strokeWidth="0.004"
               />
               {/* Thirds grid inside crop area */}
@@ -483,14 +483,14 @@ export default function CameraScanner({ onCapture, onClose, meterEnabled = true 
             {corners.map(([cx, cy], idx) => (
               <div
                 key={idx}
-                className="fixed w-10 h-10 rounded-full border-[3px] border-blue-400 bg-white/25 cursor-move touch-none z-10 flex items-center justify-center"
+                className="fixed w-10 h-10 rounded-full border-[3px] border-brand-400 bg-white/25 cursor-move touch-none z-10 flex items-center justify-center"
                 style={{
                   left: imgBounds.x + cx * imgBounds.w - 20,
                   top:  imgBounds.y + cy * imgBounds.h - 20,
                 }}
                 onPointerDown={onCornerPointerDown(idx)}
               >
-                <div className="w-2 h-2 rounded-full bg-blue-400" />
+                <div className="w-2 h-2 rounded-full bg-brand-400" />
               </div>
             ))}
           </div>
@@ -502,7 +502,7 @@ export default function CameraScanner({ onCapture, onClose, meterEnabled = true 
               onClick={() => setOcrOpen(o => !o)}
             >
               <span className="flex items-center gap-2">
-                <ScanText className="h-3.5 w-3.5 text-blue-400" />
+                <ScanText className="h-3.5 w-3.5 text-brand-400" />
                 {ocrRunning
                   ? `Reading text… ${ocrPct}%`
                   : ocrText
@@ -510,14 +510,14 @@ export default function CameraScanner({ onCapture, onClose, meterEnabled = true 
                   : 'OCR not started'}
               </span>
               {ocrRunning
-                ? <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-400" />
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin text-brand-400" />
                 : ocrOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />
               }
             </button>
             {/* Progress bar */}
             {ocrRunning && (
               <div className="h-0.5 bg-gray-800">
-                <div className="h-full bg-blue-500 transition-all" style={{ width: `${ocrPct}%` }} />
+                <div className="h-full bg-brand-500 transition-all" style={{ width: `${ocrPct}%` }} />
               </div>
             )}
             {ocrOpen && ocrText && (
@@ -591,7 +591,7 @@ export default function CameraScanner({ onCapture, onClose, meterEnabled = true 
               </Button>
               <Button
                 size="sm"
-                className="bg-blue-600 hover:bg-blue-700 text-white gap-2 h-9 px-4"
+                className="bg-brand-600 hover:bg-brand-700 text-white gap-2 h-9 px-4"
                 onClick={handleConfirm}
                 disabled={processing}
               >

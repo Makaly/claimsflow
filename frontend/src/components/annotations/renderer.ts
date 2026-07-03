@@ -93,7 +93,7 @@ export function renderAnnotations(
           break
         case 'underline':
           if (!a.w || !a.h) break
-          ctx.strokeStyle = '#3b82f6'
+          ctx.strokeStyle = '#c22d3c'
           ctx.lineWidth = 2.5 * scaleX
           {
             const y = s(a.y, 'y') + Math.abs(sh(a.h))
@@ -266,7 +266,7 @@ export function renderAnnotations(
 
           ctx.save()
           ctx.fillStyle = '#eff6ff'
-          ctx.strokeStyle = '#2563eb'
+          ctx.strokeStyle = '#ac202d'
           ctx.lineWidth = 0.8 * scaleX
           ctx.setLineDash([])
           ctx.beginPath()
@@ -289,7 +289,7 @@ export function renderAnnotations(
           ctx.fill()
           ctx.stroke()
 
-          ctx.fillStyle = '#2563eb'
+          ctx.fillStyle = '#ac202d'
           ctx.fillRect(sx2, panelY, 3 * scaleX, panelH)
 
           ctx.fillStyle = '#16a34a'
@@ -308,7 +308,7 @@ export function renderAnnotations(
           ctx.textBaseline = 'middle'
           ctx.fillText('✓', sx2 + pad + 6 * scaleX, panelY + pad + 5 * scaleY)
 
-          ctx.fillStyle = '#1d4ed8'
+          ctx.fillStyle = '#8e1a25'
           ctx.font = `bold ${fs9}px Arial`
           ctx.textAlign = 'left'
           ctx.textBaseline = 'top'

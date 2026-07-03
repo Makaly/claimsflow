@@ -78,8 +78,8 @@ const PROVIDER_TYPES = [
 
 function docTypeColor(dt: string): string {
   const map: Record<string, string> = {
-    invoice: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
-    inpatient_invoice: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300',
+    invoice: 'bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300',
+    inpatient_invoice: 'bg-brand-100 text-brand-900 dark:bg-brand-950/30 dark:text-brand-300',
     prescription: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
     lab_result: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
     medical_report: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',

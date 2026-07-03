@@ -55,7 +55,7 @@ interface AnnotationCanvasProps {
 const STAMPS = [
   { id: 'approved', label: 'APPROVED', color: '#16a34a', bg: '#dcfce7' },
   { id: 'rejected', label: 'REJECTED', color: '#dc2626', bg: '#fee2e2' },
-  { id: 'reviewed', label: 'REVIEWED', color: '#2563eb', bg: '#dbeafe' },
+  { id: 'reviewed', label: 'REVIEWED', color: '#ac202d', bg: '#f6d5d9' },
   { id: 'confidential', label: 'CONFIDENTIAL', color: '#7c3aed', bg: '#ede9fe' },
   { id: 'copy', label: 'COPY', color: '#d97706', bg: '#fef3c7' },
   { id: 'paid', label: 'PAID', color: '#059669', bg: '#d1fae5' },
@@ -249,7 +249,7 @@ export function AnnotationCanvas({
     const rect = canvas.getBoundingClientRect()
     ctx.beginPath()
     ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top)
-    ctx.strokeStyle = '#1e40af'
+    ctx.strokeStyle = '#73151e'
     ctx.lineWidth = 2
     ctx.lineCap = 'round'
   }
@@ -282,7 +282,7 @@ export function AnnotationCanvas({
       signatureData: dataUrl,
       signerName: userName,
       content: `Signed by ${userName}`,
-      color: '#2563eb',
+      color: '#ac202d',
     })
     setShowSignaturePad(false)
     clearSignaturePad()
@@ -295,7 +295,7 @@ export function AnnotationCanvas({
     { id: 'whiteout', icon: Square, label: 'Whiteout', color: '#ffffff' },
     { id: 'redaction', icon: Eraser, label: 'Redact', color: '#000000' },
     { id: 'highlight', icon: Highlighter, label: 'Highlight' },
-    { id: 'underline', icon: Type, label: 'Underline', color: '#2563eb' },
+    { id: 'underline', icon: Type, label: 'Underline', color: '#ac202d' },
     { id: 'strikethrough', icon: Type, label: 'Strike', color: '#dc2626' },
     { id: 'note', icon: MessageSquare, label: 'Note' },
     { id: 'drawing', icon: PenLine, label: 'Draw' },
@@ -523,7 +523,7 @@ function AnnotationOverlay({
       {annotation.type === 'underline' && (
         <div
           className="absolute bottom-0 left-0 right-0 h-0.5"
-          style={{ backgroundColor: annotation.color || '#2563eb' }}
+          style={{ backgroundColor: annotation.color || '#ac202d' }}
         />
       )}
 

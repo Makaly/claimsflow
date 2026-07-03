@@ -24,7 +24,7 @@ import { formatDate, formatDateTime, cn } from '@/lib/utils'
 
 const statusColors: Record<string, string> = {
   pending:      'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
-  under_review: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+  under_review: 'bg-brand-100 text-brand-800 dark:bg-brand-900/40 dark:text-brand-300',
   finalised:    'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400',
 }
 
@@ -43,7 +43,7 @@ const roleLabel: Record<string, string> = {
 
 const roleBubbleColor: Record<string, string> = {
   admin:          'bg-red-100 dark:bg-red-900/30 border-red-200 dark:border-red-800',
-  claims_officer: 'bg-blue-100 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800',
+  claims_officer: 'bg-brand-100 dark:bg-brand-900/30 border-brand-200 dark:border-brand-800',
   fraud_officer:  'bg-orange-100 dark:bg-orange-900/30 border-orange-200 dark:border-orange-800',
   provider_admin: 'bg-emerald-100 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-800',
   provider_user:  'bg-teal-100 dark:bg-teal-900/30 border-teal-200 dark:border-teal-800',
@@ -162,7 +162,7 @@ export default function Appeals() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Scale className="h-6 w-6 text-blue-600" /> Appeals
+            <Scale className="h-6 w-6 text-brand-600" /> Appeals
           </h1>
           <p className="text-muted-foreground text-sm mt-1">{total} total appeals</p>
         </div>
@@ -181,7 +181,7 @@ export default function Appeals() {
         </Card>
         <Card>
           <CardContent className="p-4 flex items-center gap-3">
-            <AlertTriangle className="h-8 w-8 text-blue-500" />
+            <AlertTriangle className="h-8 w-8 text-brand-500" />
             <div><div className="text-2xl font-bold">{underReviewCount}</div><div className="text-xs text-muted-foreground">Under Review</div></div>
           </CardContent>
         </Card>
@@ -288,7 +288,7 @@ export default function Appeals() {
         <DialogContent className="max-w-lg w-full flex flex-col" style={{ maxHeight: '85vh' }}>
           <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2">
-              <MessageSquare className="h-4 w-4 text-blue-500" />
+              <MessageSquare className="h-4 w-4 text-brand-500" />
               Appeal Thread — {threadAppeal?.claim?.claimNumber}
             </DialogTitle>
             <DialogDescription>
@@ -341,7 +341,7 @@ export default function Appeals() {
                   <div className={cn(
                     'rounded-lg border px-3 py-2 text-sm max-w-[85%]',
                     isOwn
-                      ? 'bg-blue-600 text-white border-blue-700'
+                      ? 'bg-brand-600 text-white border-brand-700'
                       : (roleBubbleColor[msg.sender?.role ?? msg.senderRole] ?? 'bg-muted border-border'),
                   )}>
                     {msg.message}

@@ -73,7 +73,7 @@ interface CheckerClaim {
 const SIGNAL_STYLE = {
   critical: { bg: 'bg-red-950/30 border-red-700', text: 'text-red-300', label: 'CRITICAL' },
   warning:  { bg: 'bg-amber-950/30 border-amber-700', text: 'text-amber-300', label: 'WARNING' },
-  info:     { bg: 'bg-blue-950/30 border-blue-700', text: 'text-blue-300', label: 'INFO' },
+  info:     { bg: 'bg-brand-950/30 border-brand-700', text: 'text-brand-300', label: 'INFO' },
 }
 
 const DOCUMENT_TYPES = [
@@ -337,7 +337,7 @@ export default function CheckerQueue() {
 
       <div className="grid gap-4 md:grid-cols-4">
         {[
-          { icon: FileText,   color: 'text-blue-500',    label: 'Pending Review',    value: stats.total },
+          { icon: FileText,   color: 'text-brand-500',    label: 'Pending Review',    value: stats.total },
           { icon: DollarSign, color: 'text-amber-500',   label: 'High Value (>100K)', value: stats.highValue },
           { icon: Clock,      color: 'text-red-500',     label: 'Urgent',            value: stats.urgent },
           { icon: DollarSign, color: 'text-emerald-500', label: 'Total Value',       value: formatCurrency(stats.totalValue) },
@@ -407,7 +407,7 @@ export default function CheckerQueue() {
                     const warnCount = claim.fraudSignals.filter(s => s.level === 'warning').length
                     return (
                       <TableRow key={claim.id}
-                        className={`cursor-pointer transition-colors ${bulkSelected.has(claim.id) ? 'bg-blue-50/10' : 'hover:bg-muted/40'}`}
+                        className={`cursor-pointer transition-colors ${bulkSelected.has(claim.id) ? 'bg-brand-50/10' : 'hover:bg-muted/40'}`}
                         onClick={() => openClaim(claim)}>
                         <TableCell onClick={e => e.stopPropagation()}>
                           <Checkbox checked={bulkSelected.has(claim.id)}
@@ -894,7 +894,7 @@ export default function CheckerQueue() {
                               <div key={i} className={`rounded-lg border p-2.5 ${s.bg}`}>
                                 <div className="flex items-center gap-2 mb-0.5">
                                   <span className={`inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider rounded px-1.5 py-0.5 ${
-                                    sig.level === 'critical' ? 'bg-red-500/30 text-red-300' : sig.level === 'warning' ? 'bg-amber-500/30 text-amber-300' : 'bg-blue-500/30 text-blue-300'
+                                    sig.level === 'critical' ? 'bg-red-500/30 text-red-300' : sig.level === 'warning' ? 'bg-amber-500/30 text-amber-300' : 'bg-brand-500/30 text-brand-300'
                                   }`}><AlertTriangle className="h-2.5 w-2.5" />{s.label}</span>
                                   <span className={`text-xs font-semibold ${s.text}`}>{sig.title}</span>
                                 </div>

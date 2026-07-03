@@ -132,7 +132,7 @@ export default function PBMLookup() {
                   <div className="flex flex-wrap gap-2 text-xs">
                     <Badge className={TIER_COLORS[r.formularyTier] ?? ''}>{TIER_LABELS[r.formularyTier] ?? `Tier ${r.formularyTier}`}</Badge>
                     <span className="text-muted-foreground">Copay: KES {r.copayAmount.toFixed(0)}</span>
-                    {r.genericAlt && <span className="text-blue-600">Generic alt: {r.genericAlt}</span>}
+                    {r.genericAlt && <span className="text-brand-600">Generic alt: {r.genericAlt}</span>}
                   </div>
                 )}
                 {r.ddInteractionWarnings.map((w, j) => (

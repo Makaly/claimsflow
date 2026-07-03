@@ -17,12 +17,12 @@ export function HeroArt() {
           <stop offset="1" stopColor="#0f172a" />
         </linearGradient>
         <linearGradient id="accentGrad" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0" stopColor="#2563eb" />
-          <stop offset="1" stopColor="#3b82f6" />
+          <stop offset="0" stopColor="#ac202d" />
+          <stop offset="1" stopColor="#c22d3c" />
         </linearGradient>
         <linearGradient id="barGrad" x1="0" y1="1" x2="0" y2="0">
-          <stop offset="0" stopColor="#1d4ed8" />
-          <stop offset="1" stopColor="#60a5fa" />
+          <stop offset="0" stopColor="#8e1a25" />
+          <stop offset="1" stopColor="#d14d5c" />
         </linearGradient>
       </defs>
 
@@ -36,10 +36,10 @@ export function HeroArt() {
       <g>
         <rect x="40" y="74" width="120" height="64" rx="12" fill="rgba(37,99,235,0.12)" stroke="rgba(37,99,235,0.30)" />
         <rect x="54" y="90" width="48" height="10" rx="5" fill="rgba(255,255,255,0.35)" />
-        <rect x="54" y="108" width="74" height="16" rx="6" fill="#60a5fa" />
+        <rect x="54" y="108" width="74" height="16" rx="6" fill="#d14d5c" />
         <rect x="170" y="74" width="120" height="64" rx="12" fill="rgba(37,99,235,0.10)" stroke="rgba(37,99,235,0.24)" />
         <rect x="184" y="90" width="40" height="10" rx="5" fill="rgba(255,255,255,0.35)" />
-        <rect x="184" y="108" width="60" height="16" rx="6" fill="#3b82f6" />
+        <rect x="184" y="108" width="60" height="16" rx="6" fill="#c22d3c" />
         <rect x="300" y="74" width="120" height="64" rx="12" fill="rgba(234,88,12,0.12)" stroke="rgba(234,88,12,0.28)" />
         <rect x="314" y="90" width="44" height="10" rx="5" fill="rgba(255,255,255,0.35)" />
         <rect x="314" y="108" width="56" height="16" rx="6" fill="#fb923c" />
@@ -70,7 +70,7 @@ export function HeroArt() {
         {[0, 1, 2, 3].map((i) => (
           <g key={i} transform={`translate(300 ${164 + i * 38})`}>
             <rect width="120" height="28" rx="8" fill="rgba(255,255,255,0.04)" />
-            <circle cx="18" cy="14" r="6" fill={['#22c55e', '#fb923c', '#3b82f6', '#22c55e'][i]} />
+            <circle cx="18" cy="14" r="6" fill={['#22c55e', '#fb923c', '#c22d3c', '#22c55e'][i]} />
             <rect x="34" y="9" width="70" height="10" rx="5" fill="rgba(255,255,255,0.20)" />
           </g>
         ))}
@@ -97,8 +97,8 @@ export function PhoneMock() {
     >
       <defs>
         <linearGradient id="phoneHeader" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#1d4ed8" />
-          <stop offset="1" stopColor="#3b82f6" />
+          <stop offset="0" stopColor="#8e1a25" />
+          <stop offset="1" stopColor="#c22d3c" />
         </linearGradient>
       </defs>
 
@@ -118,7 +118,7 @@ export function PhoneMock() {
       {/* Summary cards */}
       <rect x="38" y="150" width="84" height="56" rx="12" fill="rgba(37,99,235,0.14)" stroke="rgba(37,99,235,0.34)" />
       <rect x="50" y="162" width="34" height="8" rx="4" fill="rgba(255,255,255,0.4)" />
-      <rect x="50" y="178" width="50" height="14" rx="5" fill="#60a5fa" />
+      <rect x="50" y="178" width="50" height="14" rx="5" fill="#d14d5c" />
       <rect x="138" y="150" width="84" height="56" rx="12" fill="rgba(34,197,94,0.12)" stroke="rgba(34,197,94,0.3)" />
       <rect x="150" y="162" width="34" height="8" rx="4" fill="rgba(255,255,255,0.4)" />
       <rect x="150" y="178" width="50" height="14" rx="5" fill="#22c55e" />
@@ -127,7 +127,7 @@ export function PhoneMock() {
       {[
         { y: 226, color: '#22c55e', label: 18 },
         { y: 282, color: '#fb923c', label: 14 },
-        { y: 338, color: '#3b82f6', label: 20 },
+        { y: 338, color: '#c22d3c', label: 20 },
         { y: 394, color: '#22c55e', label: 16 },
       ].map((row, i) => (
         <g key={i}>
@@ -143,7 +143,7 @@ export function PhoneMock() {
       {/* Bottom tab bar */}
       <rect x="20" y="456" width="220" height="44" rx="0" fill="#0b1220" />
       {[60, 110, 160, 200].map((cx, i) => (
-        <circle key={i} cx={cx} cy="478" r="6" fill={i === 0 ? '#60a5fa' : 'rgba(255,255,255,0.25)'} />
+        <circle key={i} cx={cx} cy="478" r="6" fill={i === 0 ? '#d14d5c' : 'rgba(255,255,255,0.25)'} />
       ))}
 
       {/* Floating action button (camera scan) */}

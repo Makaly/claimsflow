@@ -60,14 +60,14 @@ export function AssistantPanel() {
     <Card className="flex flex-col h-full max-h-[600px]">
       <CardHeader className="border-b pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
-          <Bot className="h-5 w-5 text-blue-500" />
+          <Bot className="h-5 w-5 text-brand-500" />
           Policy Assistant (RAG)
         </CardTitle>
       </CardHeader>
       <CardContent className="flex-1 overflow-y-auto py-4 space-y-4">
         {messages.map((msg, i) => (
           <div key={i} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-            <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'}`}>
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-brand-100 text-brand-600' : 'bg-gray-100 text-gray-600'}`}>
               {msg.role === 'user' ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
             </div>
             <div className={`max-w-[80%] space-y-1 ${msg.role === 'user' ? 'items-end' : ''}`}>
@@ -77,7 +77,7 @@ export function AssistantPanel() {
                   <span>Low confidence — could not find relevant policy text</span>
                 </div>
               )}
-              <div className={`rounded-lg px-3 py-2 text-sm ${msg.role === 'user' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-800'}`}>
+              <div className={`rounded-lg px-3 py-2 text-sm ${msg.role === 'user' ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-800'}`}>
                 {msg.content}
               </div>
               {msg.citations && msg.citations.length > 0 && (

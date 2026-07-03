@@ -30,13 +30,13 @@ const typeConfig: Record<
   },
   'claim:assigned': {
     icon: FileText,
-    color: 'text-blue-600 dark:text-blue-400',
-    bg: 'bg-blue-50 dark:bg-blue-950',
+    color: 'text-brand-600 dark:text-brand-400',
+    bg: 'bg-brand-50 dark:bg-brand-950',
   },
   'claim:status': {
     icon: FileText,
-    color: 'text-blue-600 dark:text-blue-400',
-    bg: 'bg-blue-50 dark:bg-blue-950',
+    color: 'text-brand-600 dark:text-brand-400',
+    bg: 'bg-brand-50 dark:bg-brand-950',
   },
   'appeal:new': {
     icon: Scale,
@@ -60,8 +60,8 @@ const typeConfig: Record<
   },
   'user:pending': {
     icon: UserPlus,
-    color: 'text-blue-600 dark:text-blue-400',
-    bg: 'bg-blue-50 dark:bg-blue-950',
+    color: 'text-brand-600 dark:text-brand-400',
+    bg: 'bg-brand-50 dark:bg-brand-950',
   },
   'user:decision': {
     icon: ShieldX,

@@ -134,7 +134,7 @@ export default function Permissions() {
       <div className="grid gap-4 md:grid-cols-3">
         {[
           { label: 'Total', value: loading ? '…' : permissions.length, color: 'text-foreground' },
-          { label: 'System', value: loading ? '…' : systemCount, color: 'text-blue-600' },
+          { label: 'System', value: loading ? '…' : systemCount, color: 'text-brand-600' },
           { label: 'Custom', value: loading ? '…' : customCount, color: 'text-purple-600' },
         ].map((s) => (
           <Card key={s.label}>

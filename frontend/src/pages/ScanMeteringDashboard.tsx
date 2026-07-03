@@ -71,7 +71,7 @@ function KpiCard({
     violet: 'from-violet-500 to-purple-600',
     green:  'from-emerald-500 to-green-600',
     amber:  'from-amber-500 to-orange-600',
-    blue:   'from-blue-500 to-cyan-600',
+    blue:   'from-brand-500 to-brand-700',
   }
   return (
     <Card className="overflow-hidden">

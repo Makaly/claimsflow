@@ -279,10 +279,10 @@ export function ProviderOnboarding({ onApproved }: { onApproved: () => void }) {
           </div>
           <Progress value={progressPct} className="h-2" />
           {submitted && !isReturned && (
-            <div className="flex items-start gap-2 rounded-md bg-blue-500/10 border border-blue-500/30 p-3 mt-3 text-sm">
-              <Clock className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+            <div className="flex items-start gap-2 rounded-md bg-brand-500/10 border border-brand-500/30 p-3 mt-3 text-sm">
+              <Clock className="h-4 w-4 text-brand-500 shrink-0 mt-0.5" />
               <div>
-                <strong className="text-blue-500">Submitted for review</strong>
+                <strong className="text-brand-500">Submitted for review</strong>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Submitted on {new Date(packet.onboardingSubmittedAt!).toLocaleString()}. You can still edit
                   any section; the approval will be based on your latest data.

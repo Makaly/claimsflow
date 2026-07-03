@@ -488,7 +488,7 @@ export default function MakerQueue() {
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-5">
         {[
-          { label: 'Assigned', value: stats.total, icon: FileText, color: 'text-blue-500' },
+          { label: 'Assigned', value: stats.total, icon: FileText, color: 'text-brand-500' },
           { label: 'Urgent', value: stats.urgent, icon: Clock, color: 'text-red-500' },
           { label: 'SLA Breached', value: stats.slaBreach, icon: AlertTriangle, color: 'text-amber-500' },
           { label: 'Low OCR Confidence', value: stats.lowConf, icon: ScanLine, color: 'text-orange-500' },
@@ -571,7 +571,7 @@ export default function MakerQueue() {
                   return (
                     <TableRow
                       key={claim.id}
-                      className={`hover:bg-muted/60 transition-colors ${lowConf ? 'bg-amber-50/30 dark:bg-amber-950/10' : ''} ${bulkSelected.has(claim.id) ? 'bg-blue-50/50' : ''}`}
+                      className={`hover:bg-muted/60 transition-colors ${lowConf ? 'bg-amber-50/30 dark:bg-amber-950/10' : ''} ${bulkSelected.has(claim.id) ? 'bg-brand-50/50' : ''}`}
                     >
                       <TableCell onClick={e => e.stopPropagation()}>
                         <Checkbox
@@ -1388,7 +1388,7 @@ export default function MakerQueue() {
                     {denialCcChips.map((chip, i) => (
                       <span
                         key={i}
-                        className="inline-flex items-center gap-1 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-400/30 px-2.5 py-0.5 text-xs font-medium"
+                        className="inline-flex items-center gap-1 rounded-full bg-brand-500/15 text-brand-700 dark:text-brand-300 border border-brand-400/30 px-2.5 py-0.5 text-xs font-medium"
                       >
                         {chip}
                         <button
@@ -1684,7 +1684,7 @@ export default function MakerQueue() {
                                     : isFraudEscalate ? 'bg-orange-500'
                                     : isApproval && isApproved ? 'bg-emerald-400'
                                     : isApproval && isRejected ? 'bg-red-400'
-                                    : e.kind === 'status_change' ? 'bg-blue-400'
+                                    : e.kind === 'status_change' ? 'bg-brand-400'
                                     : 'bg-slate-300 dark:bg-slate-600'
                                   const label = e.kind === 'status_change'
                                     ? `${(e.data?.fromStatus || '').replace(/_/g, ' ')} → ${(e.data?.toStatus || '').replace(/_/g, ' ')}`

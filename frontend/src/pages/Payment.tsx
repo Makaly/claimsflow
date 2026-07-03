@@ -105,7 +105,7 @@ export default function Payment() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2"><CreditCard className="h-6 w-6 text-blue-600" /> Payment Settlement</h1>
+          <h1 className="text-2xl font-bold flex items-center gap-2"><CreditCard className="h-6 w-6 text-brand-600" /> Payment Settlement</h1>
           <p className="text-gray-500 text-sm mt-1">Finance — generate payment advices and confirm disbursements</p>
         </div>
         <Button variant="outline" size="sm" onClick={load} disabled={loading}>
@@ -119,7 +119,7 @@ export default function Payment() {
           <div><div className="text-xl font-bold">{fmtKES(totalPending)}</div><div className="text-xs text-gray-500">Approved, awaiting advice</div></div>
         </CardContent></Card>
         <Card><CardContent className="p-4 flex items-center gap-3">
-          <FileText className="h-8 w-8 text-blue-500" />
+          <FileText className="h-8 w-8 text-brand-500" />
           <div><div className="text-xl font-bold">{fmtKES(totalAdvicePending)}</div><div className="text-xs text-gray-500">Advices pending payment</div></div>
         </CardContent></Card>
         <Card><CardContent className="p-4 flex items-center gap-3">
@@ -136,8 +136,8 @@ export default function Payment() {
 
         <TabsContent value="pending" className="space-y-4 mt-4">
           {selectedClaims.size > 0 && (
-            <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <span className="text-sm font-medium text-blue-900">{selectedClaims.size} claim(s) selected</span>
+            <div className="flex items-center gap-3 p-3 bg-brand-50 border border-brand-200 rounded-lg">
+              <span className="text-sm font-medium text-brand-900">{selectedClaims.size} claim(s) selected</span>
               <Button size="sm" onClick={generateAdvice} disabled={generating}>
                 {generating ? 'Generating…' : 'Generate Payment Advice'}
               </Button>

@@ -114,7 +114,7 @@ const DEMO_PROVIDERS: Provider[] = [
 ]
 
 const typeColors: Record<string, string> = {
-  hospital: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
+  hospital: 'bg-brand-100 text-brand-700 dark:bg-brand-900 dark:text-brand-300',
   clinic: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
   pharmacy: 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300',
   lab: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300',
@@ -728,7 +728,7 @@ export default function Providers() {
                   onClick={() => setBulkConfirm('suspend')}>
                   <ShieldOff className="mr-1.5 h-3.5 w-3.5" /> Suspend
                 </Button>
-                <Button size="sm" variant="outline" className="text-blue-600 border-blue-600/40 hover:bg-blue-50 dark:hover:bg-blue-950"
+                <Button size="sm" variant="outline" className="text-brand-600 border-brand-600/40 hover:bg-brand-50 dark:hover:bg-brand-950"
                   onClick={() => setBulkConfirm('reactivate')}>
                   <CheckCircle className="mr-1.5 h-3.5 w-3.5" /> Reactivate
                 </Button>
@@ -882,7 +882,7 @@ export default function Providers() {
               {/* Header */}
               <div className="flex items-start gap-4 px-6 py-4 border-b bg-gradient-to-r from-muted/60 to-background shrink-0">
                 <div className={`h-12 w-12 rounded-xl flex items-center justify-center shrink-0 text-xl font-black ${
-                  selectedProvider.type === 'hospital' ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20' :
+                  selectedProvider.type === 'hospital' ? 'bg-brand-500/10 text-brand-500 border border-brand-500/20' :
                   selectedProvider.type === 'clinic' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' :
                   'bg-violet-500/10 text-violet-500 border border-violet-500/20'
                 }`}>
@@ -900,7 +900,7 @@ export default function Providers() {
                     }`}>{formatStatusLabel(selectedProvider.status)}</span>
                     <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-muted border text-muted-foreground capitalize">{selectedProvider.type}</span>
                     {selectedProvider.canSubmitClaims && (
-                      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-blue-500/10 text-blue-500 border border-blue-500/20">
+                      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-brand-500/10 text-brand-500 border border-brand-500/20">
                         <CheckCircle className="h-2.5 w-2.5" />Claims enabled
                       </span>
                     )}
@@ -965,8 +965,8 @@ export default function Providers() {
                   <div className="p-6 space-y-6 text-sm">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="md:col-span-1 rounded-xl border bg-card overflow-hidden">
-                        <div className="px-4 py-2.5 border-b bg-blue-500/5 flex items-center gap-2">
-                          <Building2 className="h-3.5 w-3.5 text-blue-500 opacity-70" />
+                        <div className="px-4 py-2.5 border-b bg-brand-500/5 flex items-center gap-2">
+                          <Building2 className="h-3.5 w-3.5 text-brand-500 opacity-70" />
                           <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Facility</span>
                         </div>
                         <div className="px-4 py-3 space-y-3">
@@ -1296,8 +1296,8 @@ export default function Providers() {
                   <div className="p-6 space-y-6 text-sm">
                     {/* Facility */}
                     <div className="rounded-xl border bg-card overflow-hidden">
-                      <div className="px-4 py-2.5 border-b bg-blue-500/5 flex items-center gap-2">
-                        <Building2 className="h-3.5 w-3.5 text-blue-500 opacity-70" />
+                      <div className="px-4 py-2.5 border-b bg-brand-500/5 flex items-center gap-2">
+                        <Building2 className="h-3.5 w-3.5 text-brand-500 opacity-70" />
                         <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Facility Info</span>
                       </div>
                       <div className="p-4 grid grid-cols-2 gap-4">
@@ -1971,7 +1971,7 @@ const ACTION_META: Record<string, { label: string; tone: string; Icon: any }> = 
   resubmit_onboarding_document:    { label: 'Document re-submitted',               tone: 'bg-purple-500/15 text-purple-600 border-purple-500/30',      Icon: Upload },
   provider_user_approved:          { label: 'Provider user approved',              tone: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30',   Icon: CheckCircle },
   provider_user_rejected:          { label: 'Provider user rejected',              tone: 'bg-red-500/15 text-red-600 border-red-500/30',               Icon: XCircle },
-  view_page:                       { label: 'Document page viewed',                tone: 'bg-blue-500/15 text-blue-600 border-blue-500/30',            Icon: Eye },
+  view_page:                       { label: 'Document page viewed',                tone: 'bg-brand-500/15 text-brand-600 border-brand-500/30',            Icon: Eye },
 }
 
 function ProviderAuditTrail({ providerId }: { providerId: string }) {
@@ -2051,7 +2051,7 @@ function ProviderAuditTrail({ providerId }: { providerId: string }) {
             className="flex w-full items-center justify-between px-3 py-2.5 border-b hover:bg-muted/40 transition-colors"
           >
             <div className="flex items-center gap-2">
-              <Eye className="h-3.5 w-3.5 text-blue-500" />
+              <Eye className="h-3.5 w-3.5 text-brand-500" />
               <span className="text-sm font-semibold">Documents viewed</span>
               <Badge variant="outline" className="text-[10px]">{docSummary.size} doc{docSummary.size !== 1 ? 's' : ''}</Badge>
             </div>
@@ -2070,7 +2070,7 @@ function ProviderAuditTrail({ providerId }: { providerId: string }) {
                       <FileText className="h-3 w-3 text-muted-foreground shrink-0" />
                       <span className="font-medium truncate flex-1">{d.fileName}</span>
                       {d.category && <Badge variant="outline" className="text-[9px] uppercase">{d.category.replace(/_/g, ' ')}</Badge>}
-                      <Badge className="bg-blue-500/15 text-blue-600 border-blue-500/30 text-[9px]">
+                      <Badge className="bg-brand-500/15 text-brand-600 border-brand-500/30 text-[9px]">
                         {pages.size} page{pages.size !== 1 ? 's' : ''} read
                       </Badge>
                     </div>

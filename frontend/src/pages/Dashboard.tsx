@@ -292,13 +292,13 @@ function CICDashboard() {
   // ── Stat cards — prefer server stats for accurate totals ─────────────────
   const sc = serverStats
   const statCards = [
-    { title: 'Total Claims',   value: (sc?.total ?? totalClaims).toLocaleString(),      icon: FileText,     color: 'text-blue-600',    bg: 'bg-blue-50 dark:bg-blue-950/30'    },
+    { title: 'Total Claims',   value: (sc?.total ?? totalClaims).toLocaleString(),      icon: FileText,     color: 'text-brand-600',    bg: 'bg-brand-50 dark:bg-brand-950/30'    },
     { title: 'Approved',       value: (sc?.approved ?? approvedClaims).toLocaleString(), icon: CheckCircle, color: 'text-emerald-600',  bg: 'bg-emerald-50 dark:bg-emerald-950/30' },
     { title: 'Pending',        value: (sc?.pending ?? pendingClaims).toLocaleString(),   icon: Clock,       color: 'text-amber-600',    bg: 'bg-amber-50 dark:bg-amber-950/30'    },
     { title: 'Rejected',       value: (sc?.rejected ?? rejectedClaims).toLocaleString(), icon: XCircle,     color: 'text-red-600',      bg: 'bg-red-50 dark:bg-red-950/30'        },
     { title: 'Total Amount',   value: formatCurrency(sc?.totalAmount ?? totalAmount),    icon: DollarSign,  color: 'text-primary',      bg: 'bg-primary/5'                        },
     { title: 'Approval Rate',  value: `${approvalRate}%`,                                    icon: Percent,     color: 'text-teal-600',     bg: 'bg-teal-50 dark:bg-teal-950/30'      },
-    { title: 'Avg Claim',      value: formatCurrency(avgAmount),                             icon: Activity,    color: 'text-indigo-600',   bg: 'bg-indigo-50 dark:bg-indigo-950/30'  },
+    { title: 'Avg Claim',      value: formatCurrency(avgAmount),                             icon: Activity,    color: 'text-brand-800',   bg: 'bg-brand-50 dark:bg-brand-950/30'  },
     { title: 'Providers',      value: String(uniqueProviders),                               icon: Building2,   color: 'text-violet-600',   bg: 'bg-violet-50 dark:bg-violet-950/30'  },
     { title: 'Total Batches',  value: String(serverBatches),                                 icon: Package,     color: 'text-sky-600',      bg: 'bg-sky-50 dark:bg-sky-950/30'        },
     { title: 'AI Extracted',   value: serverAiExtracted.toLocaleString(),                    icon: Sparkles,    color: 'text-fuchsia-600',  bg: 'bg-fuchsia-50 dark:bg-fuchsia-950/30'},
@@ -368,7 +368,7 @@ function CICDashboard() {
       <div className="grid gap-4 lg:grid-cols-7">
         <Card className="lg:col-span-4">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><TrendingUp className="h-4 w-4 text-blue-500" /> Claims Trend</CardTitle>
+            <CardTitle className="flex items-center gap-2"><TrendingUp className="h-4 w-4 text-brand-500" /> Claims Trend</CardTitle>
             <CardDescription>Submission and approval volume over time</CardDescription>
           </CardHeader>
           <CardContent>
@@ -660,13 +660,13 @@ function CICDashboard() {
         {/* Workflow pipeline */}
         <Card className="lg:col-span-3">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><TrendingUp className="h-4 w-4 text-blue-500" /> Workflow Pipeline</CardTitle>
+            <CardTitle className="flex items-center gap-2"><TrendingUp className="h-4 w-4 text-brand-500" /> Workflow Pipeline</CardTitle>
             <CardDescription>Claims at each processing stage</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               {[
-                { stage: 'Initial Review',   count: initialReview,        color: 'bg-blue-500'   },
+                { stage: 'Initial Review',   count: initialReview,        color: 'bg-brand-500'   },
                 { stage: 'Maker-Checker',    count: makerCheckerReview,   color: 'bg-violet-500' },
                 { stage: 'Claims Officer',   count: claimsOfficerReview,  color: 'bg-amber-500'  },
                 { stage: 'Fraud Review',     count: fraudReview,          color: 'bg-red-500'    },
@@ -762,7 +762,7 @@ function CICDashboard() {
       {/* ── Recent Claims ──────────────────────────────────────────────── */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><FileText className="h-4 w-4 text-blue-500" /> Recent Claims</CardTitle>
+          <CardTitle className="flex items-center gap-2"><FileText className="h-4 w-4 text-brand-500" /> Recent Claims</CardTitle>
           <CardDescription>Latest claims across all channels ({claims.length} total)</CardDescription>
         </CardHeader>
         <CardContent>

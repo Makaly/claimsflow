@@ -125,7 +125,7 @@ const DEMO_LOGS: ActivityLog[] = [
 ]
 
 const actionColors: Record<string, string> = {
-  login: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
+  login: 'bg-brand-100 text-brand-800 dark:bg-brand-900 dark:text-brand-300',
   logout: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300',
   approve_claim: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
   checker_approve: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300',
@@ -133,7 +133,7 @@ const actionColors: Record<string, string> = {
   assign_claim: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300',
   create_user: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-300',
   update_claim: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300',
-  submit_batch: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300',
+  submit_batch: 'bg-brand-100 text-brand-900 dark:bg-brand-950 dark:text-brand-300',
   batch_process: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-300',
   ocr_process: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300',
   return_to_provider: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300',

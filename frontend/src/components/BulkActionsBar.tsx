@@ -73,12 +73,12 @@ export default function BulkActionsBar({
 
   return (
     <>
-      <div className="flex items-center gap-3 px-4 py-2.5 bg-blue-950 border border-blue-800 rounded-lg text-white">
-        <CheckSquare className="h-4 w-4 text-blue-300 shrink-0" />
-        <span className="text-sm font-medium text-blue-100">{selectedIds.length} selected</span>
+      <div className="flex items-center gap-3 px-4 py-2.5 bg-brand-950 border border-brand-800 rounded-lg text-white">
+        <CheckSquare className="h-4 w-4 text-brand-300 shrink-0" />
+        <span className="text-sm font-medium text-brand-100">{selectedIds.length} selected</span>
         <div className="flex gap-2 ml-2">
           {showAssignToMe && (
-            <Button size="sm" variant="secondary" className="h-7 text-xs bg-blue-800 hover:bg-blue-700 text-white border-blue-700" onClick={() => bulkAction('assign')} disabled={loading}>
+            <Button size="sm" variant="secondary" className="h-7 text-xs bg-brand-800 hover:bg-brand-700 text-white border-brand-700" onClick={() => bulkAction('assign')} disabled={loading}>
               <UserCheck className="h-3 w-3 mr-1" /> Assign to Me
             </Button>
           )}
@@ -93,7 +93,7 @@ export default function BulkActionsBar({
             </Button>
           )}
         </div>
-        <Button size="sm" variant="ghost" className="h-7 w-7 p-0 ml-auto text-blue-300 hover:text-white hover:bg-blue-800" onClick={onClear}>
+        <Button size="sm" variant="ghost" className="h-7 w-7 p-0 ml-auto text-brand-300 hover:text-white hover:bg-brand-800" onClick={onClear}>
           <X className="h-4 w-4" />
         </Button>
       </div>

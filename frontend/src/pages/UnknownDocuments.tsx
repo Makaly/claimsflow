@@ -53,7 +53,7 @@ const DOCUMENT_TYPES = [
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   pending:          { label: 'Pending Review', color: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' },
-  reviewed:         { label: 'Reviewed',       color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300'  },
+  reviewed:         { label: 'Reviewed',       color: 'bg-brand-100 text-brand-800 dark:bg-brand-900/40 dark:text-brand-300'  },
   template_created: { label: 'Template Added', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' },
 }
 
@@ -239,7 +239,7 @@ export default function UnknownDocuments() {
                       onClick={() => navigate(`/unknown-documents/${doc.id}`)}>
                       <Eye className="h-3.5 w-3.5" /> View File
                     </Button>
-                    <Button size="sm" variant="default" className="h-7 text-xs gap-1.5 bg-indigo-600 hover:bg-indigo-700"
+                    <Button size="sm" variant="default" className="h-7 text-xs gap-1.5 bg-brand-800 hover:bg-brand-900"
                       disabled={openingEditorId === doc.id}
                       onClick={() => openInZoneEditor(doc.id)}>
                       {openingEditorId === doc.id
