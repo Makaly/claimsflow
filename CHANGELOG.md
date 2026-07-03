@@ -52,6 +52,17 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
     `assessCachedOrQueue` instead of `assessFromClaimData`, eliminating the
     timeout risk on large claims.
 
+### Removed
+
+- **Green-lane auto-approval**
+  (`backend/prisma/migrations/20260622150000_drop_green_lane/`) — claims are
+  never auto-approved; every approval now passes through the human
+  maker → checker → officer chain. The `GreenLaneRule` model and its
+  service/controller were removed from code previously; this release adds the
+  matching database migration, which drops the `green_lane_rules` table and
+  deletes the `green_lane_enabled` switch from `system_config`. The migration is
+  hand-written and idempotent — apply via `psql`, then mark it resolved.
+
 ### Fixed
 
 - **Sequential OCR post-processing pipeline**
