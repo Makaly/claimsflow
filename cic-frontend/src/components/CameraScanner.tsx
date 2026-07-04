@@ -591,7 +591,7 @@ export default function CameraScanner({ onCapture, onClose, meterEnabled = true 
               </Button>
               <Button
                 size="sm"
-                className="bg-brand-600 hover:bg-brand-700 text-white gap-2 h-9 px-4"
+                className="bg-cta-500 hover:bg-cta-400 text-brand-950 gap-2 h-9 px-4"
                 onClick={handleConfirm}
                 disabled={processing}
               >

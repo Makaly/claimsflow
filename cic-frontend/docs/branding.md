@@ -52,3 +52,12 @@ Logo placements: `src/components/Sidebar.tsx` (app shell), all auth pages
   `text-slate-900`), never white.
 - Dark-mode primary is lightened (see tokens above) so focus rings and
   primary buttons stay visible against `--background`.
+
+## Buttons
+
+Primary action buttons use the **gold** ramp, not maroon: the shared
+`Button` default variant (`src/components/ui/button.tsx`) is
+`bg-cta-500 text-brand-950 hover:bg-cta-400`, and the auth submit CTAs
+use a `from-cta-500 to-cta-600` gradient with `text-brand-950`. Maroon
+remains the identity colour for links, focus rings, nav states and
+decorative accents.

@@ -517,7 +517,7 @@ export default function Register() {
                 <Button
                   type="submit"
                   disabled={loading}
-                  className="group h-11 w-full bg-gradient-to-r from-brand-600 to-brand-800 text-white shadow-lg shadow-brand-600/20 transition-all hover:from-brand-500 hover:to-brand-700 hover:shadow-brand-500/40"
+                  className="group h-11 w-full bg-gradient-to-r from-cta-500 to-cta-600 text-brand-950 shadow-lg shadow-cta-600/30 transition-all hover:from-cta-400 hover:to-cta-500 hover:shadow-cta-500/40"
                 >
                   {loading ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />

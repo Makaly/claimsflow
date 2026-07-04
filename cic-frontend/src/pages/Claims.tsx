@@ -2507,7 +2507,7 @@ export default function Claims() {
                   <Upload className="mr-2 h-3 w-3" /> Attach Document
                 </Button>
                 {attachedFiles.length > 0 && !aiExtracted && (
-                  <Button size="sm" className="bg-brand-600 hover:bg-brand-700" onClick={handleAiExtract} disabled={aiExtracting}>
+                  <Button size="sm" className="bg-cta-500 hover:bg-cta-400 text-brand-950" onClick={handleAiExtract} disabled={aiExtracting}>
                     {aiExtracting ? <><Loader2 className="mr-2 h-3 w-3 animate-spin" /> Extracting...</> : <><Sparkles className="mr-2 h-3 w-3" /> Extract with AI</>}
                   </Button>
                 )}

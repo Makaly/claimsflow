@@ -252,7 +252,7 @@ export default function UserRegister() {
                 {form.formState.errors.acceptTerms && <p className="text-xs text-red-400">{form.formState.errors.acceptTerms.message as any}</p>}
 
                 <Button type="submit" disabled={busy || !selectedProviderId}
-                  className="h-11 w-full bg-gradient-to-r from-brand-600 to-brand-800 text-white hover:from-brand-500 hover:to-brand-700">
+                  className="h-11 w-full bg-gradient-to-r from-cta-500 to-cta-600 text-brand-950 hover:from-cta-400 hover:to-cta-500">
                   {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Create account & send code
                   <ArrowRight className="ml-2 h-4 w-4" />

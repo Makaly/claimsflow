@@ -695,7 +695,7 @@ export default function Documents() {
               <div className="px-4 py-2 border-b bg-background/80 shrink-0 flex items-center justify-between">
                 <p className="text-[11px] font-medium text-muted-foreground">Pages — bordered by section colour</p>
                 <Button size="sm" variant={analysisDone ? 'outline' : 'default'}
-                  className={`h-7 text-xs gap-1 ${!analysisDone ? 'bg-brand-600 hover:bg-brand-700' : ''}`}
+                  className={`h-7 text-xs gap-1 ${!analysisDone ? 'bg-cta-500 hover:bg-cta-400 text-brand-950' : ''}`}
                   onClick={analyzePages} disabled={analyzingPages}>
                   {analyzingPages
                     ? <><RefreshCw className="h-3 w-3 animate-spin" />Analyzing…</>
@@ -841,7 +841,7 @@ export default function Documents() {
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" className="h-8"
                     onClick={() => { setSplitDoc(null); setAnalysisDone(false) }}>Cancel</Button>
-                  <Button size="sm" className="h-8 gap-1.5 bg-brand-600 hover:bg-brand-700"
+                  <Button size="sm" className="h-8 gap-1.5 bg-cta-500 hover:bg-cta-400 text-brand-950"
                     onClick={executeSplit} disabled={splitRanges.length === 0}>
                     <Scissors className="h-3.5 w-3.5" />
                     Split {splitRanges.length} Document{splitRanges.length !== 1 ? 's' : ''}

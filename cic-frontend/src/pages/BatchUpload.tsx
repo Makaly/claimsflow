@@ -3741,7 +3741,7 @@ export default function BatchUpload() {
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Rescan
               </Button>
-              <Button onClick={handleScanApprove} className="bg-brand-600 hover:bg-brand-700 text-white">
+              <Button onClick={handleScanApprove} className="bg-cta-500 hover:bg-cta-400 text-brand-950">
                 <CheckCircle className="h-4 w-4 mr-2" />
                 Approve &amp; Process
               </Button>
@@ -4315,7 +4315,7 @@ export default function BatchUpload() {
                                   href="https://github.com/Makaly/claimsflow/releases/download/scan-agent-latest/ClaimsFlow-Scan-Agent-Setup.exe"
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="inline-flex items-center gap-2 rounded-md bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold px-3 py-1.5 transition-colors"
+                                  className="inline-flex items-center gap-2 rounded-md bg-cta-500 hover:bg-cta-400 text-brand-950 text-xs font-semibold px-3 py-1.5 transition-colors"
                                 >
                                   <Download className="h-3.5 w-3.5" />
                                   Download ClaimsFlow-Scan-Agent-Setup.exe

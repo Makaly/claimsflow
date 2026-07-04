@@ -103,7 +103,7 @@ export default function ResetPassword() {
                   {form.formState.errors.confirm && <p className="text-xs text-red-400">{form.formState.errors.confirm.message}</p>}
                 </div>
 
-                <Button type="submit" disabled={loading || !token} className="w-full h-11 bg-gradient-to-r from-brand-600 to-brand-800 text-white">
+                <Button type="submit" disabled={loading || !token} className="w-full h-11 bg-gradient-to-r from-cta-500 to-cta-600 text-brand-950">
                   {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                   Reset Password
                 </Button>
