@@ -59,11 +59,26 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: 'http://localhost:4000',
+        target: 'http://localhost:4001',
         changeOrigin: true,
       },
       '/socket.io': {
-        target: 'http://localhost:4000',
+        target: 'http://localhost:4001',
+        changeOrigin: true,
+        ws: true,
+      },
+    },
+  },
+  // `vite preview` does not inherit server.proxy — mirror it so the built
+  // app can reach the backend when previewed locally.
+  preview: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:4001',
+        changeOrigin: true,
+      },
+      '/socket.io': {
+        target: 'http://localhost:4001',
         changeOrigin: true,
         ws: true,
       },
