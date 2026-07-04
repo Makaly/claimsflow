@@ -150,7 +150,7 @@ Document processing is performed entirely **client-side** to avoid uploading raw
 | Concern | Solution |
 |---|---|
 | Dev server | Vite 5 on port 3000 with HMR |
-| API proxy | `/api/*` → `http://localhost:4000` (no CORS config needed in dev) |
+| API proxy | `/api/*` → `http://localhost:4001` (no CORS config needed in dev; mirrored under `preview` for `npm run preview`) |
 | Path alias | `@/` → `src/` (TypeScript + Vite both configured) |
 | OCR worker | `tesseract.js` excluded from Vite dep optimisation (runs in its own worker) |
 | PDF worker | `pdfjs-dist` worker served as a static file from `/public/pdf.worker.min.js` |

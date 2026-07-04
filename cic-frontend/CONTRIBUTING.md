@@ -34,7 +34,7 @@ cp .env.example .env
 npm run dev
 ```
 
-The app runs at **http://localhost:3000**. The Vite dev server proxies `/api/*` requests to `http://localhost:4000` — start the backend before testing authenticated flows.
+The app runs at **http://localhost:3000**. The Vite dev server proxies `/api/*` requests to `http://localhost:4001` — start the backend before testing authenticated flows.
 
 ---
 

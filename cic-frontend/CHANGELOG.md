@@ -10,6 +10,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 
 ### Changed
 
+- **Dev/preview API proxy retargeted to port 4001** — the Vite `server.proxy`
+  for `/api/*` and `/socket.io` now points at `http://localhost:4001` to match
+  the backend's port, and the same proxy is mirrored under `preview` (Vite
+  does not inherit `server.proxy` there) so `vite preview` builds can reach
+  the backend locally. Getting-started docs updated to match.
+
 - **CIC Group corporate rebrand** — the whole UI now carries the CIC Insurance
   Group identity. Design tokens (`--primary`, `--ring`, charts) and the
   Tailwind `brand`/`cta` ramps switched from the blue/indigo palette to the

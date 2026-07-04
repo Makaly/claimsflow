@@ -133,7 +133,7 @@ Key capabilities include client-side OCR for document extraction, a rich PDF vie
                         ▼
               ┌──────────────────┐
               │  Backend REST API │
-              │  (localhost:4000) │
+              │  (localhost:4001) │
               └──────────────────┘
 ```
 
@@ -172,7 +172,7 @@ Key capabilities include client-side OCR for document extraction, a rich PDF vie
 |---|---|
 | Node.js | 20.x |
 | npm | 9.x |
-| Backend API | Running on port 4000 |
+| Backend API | Running on port 4001 |
 
 ### Installation
 
@@ -297,12 +297,12 @@ Copy `.env.example` to `.env` and set the values:
 
 ```env
 # URL of the backend REST API
-VITE_API_BASE_URL=http://localhost:4000
+VITE_API_BASE_URL=http://localhost:4001
 ```
 
 > All client-side variables **must** be prefixed with `VITE_` to be included in the browser bundle.
 
-During development, Vite proxies `/api/*` to `http://localhost:4000` (see `vite.config.ts`), so no CORS configuration is needed locally.
+During development, Vite proxies `/api/*` to `http://localhost:4001` (see `vite.config.ts`), so no CORS configuration is needed locally. The same proxy is mirrored under `preview` so `npm run preview` can also reach the backend.
 
 ---
 
