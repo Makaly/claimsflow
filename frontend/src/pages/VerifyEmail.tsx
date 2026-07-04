@@ -77,7 +77,9 @@ export default function VerifyEmail() {
       </div>
       <div className="relative mx-auto flex min-h-screen max-w-md flex-col justify-center p-6">
         <div className="mb-6 flex items-center justify-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white p-1 shadow-lg shadow-brand-900/20 ring-1 ring-brand-100"><img src="/cic-logo.png" alt="CIC Group" className="h-full w-full object-contain" /></div>
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-cyan-600 shadow-lg shadow-emerald-500/30">
+            <ShieldCheck className="h-5 w-5 text-white" />
+          </div>
           <span className="text-lg font-semibold">ClaimsFlow</span>
         </div>
 

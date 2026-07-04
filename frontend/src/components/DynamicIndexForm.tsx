@@ -159,7 +159,7 @@ export function DynamicIndexForm({
 function viaBadge(via?: string) {
   if (!via || via === 'manual') return null
   const map: Record<string, { label: string; cls: string }> = {
-    lookup:     { label: 'looked up',    cls: 'bg-brand-100 text-brand-700 dark:bg-brand-950/50 dark:text-brand-400' },
+    lookup:     { label: 'looked up',    cls: 'bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400' },
     history:    { label: 'from history', cls: 'bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-400' },
     extraction: { label: 'extracted',    cls: 'bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-400' },
     system:     { label: 'system',       cls: 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400' },

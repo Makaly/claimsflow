@@ -185,7 +185,7 @@ export default function ProviderScorecard() {
         <Card>
           <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
             <CardTitle className="text-sm font-medium text-muted-foreground">Avg Volume Score</CardTitle>
-            <Activity className="h-4 w-4 text-brand-500" />
+            <Activity className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">

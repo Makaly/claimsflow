@@ -32,7 +32,7 @@ interface ApprovedProvider {
 }
 
 const typeStyle: Record<string, string> = {
-  hospital: 'bg-brand-500/15 text-brand-300',
+  hospital: 'bg-blue-500/15 text-blue-300',
   clinic:   'bg-emerald-500/15 text-emerald-300',
   pharmacy: 'bg-purple-500/15 text-purple-300',
   lab:      'bg-orange-500/15 text-orange-300',
@@ -91,21 +91,23 @@ export default function UserRegister() {
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-40 -left-40 h-[500px] w-[500px] rounded-full bg-brand-600/20 blur-3xl" />
+        <div className="absolute -top-40 -left-40 h-[500px] w-[500px] rounded-full bg-blue-600/20 blur-3xl" />
         <div className="absolute -bottom-40 -right-20 h-[500px] w-[500px] rounded-full bg-cyan-600/20 blur-3xl" />
       </div>
 
       <div className="relative mx-auto flex min-h-screen max-w-5xl flex-col p-6 sm:p-10">
         <header className="mb-8 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white p-1 shadow-lg shadow-brand-900/20 ring-1 ring-brand-100"><img src="/cic-logo.png" alt="CIC Group" className="h-full w-full object-contain" /></div>
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 shadow-lg shadow-blue-500/30">
+              <ShieldCheck className="h-6 w-6 text-white" />
+            </div>
             <div>
               <p className="text-sm font-semibold tracking-wide">ClaimsFlow</p>
               <p className="text-xs text-slate-400">Join an approved provider</p>
             </div>
           </Link>
           <Link to="/login" className="text-sm text-slate-400 hover:text-slate-200">
-            Already registered? <span className="font-medium text-brand-400">Sign in</span>
+            Already registered? <span className="font-medium text-blue-400">Sign in</span>
           </Link>
         </header>
 
@@ -124,7 +126,7 @@ export default function UserRegister() {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search by name, city or region…"
-                  className="h-10 border-white/10 bg-white/5 pl-9 text-slate-100 placeholder:text-slate-500 focus-visible:ring-brand-500/60"
+                  className="h-10 border-white/10 bg-white/5 pl-9 text-slate-100 placeholder:text-slate-500 focus-visible:ring-blue-500/60"
                 />
               </div>
 
@@ -191,7 +193,7 @@ export default function UserRegister() {
                 <div className="space-y-1.5">
                   <Label className="text-slate-200">Full name</Label>
                   <Input {...form.register('name')}
-                    className="h-10 border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 focus-visible:ring-brand-500/60" placeholder="Your name" />
+                    className="h-10 border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 focus-visible:ring-blue-500/60" placeholder="Your name" />
                   {form.formState.errors.name && <p className="text-xs text-red-400">{form.formState.errors.name.message}</p>}
                 </div>
 
@@ -200,7 +202,7 @@ export default function UserRegister() {
                   <div className="relative">
                     <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                     <Input {...form.register('email')} type="email"
-                      className="h-10 border-white/10 bg-white/5 pl-9 text-slate-100 placeholder:text-slate-500 focus-visible:ring-brand-500/60"
+                      className="h-10 border-white/10 bg-white/5 pl-9 text-slate-100 placeholder:text-slate-500 focus-visible:ring-blue-500/60"
                       placeholder="you@example.com" />
                   </div>
                   {form.formState.errors.email && <p className="text-xs text-red-400">{form.formState.errors.email.message}</p>}
@@ -211,7 +213,7 @@ export default function UserRegister() {
                   <div className="relative">
                     <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                     <Input {...form.register('password')} type={showPwd ? 'text' : 'password'}
-                      className="h-10 border-white/10 bg-white/5 pl-9 pr-10 text-slate-100 placeholder:text-slate-500 focus-visible:ring-brand-500/60"
+                      className="h-10 border-white/10 bg-white/5 pl-9 pr-10 text-slate-100 placeholder:text-slate-500 focus-visible:ring-blue-500/60"
                       placeholder="At least 8 characters" />
                     <button type="button" onClick={() => setShowPwd((s) => !s)}
                       className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:bg-white/5 hover:text-slate-200">
@@ -252,7 +254,7 @@ export default function UserRegister() {
                 {form.formState.errors.acceptTerms && <p className="text-xs text-red-400">{form.formState.errors.acceptTerms.message as any}</p>}
 
                 <Button type="submit" disabled={busy || !selectedProviderId}
-                  className="h-11 w-full bg-gradient-to-r from-brand-600 to-brand-800 text-white hover:from-brand-500 hover:to-brand-700">
+                  className="h-11 w-full bg-gradient-to-r from-blue-600 to-cyan-600 text-white hover:from-blue-500 hover:to-cyan-500">
                   {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Create account & send code
                   <ArrowRight className="ml-2 h-4 w-4" />

@@ -1,0 +1,26 @@
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import * as pdfjsLib from 'pdfjs-dist'
+import App from './App'
+import './index.css'
+import { installFetchProxy } from './lib/installFetchProxy'
+// C5: initialise i18n before any component renders
+import './lib/i18n'
+
+// Wrap window.fetch before any component mounts. Rewrites the older raw
+// fetch('/api/...') call sites that still live in some components onto the
+// absolute backend URL and adds credentials so the HttpOnly auth cookie
+// rides with them. Safe no-op when same-origin or when called twice.
+installFetchProxy()
+
+// Set once at app boot. Wrapped in try/catch because Firefox extensions proxy
+// pdfjs module objects via XrayWrapper and throw on property writes.
+// pdfjs-dist v4 ships an ES-module worker (.mjs); the self-hosted copy in
+// public/ was refreshed to match the upgraded package.
+try { pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs' } catch (_) {}
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+)

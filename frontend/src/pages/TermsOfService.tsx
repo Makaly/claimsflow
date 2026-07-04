@@ -8,7 +8,7 @@ export default function TermsOfService() {
       <header className="border-b border-white/10 bg-slate-950/60 backdrop-blur">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
-            <div className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-brand-600 to-brand-800 shadow-lg shadow-brand-600/20">
+            <div className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-blue-600 to-indigo-600 shadow-lg shadow-blue-600/20">
               <ShieldCheck className="h-5 w-5 text-white" />
             </div>
             <div>
@@ -27,7 +27,7 @@ export default function TermsOfService() {
 
       <main className="mx-auto max-w-3xl px-6 py-12">
         <div className="mb-8 flex items-center gap-3">
-          <FileText className="h-6 w-6 text-brand-400" />
+          <FileText className="h-6 w-6 text-blue-400" />
           <h1 className="text-3xl font-bold text-white">Terms of Service</h1>
         </div>
         <p className="mb-10 text-sm text-slate-400">
@@ -266,7 +266,7 @@ export default function TermsOfService() {
           <Block title="17. Contact">
             <p>
               Questions about these Terms may be sent to{' '}
-              <a className="text-brand-400 hover:text-brand-300" href="mailto:legal@cic.co.ke">
+              <a className="text-blue-400 hover:text-blue-300" href="mailto:legal@cic.co.ke">
                 legal@cic.co.ke
               </a>{' '}
               or to the Legal Department, CIC Insurance Group PLC,
@@ -276,11 +276,11 @@ export default function TermsOfService() {
         </section>
 
         <div className="mt-12 flex items-center justify-between border-t border-white/10 pt-6 text-sm text-slate-400">
-          <Link to="/privacy" className="text-brand-400 hover:text-brand-300">
+          <Link to="/privacy" className="text-blue-400 hover:text-blue-300">
             Read the Privacy Policy &rarr;
           </Link>
           <Link to="/register">
-            <Button className="bg-brand-600 hover:bg-brand-500">Back to registration</Button>
+            <Button className="bg-blue-600 hover:bg-blue-500">Back to registration</Button>
           </Link>
         </div>
       </main>

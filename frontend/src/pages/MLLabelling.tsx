@@ -107,7 +107,7 @@ export default function MLLabelling() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Database className="h-6 w-6 text-brand-600" /> ML Labelling
+            <Database className="h-6 w-6 text-blue-600" /> ML Labelling
           </h1>
           <p className="text-gray-500 text-sm mt-1">
             Training dataset accumulated from workflow decisions — powers fraud scoring and weight calibration
@@ -131,7 +131,7 @@ export default function MLLabelling() {
                 Excel (.xlsx) — recommended
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => downloadFile('/claim-labels/export/csv', `claim-labels-${date}.csv`)}>
-                <FileText className="h-4 w-4 mr-2 text-brand-600" />
+                <FileText className="h-4 w-4 mr-2 text-blue-600" />
                 CSV — universal
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => downloadFile('/claim-labels/export', `claim-labels-${date}.json`)}>
@@ -185,7 +185,7 @@ export default function MLLabelling() {
             onClick={() => setActiveTab(tab.key)}
             className={`flex items-center gap-1.5 pb-2 text-sm font-medium border-b-2 transition-colors ${
               activeTab === tab.key
-                ? 'border-brand-600 text-brand-600'
+                ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
@@ -216,7 +216,7 @@ export default function MLLabelling() {
                         <div className="w-44 text-xs text-gray-700 capitalize truncate">
                           {f.name.replace(/([A-Z])/g, ' $1')}
                         </div>
-                        <StatBar value={f.separation} max={1} colour="bg-brand-500" />
+                        <StatBar value={f.separation} max={1} colour="bg-blue-500" />
                         <div className="w-14 text-right text-xs font-mono text-gray-600">
                           {(f.separation * 100).toFixed(0)}%
                         </div>

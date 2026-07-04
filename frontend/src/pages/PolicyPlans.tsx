@@ -317,7 +317,7 @@ export default function PolicyPlans() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Shield className="h-6 w-6 text-brand-600" /> Policy Plans & Members
+            <Shield className="h-6 w-6 text-blue-600" /> Policy Plans & Members
           </h1>
           <p className="text-gray-500 text-sm mt-1">
             Manage benefit plans and member registrations powering the adjudication engine

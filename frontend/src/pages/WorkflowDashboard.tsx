@@ -188,7 +188,7 @@ export default function WorkflowDashboard() {
   }
 
   const stages = [
-    { key: 'initial_review', label: 'Initial Review', icon: Clock, count: stats?.initial_review ?? 0, color: 'text-brand-600', bg: 'bg-brand-50 dark:bg-brand-950/40' },
+    { key: 'initial_review', label: 'Initial Review', icon: Clock, count: stats?.initial_review ?? 0, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-950/40' },
     { key: 'maker_checker_review', label: 'Maker-Checker', icon: UserCheck, count: stats?.maker_checker_review ?? 0, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-950/40', action: () => navigate('/workflow/checker') },
     { key: 'claims_officer_review', label: 'Claims Officer', icon: CheckCircle, count: stats?.claims_officer_review ?? 0, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/40', action: () => navigate('/workflow/claims-officer') },
     { key: 'fraud_review', label: 'Fraud Review', icon: AlertTriangle, count: stats?.fraud_review ?? 0, color: 'text-red-600', bg: 'bg-red-50 dark:bg-red-950/40', action: () => navigate('/workflow/fraud') },
@@ -198,9 +198,9 @@ export default function WorkflowDashboard() {
   const stageData = stages.map(s => ({ stage: s.label.split(' ')[0], claims: s.count }))
 
   const activityDotColor: Record<string, string> = {
-    approve: 'bg-emerald-500', reject: 'bg-red-500', assign: 'bg-brand-500',
+    approve: 'bg-emerald-500', reject: 'bg-red-500', assign: 'bg-blue-500',
     return: 'bg-amber-500', submit: 'bg-violet-500',
-    edms: 'bg-sky-500', eoxegen: 'bg-brand-700',
+    edms: 'bg-sky-500', eoxegen: 'bg-indigo-500',
   }
 
   return (
@@ -242,7 +242,7 @@ export default function WorkflowDashboard() {
       <div className="grid gap-4 sm:grid-cols-3">
         <Card>
           <CardContent className="p-4 flex items-center gap-3">
-            <GitBranch className="h-8 w-8 text-brand-500 opacity-75" />
+            <GitBranch className="h-8 w-8 text-blue-500 opacity-75" />
             <div>
               <p className="text-xs text-muted-foreground">Total In Pipeline</p>
               <p className="text-2xl font-bold">{stats?.total ?? 0}</p>

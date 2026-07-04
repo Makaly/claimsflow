@@ -95,7 +95,7 @@ export default function JobSetups() {
               isActive: true,
               learningEnabled: true,
               autoPopulateFromHistory: true,
-              color: '#ac202d',
+              color: '#2563eb',
               fields: [blankField(0)],
             })
           }
@@ -286,7 +286,7 @@ function GeneralTab({ value, set }: { value: Partial<JobSetup>; set: (p: Partial
         </label>
         <label className="text-sm">
           <span className="text-muted-foreground">Accent color</span>
-          <input type="color" className="w-full border rounded px-2 py-0.5 h-9 mt-1" value={value.color ?? '#ac202d'} onChange={(e) => set({ color: e.target.value })} />
+          <input type="color" className="w-full border rounded px-2 py-0.5 h-9 mt-1" value={value.color ?? '#2563eb'} onChange={(e) => set({ color: e.target.value })} />
         </label>
       </div>
       <label className="text-sm block">

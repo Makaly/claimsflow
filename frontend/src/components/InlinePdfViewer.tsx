@@ -336,7 +336,7 @@ export function InlinePdfViewer({
               title={showAnnotations ? 'Hide annotations' : 'Show annotations'}
               className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium border transition-colors ${
                 showAnnotations
-                  ? 'bg-brand-500/10 border-brand-400/40 text-brand-600 dark:text-brand-400'
+                  ? 'bg-blue-500/10 border-blue-400/40 text-blue-600 dark:text-blue-400'
                   : 'bg-muted border-transparent text-muted-foreground hover:bg-muted/80'
               }`}>
               {showAnnotations ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
@@ -388,7 +388,7 @@ export function InlinePdfViewer({
                   const isActive = gIdx === activeAnnotIdx
                   const bx = a.bbox!.x * canvasDims.w; const by = a.bbox!.y * canvasDims.h
                   const bw = a.bbox!.w * canvasDims.w; const bh = a.bbox!.h * canvasDims.h
-                  const color = a.anomaly ? '#ef4444' : isActive ? '#6366f1' : '#c22d3c'
+                  const color = a.anomaly ? '#ef4444' : isActive ? '#6366f1' : '#3b82f6'
                   const fillOpacity = isActive ? 0.28 : a.anomaly ? 0.18 : 0.12
                   const labelW = a.label.length * 5.5 + 8
                   const labelY = by > 16 ? by - 14 : by + bh + 2
@@ -493,7 +493,7 @@ export function InlinePdfViewer({
                 title={`${a.label}: ${a.value}${a.confidence !== undefined ? ` (${(a.confidence * 100).toFixed(0)}%)` : ''} — click to locate in document`}
                 className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-medium border whitespace-nowrap transition-colors shrink-0 ${
                   i === activeAnnotIdx
-                    ? 'bg-brand-500 text-white border-brand-500'
+                    ? 'bg-blue-500 text-white border-blue-500'
                     : a.anomaly
                     ? 'bg-red-50 dark:bg-red-950/20 border-red-300 dark:border-red-700 text-red-700 dark:text-red-400 hover:bg-red-100'
                     : 'bg-muted/60 border-border text-muted-foreground hover:text-foreground hover:bg-muted'

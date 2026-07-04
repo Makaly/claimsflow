@@ -193,7 +193,7 @@ export default function AgingDashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Clock className="h-6 w-6 text-brand-600" /> Claims Aging
+            <Clock className="h-6 w-6 text-blue-600" /> Claims Aging
           </h1>
           <p className="text-gray-500 text-sm mt-1 flex items-center gap-2">
             Live view of active claims by time-in-queue
@@ -314,7 +314,7 @@ export default function AgingDashboard() {
                 <XAxis dataKey="stage" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip />
-                <Bar dataKey="total"    name="Total"    fill="#e2808b" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="total"    name="Total"    fill="#93c5fd" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="breached" name="Breached" fill="#f87171" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>

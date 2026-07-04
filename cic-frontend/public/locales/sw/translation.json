@@ -1,0 +1,66 @@
+{
+  "nav": {
+    "dashboard": "Dashibodi",
+    "claims": "Madai",
+    "providers": "Watoa Huduma",
+    "documents": "Hati",
+    "batchUpload": "Pakia Kwa Wingi",
+    "workflow": "Mtiririko wa Kazi",
+    "reports": "Ripoti",
+    "profile": "Wasifu",
+    "settings": "Mipangilio",
+    "logout": "Toka"
+  },
+  "login": {
+    "title": "Ingia kwenye ClaimsFlow",
+    "subtitle": "CIC Insurance Group PLC",
+    "email": "Anwani ya barua pepe",
+    "password": "Nywila",
+    "forgotPassword": "Umesahau nywila?",
+    "submit": "Ingia",
+    "noAccount": "Huna akaunti?",
+    "register": "Jisajili"
+  },
+  "dashboard": {
+    "title": "Dashibodi",
+    "welcome": "Karibu tena, {{name}}",
+    "totalClaims": "Jumla ya Madai",
+    "pendingClaims": "Madai Yanayosubiri",
+    "approvedClaims": "Madai Yaliyoidhinishwa",
+    "rejectedClaims": "Madai Yaliyokataliwa"
+  },
+  "batchUpload": {
+    "title": "Pakia Kwa Wingi",
+    "dragDrop": "Buruta na uweke faili hapa, au bonyeza kuchagua",
+    "upload": "Pakia",
+    "processing": "Inachakata...",
+    "success": "Upakiaji umefaulu",
+    "error": "Upakiaji umeshindwa"
+  },
+  "profile": {
+    "title": "Wasifu",
+    "personalInfo": "Taarifa za Kibinafsi",
+    "security": "Usalama",
+    "language": "Lugha",
+    "timezone": "Saa za Eneo",
+    "save": "Hifadhi mabadiliko",
+    "saved": "Mabadiliko yamehifadhiwa",
+    "selectLanguage": "Chagua lugha"
+  },
+  "common": {
+    "loading": "Inapakia...",
+    "error": "Hitilafu imetokea",
+    "retry": "Jaribu tena",
+    "cancel": "Ghairi",
+    "confirm": "Thibitisha",
+    "save": "Hifadhi",
+    "delete": "Futa",
+    "edit": "Hariri",
+    "view": "Angalia",
+    "close": "Funga",
+    "search": "Tafuta",
+    "filter": "Chuja",
+    "export": "Hamisha",
+    "refresh": "Onyesha upya"
+  }
+}

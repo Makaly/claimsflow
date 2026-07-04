@@ -69,7 +69,7 @@ interface PurgeRequest {
 
 const ocrColors: Record<string, string> = {
   completed: 'bg-emerald-100 text-emerald-800',
-  processing: 'bg-brand-100 text-brand-800',
+  processing: 'bg-blue-100 text-blue-800',
   manual_review: 'bg-amber-100 text-amber-800',
   failed: 'bg-red-100 text-red-800',
   pending: 'bg-gray-100 text-gray-600',
@@ -111,7 +111,7 @@ export default function Documents() {
   const [thumbsLoading, setThumbsLoading] = useState(false)
   const splitPdfDocRef = useRef<any>(null)
 
-  const SEGMENT_COLORS = ['#c22d3c','#10b981','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#f97316','#6366f1']
+  const SEGMENT_COLORS = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#f97316','#6366f1']
   const getPageSegmentIdx = (page: number) =>
     splitRanges.findIndex(r => r.start <= page && page <= r.end)
 
@@ -447,7 +447,7 @@ export default function Documents() {
                   ) : filtered.length === 0 ? (
                     <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground">No documents found</TableCell></TableRow>
                   ) : filtered.slice((page - 1) * pageSize, page * pageSize).map((doc) => (
-                    <TableRow key={doc.id} className={selectedIds.has(doc.id) ? 'bg-brand-50 dark:bg-brand-950/20' : ''}>
+                    <TableRow key={doc.id} className={selectedIds.has(doc.id) ? 'bg-blue-50 dark:bg-blue-950/20' : ''}>
                       <TableCell>
                         <Checkbox
                           checked={selectedIds.has(doc.id)}
@@ -460,7 +460,7 @@ export default function Documents() {
                           <div>
                             <p className="text-sm font-medium truncate max-w-[180px]">{doc.originalName}</p>
                             {doc.hasAnnotations && (
-                              <p className="text-[10px] text-brand-500">{doc.annotationsCount} annotation(s)</p>
+                              <p className="text-[10px] text-blue-500">{doc.annotationsCount} annotation(s)</p>
                             )}
                           </div>
                         </div>
@@ -673,8 +673,8 @@ export default function Documents() {
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-3.5 border-b bg-background shrink-0">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-100 dark:bg-brand-900/30">
-                <Scissors className="h-4 w-4 text-brand-600" />
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                <Scissors className="h-4 w-4 text-blue-600" />
               </div>
               <div>
                 <h2 className="text-sm font-semibold leading-tight">Split &amp; Categorize</h2>
@@ -695,7 +695,7 @@ export default function Documents() {
               <div className="px-4 py-2 border-b bg-background/80 shrink-0 flex items-center justify-between">
                 <p className="text-[11px] font-medium text-muted-foreground">Pages — bordered by section colour</p>
                 <Button size="sm" variant={analysisDone ? 'outline' : 'default'}
-                  className={`h-7 text-xs gap-1 ${!analysisDone ? 'bg-brand-600 hover:bg-brand-700' : ''}`}
+                  className={`h-7 text-xs gap-1 ${!analysisDone ? 'bg-blue-600 hover:bg-blue-700' : ''}`}
                   onClick={analyzePages} disabled={analyzingPages}>
                   {analyzingPages
                     ? <><RefreshCw className="h-3 w-3 animate-spin" />Analyzing…</>
@@ -753,7 +753,7 @@ export default function Documents() {
             <div className="flex-1 flex flex-col overflow-hidden">
               <div className="px-4 py-2 border-b bg-background/80 shrink-0 flex items-center justify-between">
                 <p className="text-[11px] font-medium text-muted-foreground">Sections · {splitRanges.length} defined</p>
-                <button className="text-[11px] text-brand-600 font-medium hover:text-brand-800 flex items-center gap-1"
+                <button className="text-[11px] text-blue-600 font-medium hover:text-blue-800 flex items-center gap-1"
                   onClick={() => setSplitRanges(prev => [...prev, {
                     start: Math.max(1, (prev[prev.length - 1]?.end ?? 0) + 1),
                     end: splitDoc?.pageCount || 1,
@@ -841,7 +841,7 @@ export default function Documents() {
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" className="h-8"
                     onClick={() => { setSplitDoc(null); setAnalysisDone(false) }}>Cancel</Button>
-                  <Button size="sm" className="h-8 gap-1.5 bg-brand-600 hover:bg-brand-700"
+                  <Button size="sm" className="h-8 gap-1.5 bg-blue-600 hover:bg-blue-700"
                     onClick={executeSplit} disabled={splitRanges.length === 0}>
                     <Scissors className="h-3.5 w-3.5" />
                     Split {splitRanges.length} Document{splitRanges.length !== 1 ? 's' : ''}

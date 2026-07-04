@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import api from '@/services/api'
 
 const CATEGORIES: Record<string, { label: string; color: string }> = {
-  sla:         { label: 'SLA Thresholds', color: 'bg-brand-50 border-brand-200' },
+  sla:         { label: 'SLA Thresholds', color: 'bg-blue-50 border-blue-200' },
   fraud:       { label: 'Fraud Detection', color: 'bg-red-50 border-red-200' },
   compliance:  { label: 'Compliance & Retention', color: 'bg-purple-50 border-purple-200' },
   submissions: { label: 'Submission Limits', color: 'bg-amber-50 border-amber-200' },
@@ -85,7 +85,7 @@ export default function SystemConfigPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2"><Settings className="h-6 w-6 text-brand-600" /> System Configuration</h1>
+          <h1 className="text-2xl font-bold flex items-center gap-2"><Settings className="h-6 w-6 text-blue-600" /> System Configuration</h1>
           <p className="text-gray-500 text-sm mt-1">Configure SLA thresholds, fraud detection sensitivity, and compliance settings</p>
         </div>
         <div className="flex gap-2">

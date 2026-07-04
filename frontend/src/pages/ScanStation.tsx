@@ -185,7 +185,7 @@ export default function ScanStation() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <ScanLine className="h-6 w-6 text-brand-600" /> Scan Station
+            <ScanLine className="h-6 w-6 text-blue-600" /> Scan Station
           </h1>
           <p className="text-gray-500 text-sm mt-1">Scan a claim barcode to instantly retrieve and review the claim</p>
         </div>
@@ -205,7 +205,7 @@ export default function ScanStation() {
               onCheckedChange={(on) => on ? startCamera() : stopCamera()}
             />
             {cameraMode
-              ? <Camera className="h-4 w-4 text-brand-600" />
+              ? <Camera className="h-4 w-4 text-blue-600" />
               : <Camera className="h-4 w-4 text-gray-400" />
             }
             <span className="text-gray-600">Camera {cameraMode ? 'on' : 'off'}</span>
@@ -232,10 +232,10 @@ export default function ScanStation() {
 
       {/* Camera scanner section — visible when cameraMode is on */}
       {cameraMode && (
-        <Card className="border-brand-200 bg-brand-50/30">
+        <Card className="border-blue-200 bg-blue-50/30">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm flex items-center gap-2">
-              <Camera className="h-4 w-4 text-brand-600" /> Camera Scanner
+              <Camera className="h-4 w-4 text-blue-600" /> Camera Scanner
               <Badge variant="secondary" className="text-[10px] ml-1">
                 <Smartphone className="h-3 w-3 mr-1" />phone / webcam
               </Badge>
@@ -261,8 +261,8 @@ export default function ScanStation() {
                   />
                   {/* Scan-line animation overlay */}
                   <div className="pointer-events-none absolute inset-0">
-                    <div className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-brand-400 to-transparent animate-[scan_2s_ease-in-out_infinite]" />
-                    <div className="absolute inset-0 border-2 border-brand-400/30 rounded-xl" />
+                    <div className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-blue-400 to-transparent animate-[scan_2s_ease-in-out_infinite]" />
+                    <div className="absolute inset-0 border-2 border-blue-400/30 rounded-xl" />
                   </div>
                   <div className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1 text-[11px] text-white">
                     {loading ? 'Looking up…' : 'Point camera at barcode'}
@@ -272,7 +272,7 @@ export default function ScanStation() {
                   variant="outline"
                   size="sm"
                   onClick={stopCamera}
-                  className="gap-1.5 border-brand-300 text-brand-700 hover:bg-brand-100"
+                  className="gap-1.5 border-blue-300 text-blue-700 hover:bg-blue-100"
                 >
                   <CameraOff className="h-3.5 w-3.5" />
                   Close Camera

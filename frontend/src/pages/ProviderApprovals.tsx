@@ -55,7 +55,7 @@ interface Readiness {
 }
 
 const typeColors: Record<string, string> = {
-  hospital: 'bg-brand-100 text-brand-800 dark:bg-brand-900/40 dark:text-brand-300',
+  hospital: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
   clinic:   'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
   pharmacy: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
   lab:      'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
@@ -119,7 +119,7 @@ export default function ProviderApprovals() {
 
       <div className="grid gap-4 sm:grid-cols-4">
         {[
-          { label: 'Pending approval',     value: stats.total, color: 'text-brand-500' },
+          { label: 'Pending approval',     value: stats.total, color: 'text-blue-500' },
           { label: 'Hospitals / clinics',  value: stats.hospitals, color: 'text-green-500' },
           { label: 'Labs / pharmacies',    value: stats.labs, color: 'text-purple-500' },
           { label: 'Avg wait (days)',      value: providers.length > 0
@@ -345,8 +345,8 @@ function ReviewWorkspace({
                         onClick={() => setActiveDocId(d.id)}
                         className={`flex items-start justify-between gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition ${
                           activeDocId === d.id
-                            ? 'border-brand-300 bg-brand-50 dark:border-brand-700 dark:bg-brand-950/30'
-                            : 'border-muted hover:border-brand-200 hover:bg-muted/40'
+                            ? 'border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-950/30'
+                            : 'border-muted hover:border-blue-200 hover:bg-muted/40'
                         }`}
                       >
                         <div className="min-w-0 flex-1">

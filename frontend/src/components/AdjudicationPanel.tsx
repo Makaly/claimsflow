@@ -86,7 +86,7 @@ export function AdjudicationPanel({
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm flex items-center gap-2">
-            <Calculator className="h-4 w-4 text-brand-600" />
+            <Calculator className="h-4 w-4 text-blue-600" />
             Adjudication
           </CardTitle>
         </CardHeader>
@@ -150,7 +150,7 @@ export function AdjudicationPanel({
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-sm flex items-center gap-2">
-          <Calculator className="h-4 w-4 text-brand-600" />
+          <Calculator className="h-4 w-4 text-blue-600" />
           Adjudication —{' '}
           <span className="font-normal text-gray-700">{result.planName}</span>
           {result.benefitCategory && (

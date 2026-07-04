@@ -1,0 +1,14 @@
+# CODEOWNERS
+# Each line defines a pattern and the GitHub user(s) or team(s) responsible for reviewing changes.
+# The last matching rule wins.
+
+# Default owner for everything
+* @Makaly
+
+# CI/CD configuration
+.github/ @Makaly
+
+# Core architecture files
+src/services/ @Makaly
+src/store/ @Makaly
+src/types/ @Makaly

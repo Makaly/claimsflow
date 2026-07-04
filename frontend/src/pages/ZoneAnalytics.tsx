@@ -94,7 +94,7 @@ export default function ZoneAnalytics() {
       {summary && (
         <div className="grid grid-cols-5 gap-4">
           {[
-            { label: 'Total Extractions', value: summary.totalHits.toLocaleString(), icon: Database, colour: 'text-brand-600', bg: 'bg-brand-50' },
+            { label: 'Total Extractions', value: summary.totalHits.toLocaleString(), icon: Database, colour: 'text-blue-600', bg: 'bg-blue-50' },
             { label: 'Avg Confidence',    value: `${summary.avgConfidence}%`,        icon: Target,   colour: 'text-emerald-600', bg: 'bg-emerald-50' },
             { label: 'Correction Rate',   value: `${summary.correctionRate}%`,       icon: AlertTriangle, colour: summary.correctionRate > 15 ? 'text-red-600' : 'text-amber-600', bg: summary.correctionRate > 15 ? 'bg-red-50' : 'bg-amber-50' },
             { label: 'Unverified Hits',   value: summary.unverifiedHits.toLocaleString(), icon: Eye, colour: 'text-violet-600', bg: 'bg-violet-50' },
@@ -326,7 +326,7 @@ export default function ZoneAnalytics() {
                     <TableCell>
                       <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
                         h.engine === 'anthropic' ? 'bg-orange-100 text-orange-700'
-                        : h.engine === 'gemini'  ? 'bg-brand-100 text-brand-700'
+                        : h.engine === 'gemini'  ? 'bg-blue-100 text-blue-700'
                         : 'bg-gray-100 text-gray-600'
                       }`}>
                         {h.engine ?? '—'}

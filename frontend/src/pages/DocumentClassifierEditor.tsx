@@ -146,8 +146,8 @@ const STANDARD_FIELDS: { value: string; label: string }[] = [
 // ── Zone colour palette ───────────────────────────────────────────────────────
 
 const ZONE_COLORS: Record<string, { bg: string; border: string }> = {
-  patient_name:       { bg: 'rgba(59,130,246,0.18)',  border: '#c22d3c' },
-  patient_id:         { bg: 'rgba(59,130,246,0.14)',  border: '#d14d5c' },
+  patient_name:       { bg: 'rgba(59,130,246,0.18)',  border: '#3b82f6' },
+  patient_id:         { bg: 'rgba(59,130,246,0.14)',  border: '#60a5fa' },
   invoice_number:     { bg: 'rgba(16,185,129,0.18)',  border: '#10b981' },
   invoice_date:       { bg: 'rgba(245,158,11,0.18)',  border: '#f59e0b' },
   invoice_amount:     { bg: 'rgba(239,68,68,0.18)',   border: '#ef4444' },
@@ -248,7 +248,7 @@ function ZoneSaveForm({ pending, existingFields, existingZones, initialParentZon
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0">
-          <div className={`h-2 w-2 rounded-full animate-pulse shrink-0 ${initialParentZoneId ? 'bg-violet-500' : 'bg-brand-700'}`} />
+          <div className={`h-2 w-2 rounded-full animate-pulse shrink-0 ${initialParentZoneId ? 'bg-violet-500' : 'bg-indigo-500'}`} />
           <div className="min-w-0">
             <p className="text-sm font-semibold leading-tight">
               {initialParentZoneId ? 'Define Sub-Zone' : 'Define New Zone'}
@@ -319,7 +319,7 @@ function ZoneSaveForm({ pending, existingFields, existingZones, initialParentZon
       ) : existingZones.length > 0 && (
         <div className="space-y-1.5">
           <Label className="text-xs font-medium flex items-center gap-1.5">
-            <GitBranch className="h-3 w-3 text-brand-700" />
+            <GitBranch className="h-3 w-3 text-indigo-500" />
             Parent Zone <span className="text-muted-foreground font-normal">(optional)</span>
           </Label>
           <Select value={parentZoneId ?? '__none__'} onValueChange={(v) => setParentZoneId(v === '__none__' ? null : v)}>
@@ -462,7 +462,7 @@ export default function DocumentClassifierEditor() {
   const [splitResult, setSplitResult]           = useState<Array<{ id: string; originalName: string; documentType: string | null }> | null>(null)
   const [openingEditorForDoc, setOpeningEditorForDoc] = useState<string | null>(null)
 
-  const SEGMENT_COLORS = ['#c22d3c','#10b981','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#f97316','#6366f1']
+  const SEGMENT_COLORS = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#f97316','#6366f1']
 
   const generateThumbnails = async (doc: pdfjsLib.PDFDocumentProxy, total: number) => {
     setThumbsLoading(true)
@@ -1042,7 +1042,7 @@ export default function DocumentClassifierEditor() {
                   className={`flex items-center gap-2 h-8 pl-2.5 pr-2 rounded-lg border text-xs font-semibold transition-all shadow-sm hover:shadow-md disabled:opacity-50 ${
                     isAnthropic
                       ? 'bg-orange-50 border-orange-200 text-orange-800 hover:bg-orange-100 dark:bg-orange-950/40 dark:border-orange-800 dark:text-orange-200'
-                      : 'bg-brand-50 border-brand-200 text-brand-800 hover:bg-brand-100 dark:bg-brand-950/40 dark:border-brand-800 dark:text-brand-200'
+                      : 'bg-blue-50 border-blue-200 text-blue-800 hover:bg-blue-100 dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-200'
                   }`}
                 >
                   {switchingProvider
@@ -1051,7 +1051,7 @@ export default function DocumentClassifierEditor() {
                   }
                   <span>{isAnthropic ? 'Claude' : 'Gemini'}</span>
                   <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
-                    isAnthropic ? 'bg-orange-100 dark:bg-orange-900/50' : 'bg-brand-100 dark:bg-brand-900/50'
+                    isAnthropic ? 'bg-orange-100 dark:bg-orange-900/50' : 'bg-blue-100 dark:bg-blue-900/50'
                   }`}>{shortModel}</span>
                   <ChevronDown className={`h-3.5 w-3.5 transition-transform ${modelMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
@@ -1088,7 +1088,7 @@ export default function DocumentClassifierEditor() {
                     {/* Gemini section */}
                     <div className={`pb-2 ${!aiProvider.gemini.available ? 'opacity-40 pointer-events-none' : ''}`}>
                       <div className="flex items-center gap-2 px-3 pt-1 pb-1">
-                        <span className="text-brand-500 text-sm">✦</span>
+                        <span className="text-blue-500 text-sm">✦</span>
                         <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Gemini</span>
                         {!aiProvider.gemini.available && <span className="text-[9px] text-destructive ml-auto">No API key</span>}
                       </div>
@@ -1097,12 +1097,12 @@ export default function DocumentClassifierEditor() {
                         return (
                           <button key={m.id}
                             className={`w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors ${
-                              isActive ? 'bg-brand-50 dark:bg-brand-950/40' : 'hover:bg-muted/60'
+                              isActive ? 'bg-blue-50 dark:bg-blue-950/40' : 'hover:bg-muted/60'
                             }`}
                             onClick={() => selectModel('gemini', m.id)}
                           >
-                            <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${isActive ? 'bg-brand-500' : 'bg-transparent border border-muted-foreground/30'}`} />
-                            <span className={`text-xs flex-1 ${isActive ? 'font-semibold text-brand-800 dark:text-brand-200' : 'text-foreground'}`}>{m.label}</span>
+                            <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${isActive ? 'bg-blue-500' : 'bg-transparent border border-muted-foreground/30'}`} />
+                            <span className={`text-xs flex-1 ${isActive ? 'font-semibold text-blue-800 dark:text-blue-200' : 'text-foreground'}`}>{m.label}</span>
                             {m.badge && <span className="text-[9px] text-muted-foreground">{m.badge}</span>}
                           </button>
                         )
@@ -1143,7 +1143,7 @@ export default function DocumentClassifierEditor() {
               <Button
                 size="sm"
                 variant={toolMode === 'draw' ? 'default' : 'ghost'}
-                className={`gap-1.5 h-6 text-xs px-2 ${toolMode === 'draw' ? 'bg-brand-800 hover:bg-brand-900' : ''}`}
+                className={`gap-1.5 h-6 text-xs px-2 ${toolMode === 'draw' ? 'bg-indigo-600 hover:bg-indigo-700' : ''}`}
                 onClick={() => { setToolMode('draw'); setPendingZone(null); setDrawRect(null); setIsDrawing(false) }}
                 title="Draw — drag to mark a zone"
               >
@@ -1152,7 +1152,7 @@ export default function DocumentClassifierEditor() {
             </div>
 
             {toolMode === 'draw' && !pendingZone && adjustingIdx === null && adjustingZoneId === null && (
-              <span className="text-xs text-brand-800 dark:text-brand-400 font-medium">
+              <span className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">
                 Drag to define a zone
               </span>
             )}
@@ -1560,7 +1560,7 @@ export default function DocumentClassifierEditor() {
                           style={{ backgroundColor: zoneColor(sugg.fieldName).bg, borderBottom: `1px solid ${zoneColor(sugg.fieldName).border}22` }}>
                           <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: zoneColor(sugg.fieldName).border }} />
                           <p className="text-xs font-bold flex-1 truncate">{sugg.fieldLabel}</p>
-                          <span className="text-[10px] bg-white/70 dark:bg-black/30 px-1.5 py-0.5 rounded font-semibold text-brand-900 dark:text-brand-300">
+                          <span className="text-[10px] bg-white/70 dark:bg-black/30 px-1.5 py-0.5 rounded font-semibold text-indigo-700 dark:text-indigo-300">
                             pg {sugg.pageNumber ?? 1}
                           </span>
                           <span className={`text-[10px] font-bold font-mono ${confColor}`}>{confPct}%</span>
@@ -1713,7 +1713,7 @@ export default function DocumentClassifierEditor() {
                           <Badge variant="secondary" className="text-[10px] h-4 px-1.5 font-mono rounded font-normal shrink-0">
                             {zone.fieldName}
                           </Badge>
-                          <Badge className="text-[10px] h-4 px-1.5 bg-brand-100 dark:bg-brand-950/50 text-brand-900 dark:text-brand-300 hover:bg-brand-100 border-0 shrink-0">
+                          <Badge className="text-[10px] h-4 px-1.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 border-0 shrink-0">
                             pg {zone.pageNumber ?? 1}
                           </Badge>
                           {childZones.length > 0 && (
@@ -1728,7 +1728,7 @@ export default function DocumentClassifierEditor() {
                               <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 shrink-0">
                                 <GitBranch className="h-2.5 w-2.5" /> under&nbsp;
                                 <button
-                                  className="font-medium text-brand-800 dark:text-brand-400 hover:underline"
+                                  className="font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     setPinnedZoneId(parent.id)
@@ -1769,7 +1769,7 @@ export default function DocumentClassifierEditor() {
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <button
-                              className={`flex items-center justify-center h-7 w-7 transition-colors ${isPinned ? 'text-brand-500 bg-brand-50 dark:bg-brand-950/40' : 'text-muted-foreground hover:text-brand-500 hover:bg-muted/60'}`}
+                              className={`flex items-center justify-center h-7 w-7 transition-colors ${isPinned ? 'text-blue-500 bg-blue-50 dark:bg-blue-950/40' : 'text-muted-foreground hover:text-blue-500 hover:bg-muted/60'}`}
                               onClick={(e) => {
                                 e.stopPropagation()
                                 const next = pinnedZoneId === zone.id ? null : zone.id
@@ -1816,7 +1816,7 @@ export default function DocumentClassifierEditor() {
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <button
-                              className="flex items-center justify-center h-7 w-7 text-brand-400 hover:text-brand-800 hover:bg-brand-50 dark:hover:bg-brand-950/40 transition-colors"
+                              className="flex items-center justify-center h-7 w-7 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 setPendingParentZoneId(zone.id); setPendingZone(null); setDrawRect(null); setAdjustingZoneId(null)
@@ -2014,7 +2014,7 @@ export default function DocumentClassifierEditor() {
                   )}
 
                   {childZones.length > 0 && (
-                    <div className="ml-5 space-y-1.5 pl-3 border-l-2 border-brand-200 dark:border-brand-900">
+                    <div className="ml-5 space-y-1.5 pl-3 border-l-2 border-indigo-200 dark:border-indigo-800">
                       {childZones.map((child) => renderCard(child))}
                     </div>
                   )}
@@ -2037,7 +2037,7 @@ export default function DocumentClassifierEditor() {
               ? template?.zones.find((z) => z.id === pendingParentZoneId)
               : null
             return (
-              <div className={`shrink-0 border-t px-4 py-3 ${parentZone ? 'bg-violet-50 dark:bg-violet-950/30' : 'bg-brand-50 dark:bg-brand-950/30'}`}>
+              <div className={`shrink-0 border-t px-4 py-3 ${parentZone ? 'bg-violet-50 dark:bg-violet-950/30' : 'bg-indigo-50 dark:bg-indigo-950/30'}`}>
                 {parentZone ? (
                   <div className="space-y-1">
                     <p className="text-xs font-semibold text-violet-700 dark:text-violet-300 flex items-center gap-1.5">
@@ -2049,7 +2049,7 @@ export default function DocumentClassifierEditor() {
                     </p>
                   </div>
                 ) : (
-                  <p className="text-xs text-brand-900 dark:text-brand-300 flex items-center gap-1.5 font-medium">
+                  <p className="text-xs text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5 font-medium">
                     <MousePointer2 className="h-3.5 w-3.5 shrink-0" />
                     Click and drag on the document to draw a zone
                   </p>
@@ -2130,7 +2130,7 @@ export default function DocumentClassifierEditor() {
                       {/* Open in Zone Editor */}
                       <Button
                         size="sm"
-                        className="shrink-0 h-8 gap-1.5 text-xs bg-brand-800 hover:bg-brand-900 text-white"
+                        className="shrink-0 h-8 gap-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white"
                         disabled={isOpening || !!openingEditorForDoc}
                         onClick={async () => {
                           setOpeningEditorForDoc(doc.id)

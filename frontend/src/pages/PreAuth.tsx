@@ -47,7 +47,7 @@ const STATUS_COLORS: Record<string, string> = {
   pending:      'bg-yellow-100 text-yellow-800',
   approved:     'bg-green-100 text-green-800',
   rejected:     'bg-red-100 text-red-800',
-  under_review: 'bg-brand-100 text-brand-800',
+  under_review: 'bg-blue-100 text-blue-800',
 }
 
 const STATUS_ICONS: Record<string, JSX.Element> = {
@@ -217,7 +217,7 @@ export default function PreAuth() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <ShieldCheck className="h-6 w-6 text-brand-600" /> Pre-Authorisations
+            <ShieldCheck className="h-6 w-6 text-blue-600" /> Pre-Authorisations
           </h1>
           <p className="text-gray-500 text-sm mt-1">{total} total records</p>
         </div>

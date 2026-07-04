@@ -23,7 +23,7 @@ interface Session {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  booked: 'bg-brand-100 text-brand-700',
+  booked: 'bg-blue-100 text-blue-700',
   completed: 'bg-emerald-100 text-emerald-700',
   cancelled: 'bg-red-100 text-red-700',
 }
@@ -79,7 +79,7 @@ export default function TelemedicineBooking() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center gap-3">
-        <Video className="h-6 w-6 text-brand-500" />
+        <Video className="h-6 w-6 text-blue-500" />
         <div>
           <h1 className="text-2xl font-bold">Telemedicine Booking</h1>
           <p className="text-muted-foreground text-sm">Book a virtual consultation session</p>
@@ -172,7 +172,7 @@ export default function TelemedicineBooking() {
                     {new Date(s.scheduledAt).toLocaleString()}
                   </div>
                   {s.claimId && (
-                    <div className="text-xs text-brand-600">Claim created: {s.claimId.slice(0, 8)}...</div>
+                    <div className="text-xs text-blue-600">Claim created: {s.claimId.slice(0, 8)}...</div>
                   )}
                 </div>
                 <Badge className={STATUS_COLORS[s.status] ?? 'bg-gray-100 text-gray-700'}>

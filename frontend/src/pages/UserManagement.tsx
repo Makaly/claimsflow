@@ -77,8 +77,8 @@ const DEMO_USERS: MappedUser[] = [
 
 const roleColors: Record<string, string> = {
   admin:          'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
-  claims_officer: 'bg-brand-100 text-brand-800 dark:bg-brand-900/40 dark:text-brand-300',
-  maker_checker:  'bg-brand-100 text-brand-900 dark:bg-brand-950/40 dark:text-brand-300',
+  claims_officer: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+  maker_checker:  'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300',
   fraud_officer:  'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
   finance:        'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
   provider_admin: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
@@ -362,7 +362,7 @@ export default function UserManagement() {
         {[
           { label: 'Total Users',      value: loading ? '…' : stats.total,     color: 'text-foreground' },
           { label: 'Active',           value: loading ? '…' : stats.active,    color: 'text-emerald-600' },
-          { label: 'Mapped to Provider', value: loading ? '…' : stats.providers, color: 'text-brand-600' },
+          { label: 'Mapped to Provider', value: loading ? '…' : stats.providers, color: 'text-blue-600' },
           { label: 'Unmapped Provider Staff', value: loading ? '…' : stats.unmapped, color: 'text-amber-600' },
         ].map(s => (
           <Card key={s.label}>
@@ -457,7 +457,7 @@ export default function UserManagement() {
                       <TableCell>
                         {user.provider ? (
                           <div className="flex items-center gap-1.5 text-sm">
-                            <Building2 className="h-3.5 w-3.5 text-brand-500 shrink-0" />
+                            <Building2 className="h-3.5 w-3.5 text-blue-500 shrink-0" />
                             <div>
                               <p className="font-medium">{user.provider.name}</p>
                               <p className="text-[10px] font-mono text-muted-foreground">{user.provider.licenseNumber}</p>
@@ -857,7 +857,7 @@ function ProviderMappingCard({
         <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0">
           {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </Button>
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-100 dark:bg-brand-900/30 text-brand-600 shrink-0">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 shrink-0">
           <Building2 className="h-4 w-4" />
         </div>
         <div className="flex-1 min-w-0">

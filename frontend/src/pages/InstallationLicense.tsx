@@ -45,12 +45,12 @@ interface ActivationKeyRow {
 
 const STATUS_STYLES: Record<string, string> = {
   ACTIVE: 'bg-green-100 text-green-800',
-  UNLICENSED: 'bg-brand-100 text-brand-800',
+  UNLICENSED: 'bg-blue-100 text-blue-800',
   LOCKED: 'bg-red-100 text-red-700',
   SUSPENDED: 'bg-amber-100 text-amber-800',
   REVOKED: 'bg-gray-200 text-gray-600',
   USED: 'bg-green-100 text-green-800',
-  UNUSED: 'bg-brand-100 text-brand-800',
+  UNUSED: 'bg-blue-100 text-blue-800',
 };
 
 const fmt = (s: string | null) =>

@@ -199,7 +199,7 @@ export function OnboardingPacketReview({
             <p className="text-sm font-semibold">Onboarding Packet</p>
             <div className="flex items-center gap-1.5 flex-wrap justify-end">
               {packet.onboardingSubmittedAt
-                ? <Badge className="bg-brand-500/15 text-brand-500 border-brand-500/30 text-[10px]">SUBMITTED</Badge>
+                ? <Badge className="bg-blue-500/15 text-blue-500 border-blue-500/30 text-[10px]">SUBMITTED</Badge>
                 : <Badge variant="outline" className="text-[10px]">DRAFT</Badge>}
               {totalDocs > 0 && (
                 completedDocs === totalDocs

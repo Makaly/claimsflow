@@ -1014,7 +1014,7 @@ export default function FraudQueue() {
                     onClick={() => document.getElementById('fq-cc-chip-input')?.focus()}
                   >
                     {denialCcChips.map((chip, i) => (
-                      <span key={i} className="inline-flex items-center gap-1 rounded-full bg-brand-500/15 text-brand-700 dark:text-brand-300 border border-brand-400/30 px-2.5 py-0.5 text-xs font-medium">
+                      <span key={i} className="inline-flex items-center gap-1 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-400/30 px-2.5 py-0.5 text-xs font-medium">
                         {chip}
                         <button
                           type="button"
@@ -1260,7 +1260,7 @@ export default function FraudQueue() {
                               : isFraudEscalate ? 'bg-orange-500 ring-2 ring-orange-500/20'
                               : isApproval && isApproved ? 'bg-emerald-400 ring-2 ring-emerald-400/20'
                               : isApproval && isRejected ? 'bg-red-400 ring-2 ring-red-400/20'
-                              : e.kind === 'status_change' ? 'bg-brand-400 ring-2 ring-brand-400/20'
+                              : e.kind === 'status_change' ? 'bg-blue-400 ring-2 ring-blue-400/20'
                               : 'bg-slate-300 dark:bg-slate-600'
                             const labelMap: Record<string, string> = {
                               fraud_confirmed: 'Fraud Confirmed',

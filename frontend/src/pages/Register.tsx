@@ -120,7 +120,7 @@ function RolePicker({ value, onChange, error }: {
           error
             ? 'border-red-500/60 bg-white/5 text-red-300'
             : open
-            ? 'border-brand-500/60 bg-white/5 text-slate-100 ring-2 ring-brand-500/30'
+            ? 'border-blue-500/60 bg-white/5 text-slate-100 ring-2 ring-blue-500/30'
             : 'border-white/10 bg-white/5 text-slate-100 hover:border-white/20'
         }`}
       >
@@ -149,7 +149,7 @@ function RolePicker({ value, onChange, error }: {
                 onClick={() => { onChange(r.value); setOpen(false) }}
                 className={`flex w-full items-center justify-between px-3 py-2.5 text-sm transition-colors ${
                   isSelected
-                    ? 'bg-brand-600 text-white font-medium'
+                    ? 'bg-blue-600 text-white font-medium'
                     : 'text-slate-200 hover:bg-slate-700 hover:text-white'
                 }`}
               >
@@ -182,7 +182,7 @@ function ProviderTypePicker({ value, onChange, error }: { value: string; onChang
   return (
     <div ref={ref} className="relative">
       <button type="button" onClick={() => setOpen(o => !o)}
-        className={`flex h-11 w-full items-center justify-between rounded-lg border px-3 text-sm transition-colors ${error ? 'border-red-500/60 bg-white/5 text-red-300' : open ? 'border-brand-500/60 bg-white/5 text-slate-100 ring-2 ring-brand-500/30' : 'border-white/10 bg-white/5 text-slate-100 hover:border-white/20'}`}>
+        className={`flex h-11 w-full items-center justify-between rounded-lg border px-3 text-sm transition-colors ${error ? 'border-red-500/60 bg-white/5 text-red-300' : open ? 'border-blue-500/60 bg-white/5 text-slate-100 ring-2 ring-blue-500/30' : 'border-white/10 bg-white/5 text-slate-100 hover:border-white/20'}`}>
         <span className="flex items-center gap-2">
           <Building2 className="h-4 w-4 text-slate-400 shrink-0" />
           {selected ? <span className="font-medium">{selected.label}</span> : <span className="text-slate-400">Select provider type</span>}
@@ -195,7 +195,7 @@ function ProviderTypePicker({ value, onChange, error }: { value: string; onChang
             const isSel = r.value === value
             return (
               <button key={r.value} type="button" onClick={() => { onChange(r.value); setOpen(false) }}
-                className={`flex w-full items-center justify-between px-3 py-2.5 text-sm transition-colors ${isSel ? 'bg-brand-600 text-white font-medium' : 'text-slate-200 hover:bg-slate-700 hover:text-white'}`}>
+                className={`flex w-full items-center justify-between px-3 py-2.5 text-sm transition-colors ${isSel ? 'bg-blue-600 text-white font-medium' : 'text-slate-200 hover:bg-slate-700 hover:text-white'}`}>
                 <span>{r.label}</span>
                 {isSel && <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
               </button>
@@ -296,15 +296,17 @@ export default function Register() {
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-40 -left-40 h-[500px] w-[500px] rounded-full bg-brand-800/20 blur-3xl" />
-        <div className="absolute -bottom-40 -right-20 h-[500px] w-[500px] rounded-full bg-brand-600/20 blur-3xl" />
+        <div className="absolute -top-40 -left-40 h-[500px] w-[500px] rounded-full bg-indigo-600/20 blur-3xl" />
+        <div className="absolute -bottom-40 -right-20 h-[500px] w-[500px] rounded-full bg-blue-600/20 blur-3xl" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.05)_1px,transparent_0)] [background-size:32px_32px]" />
       </div>
 
       <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col lg:flex-row">
         <aside className="hidden flex-1 flex-col justify-between p-10 lg:flex xl:p-14">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white p-1 shadow-lg shadow-brand-900/20 ring-1 ring-brand-100"><img src="/cic-logo.png" alt="CIC Group" className="h-full w-full object-contain" /></div>
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/30">
+              <ShieldCheck className="h-6 w-6 text-white" />
+            </div>
             <div>
               <p className="text-sm font-semibold tracking-wide text-slate-100">ClaimsFlow</p>
               <p className="text-xs text-slate-400">Medical Claims Automation</p>
@@ -313,7 +315,7 @@ export default function Register() {
 
           <div className="space-y-8">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-slate-300 backdrop-blur">
-              <Sparkles className="h-3.5 w-3.5 text-brand-400" />
+              <Sparkles className="h-3.5 w-3.5 text-indigo-400" />
               Join the platform
             </div>
             <h1 className="text-4xl font-semibold leading-tight tracking-tight text-white xl:text-5xl">
@@ -345,7 +347,9 @@ export default function Register() {
         <main className="flex flex-1 items-start justify-center overflow-y-auto p-6 sm:p-10">
           <div className="w-full max-w-md py-4">
             <div className="mb-8 flex items-center justify-center gap-3 lg:hidden">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white p-1 shadow-lg shadow-brand-900/20 ring-1 ring-brand-100"><img src="/cic-logo.png" alt="CIC Group" className="h-full w-full object-contain" /></div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/30">
+                <ShieldCheck className="h-5 w-5 text-white" />
+              </div>
               <span className="text-lg font-semibold text-white">ClaimsFlow</span>
             </div>
 
@@ -358,7 +362,7 @@ export default function Register() {
               {/* Tab switcher */}
               <div className="mb-5 flex rounded-xl border border-white/10 bg-white/[0.04] p-1">
                 <button type="button" onClick={() => { setTab('staff'); setError('') }}
-                  className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium transition-all ${tab === 'staff' ? 'bg-brand-600 text-white shadow-md shadow-brand-700/30' : 'text-slate-400 hover:text-slate-200'}`}>
+                  className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium transition-all ${tab === 'staff' ? 'bg-blue-600 text-white shadow-md shadow-blue-700/30' : 'text-slate-400 hover:text-slate-200'}`}>
                   <Users className="h-4 w-4" /> Staff Account
                 </button>
                 <button type="button" onClick={() => { setTab('provider'); setError('') }}
@@ -385,7 +389,7 @@ export default function Register() {
                       id="reg-name"
                       autoComplete="name"
                       placeholder="Jane Doe"
-                      className="h-11 border-white/10 bg-white/5 pl-9 text-slate-100 placeholder:text-slate-500 focus-visible:ring-brand-500/60"
+                      className="h-11 border-white/10 bg-white/5 pl-9 text-slate-100 placeholder:text-slate-500 focus-visible:ring-blue-500/60"
                       {...form.register('name')}
                     />
                   </div>
@@ -403,7 +407,7 @@ export default function Register() {
                       type="email"
                       autoComplete="email"
                       placeholder="you@company.com"
-                      className="h-11 border-white/10 bg-white/5 pl-9 text-slate-100 placeholder:text-slate-500 focus-visible:ring-brand-500/60"
+                      className="h-11 border-white/10 bg-white/5 pl-9 text-slate-100 placeholder:text-slate-500 focus-visible:ring-blue-500/60"
                       {...form.register('email')}
                     />
                   </div>
@@ -430,7 +434,7 @@ export default function Register() {
                       type={showPassword ? 'text' : 'password'}
                       autoComplete="new-password"
                       placeholder="Min 6 characters"
-                      className="h-11 border-white/10 bg-white/5 pl-9 pr-10 text-slate-100 placeholder:text-slate-500 focus-visible:ring-brand-500/60"
+                      className="h-11 border-white/10 bg-white/5 pl-9 pr-10 text-slate-100 placeholder:text-slate-500 focus-visible:ring-blue-500/60"
                       {...form.register('password')}
                     />
                     <button
@@ -474,7 +478,7 @@ export default function Register() {
                       type={showConfirm ? 'text' : 'password'}
                       autoComplete="new-password"
                       placeholder="Re-enter password"
-                      className="h-11 border-white/10 bg-white/5 pl-9 pr-10 text-slate-100 placeholder:text-slate-500 focus-visible:ring-brand-500/60"
+                      className="h-11 border-white/10 bg-white/5 pl-9 pr-10 text-slate-100 placeholder:text-slate-500 focus-visible:ring-blue-500/60"
                       {...form.register('confirmPassword')}
                     />
                     <button
@@ -499,13 +503,13 @@ export default function Register() {
                     onCheckedChange={(v) =>
                       form.setValue('acceptTerms', Boolean(v) as true, { shouldValidate: true })
                     }
-                    className="mt-0.5 border-white/20 data-[state=checked]:border-brand-500 data-[state=checked]:bg-brand-500"
+                    className="mt-0.5 border-white/20 data-[state=checked]:border-blue-500 data-[state=checked]:bg-blue-500"
                   />
                   <span>
                     I agree to the{' '}
-                    <Link to="/terms" target="_blank" className="text-brand-400 hover:text-brand-300">Terms of Service</Link>{' '}
+                    <Link to="/terms" target="_blank" className="text-blue-400 hover:text-blue-300">Terms of Service</Link>{' '}
                     and{' '}
-                    <Link to="/privacy" target="_blank" className="text-brand-400 hover:text-brand-300">Privacy Policy</Link>.
+                    <Link to="/privacy" target="_blank" className="text-blue-400 hover:text-blue-300">Privacy Policy</Link>.
                   </span>
                 </label>
                 {form.formState.errors.acceptTerms && (
@@ -517,7 +521,7 @@ export default function Register() {
                 <Button
                   type="submit"
                   disabled={loading}
-                  className="group h-11 w-full bg-gradient-to-r from-brand-600 to-brand-800 text-white shadow-lg shadow-brand-600/20 transition-all hover:from-brand-500 hover:to-brand-700 hover:shadow-brand-500/40"
+                  className="group h-11 w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/20 transition-all hover:from-blue-500 hover:to-indigo-500 hover:shadow-blue-500/40"
                 >
                   {loading ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -704,7 +708,7 @@ export default function Register() {
                 Already have an account?{' '}
                 <Link
                   to="/login"
-                  className="inline-flex items-center gap-1 font-medium text-brand-400 transition-colors hover:text-brand-300"
+                  className="inline-flex items-center gap-1 font-medium text-blue-400 transition-colors hover:text-blue-300"
                 >
                   <ArrowLeft className="h-3.5 w-3.5" />
                   Back to sign in

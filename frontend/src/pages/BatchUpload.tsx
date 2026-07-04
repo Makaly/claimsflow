@@ -467,7 +467,7 @@ const OCR_FIELD_OPTIONS = [
 
 const STAMPS = [
   { label: 'APPROVED',     color: '#10b981', bg: 'rgba(16,185,129,0.12)'  },
-  { label: 'RECEIVED',     color: '#c22d3c', bg: 'rgba(59,130,246,0.12)'  },
+  { label: 'RECEIVED',     color: '#3b82f6', bg: 'rgba(59,130,246,0.12)'  },
   { label: 'REVIEWED',     color: '#8b5cf6', bg: 'rgba(139,92,246,0.12)'  },
   { label: 'REJECTED',     color: '#ef4444', bg: 'rgba(239,68,68,0.12)'   },
   { label: 'CONFIDENTIAL', color: '#f97316', bg: 'rgba(249,115,22,0.12)'  },
@@ -496,7 +496,7 @@ function ToolBtn({ active, onClick, icon, label, color, trailingIcon }: {
 }) {
   const ac: Record<string, string> = {
     amber:  'bg-amber-500/20 text-amber-300 border-amber-500/40',
-    blue:   'bg-brand-500/20 text-brand-300 border-brand-500/40',
+    blue:   'bg-blue-500/20 text-blue-300 border-blue-500/40',
     red:    'bg-red-500/20 text-red-300 border-red-500/40',
     purple: 'bg-violet-500/20 text-violet-300 border-violet-500/40',
     gray:   'bg-gray-200 text-gray-900 border-gray-300 dark:bg-gray-700 dark:text-white dark:border-gray-600',
@@ -844,7 +844,7 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId, jobSetup }: {
         ctx.fillRect(a.x, a.y, a.w, a.h)
         ctx.strokeRect(a.x, a.y, a.w, a.h)
       } else if (a.type === 'underline' && a.w && a.h) {
-        ctx.strokeStyle = '#c22d3c'
+        ctx.strokeStyle = '#3b82f6'
         ctx.lineWidth   = 2.5
         const y = a.y + Math.abs(a.h)
         ctx.beginPath(); ctx.moveTo(a.x, y); ctx.lineTo(a.x + a.w, y); ctx.stroke()
@@ -910,7 +910,7 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId, jobSetup }: {
         ctx.textAlign   = 'center'; ctx.textBaseline = 'middle'
         ctx.fillText(a.text, a.x, a.y)
       } else if ((a.type === 'draw' || a.type === 'signature') && a.points && a.points.length > 1) {
-        ctx.strokeStyle = a.type === 'signature' ? '#8e1a25' : '#7c3aed'
+        ctx.strokeStyle = a.type === 'signature' ? '#1d4ed8' : '#7c3aed'
         ctx.lineWidth   = a.type === 'signature' ? 2 : 1.5
         ctx.lineJoin    = 'round'; ctx.lineCap = 'round'
         ctx.beginPath()
@@ -994,7 +994,7 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId, jobSetup }: {
         redrawAnnotations()
         const ctx = overlayRef.current?.getContext('2d')
         if (ctx && next.length > 1) {
-          ctx.strokeStyle = activeTool === 'signature' ? '#8e1a25' : '#7c3aed'
+          ctx.strokeStyle = activeTool === 'signature' ? '#1d4ed8' : '#7c3aed'
           ctx.lineWidth = activeTool === 'signature' ? 2 : 1.5
           ctx.lineJoin = 'round'; ctx.lineCap = 'round'
           ctx.beginPath(); ctx.moveTo(next[0].x, next[0].y)
@@ -1257,13 +1257,13 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId, jobSetup }: {
         {/* Left: thumbnail strip — hidden on mobile */}
         {isPdf && numPages > 0 && (() => {
           const thumbCatColors: Record<string, string> = {
-            invoice:          'bg-brand-500/80 text-white',
+            invoice:          'bg-blue-500/80 text-white',
             claim_form:       'bg-purple-500/80 text-white',
             prescription:     'bg-green-500/80 text-white',
             lab_result:       'bg-orange-500/80 text-white',
             medical_report:   'bg-teal-500/80 text-white',
             discharge_summary:'bg-cyan-500/80 text-white',
-            referral:         'bg-brand-700/80 text-white',
+            referral:         'bg-indigo-500/80 text-white',
             pre_auth:         'bg-amber-500/80 text-white',
           }
           // Build a quick lookup: pageNumber → documentPage entry
@@ -1388,7 +1388,7 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId, jobSetup }: {
             <div className="absolute inset-0 z-40 bg-black/70 flex items-center justify-center">
               <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 w-[420px] shadow-2xl">
                 <div className="flex items-center justify-between mb-3">
-                  <p className="font-semibold text-sm text-gray-900 dark:text-white flex items-center gap-2"><FileSignature className="h-4 w-4 text-brand-400"/> Draw your signature</p>
+                  <p className="font-semibold text-sm text-gray-900 dark:text-white flex items-center gap-2"><FileSignature className="h-4 w-4 text-blue-400"/> Draw your signature</p>
                   <button onClick={() => { setShowSignaturePad(false); setActiveTool('pointer') }} className="text-gray-500 hover:text-gray-900 dark:hover:text-white"><X className="h-4 w-4"/></button>
                 </div>
                 <canvas ref={sigCanvasRef} width={380} height={160}
@@ -1448,7 +1448,7 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId, jobSetup }: {
                     }
                     setShowSignaturePad(false); setActiveTool('pointer')
                     sigPointsRef.current = []
-                  }} className="flex-1 py-2 rounded-xl text-xs bg-brand-600 text-white font-semibold hover:bg-brand-500 transition-colors">Place on Document</button>
+                  }} className="flex-1 py-2 rounded-xl text-xs bg-blue-600 text-white font-semibold hover:bg-blue-500 transition-colors">Place on Document</button>
                 </div>
               </div>
             </div>
@@ -1490,7 +1490,7 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId, jobSetup }: {
                   const ch = canvasDims.h
                   const pageFields = doc.fieldAnnotations.filter(a => (a.page || 1) === pageNum)
                   if (!pageFields.length) return null
-                  const COLORS = ['#c22d3c','#8b5cf6','#10b981','#f59e0b','#ef4444','#06b6d4','#ec4899']
+                  const COLORS = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#06b6d4','#ec4899']
                   return (
                     <svg style={{ position: 'absolute', top: 0, left: 0, width: cw, height: ch, pointerEvents: 'none', overflow: 'visible' }}>
                       {pageFields.map((a, i) => {
@@ -1517,18 +1517,18 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId, jobSetup }: {
                 })()}
                 {/* Note creation popup */}
                 {notePopup && (
-                  <div className="absolute z-20 bg-gray-50 dark:bg-gray-900 border border-brand-500/40 rounded-xl p-3 shadow-2xl w-56"
+                  <div className="absolute z-20 bg-gray-50 dark:bg-gray-900 border border-blue-500/40 rounded-xl p-3 shadow-2xl w-56"
                     style={{ left: Math.min(notePopup.x, (mainRef.current?.width || 600) - 230), top: notePopup.y }}>
-                    <p className="text-[10px] text-brand-400 font-semibold uppercase tracking-wider mb-1.5">Add Note — Page {notePopup.page}</p>
+                    <p className="text-[10px] text-blue-400 font-semibold uppercase tracking-wider mb-1.5">Add Note — Page {notePopup.page}</p>
                     <textarea autoFocus value={noteText} onChange={e => setNoteText(e.target.value)}
                       placeholder="Type your note here…"
-                      className="w-full h-20 bg-gray-100 dark:bg-gray-800 text-sm text-gray-900 dark:text-white resize-none outline-none rounded-lg p-2 placeholder:text-gray-500 dark:placeholder:text-gray-600 border border-gray-200 dark:border-gray-700 focus:border-brand-500/50" />
+                      className="w-full h-20 bg-gray-100 dark:bg-gray-800 text-sm text-gray-900 dark:text-white resize-none outline-none rounded-lg p-2 placeholder:text-gray-500 dark:placeholder:text-gray-600 border border-gray-200 dark:border-gray-700 focus:border-blue-500/50" />
                     <div className="flex gap-1.5 mt-2">
                       <button onClick={() => {
                         if (noteText.trim())
                           commitAnnotations([...annotations, { id: Math.random().toString(36).slice(2), page: notePopup.page, type: 'note', x: notePopup.x, y: notePopup.y, text: noteText }])
                         setNotePopup(null); setNoteText('')
-                      }} className="flex-1 bg-brand-600/20 text-brand-300 text-xs rounded-lg py-1.5 hover:bg-brand-600/40 border border-brand-500/30 transition-colors font-medium">
+                      }} className="flex-1 bg-blue-600/20 text-blue-300 text-xs rounded-lg py-1.5 hover:bg-blue-600/40 border border-blue-500/30 transition-colors font-medium">
                         Add Note
                       </button>
                       <button onClick={() => { setNotePopup(null); setNoteText('') }}
@@ -1637,8 +1637,8 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId, jobSetup }: {
         <div className={`bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-800 overflow-y-auto shrink-0 flex flex-col w-full md:w-[310px] md:border-l ${mobileTab === 'pdf' ? 'hidden md:flex' : 'flex'}`}>
           {/* Panel header */}
           <div className="sticky top-0 z-10 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center gap-2 shrink-0">
-            <div className={`flex items-center justify-center h-7 w-7 rounded-lg shrink-0 ${doc.aiConfidence === 0 ? 'bg-brand-600/20 border border-brand-500/20' : 'bg-violet-600/20 border border-violet-500/20'}`}>
-              {doc.aiConfidence === 0 ? <ClipboardList className="h-3.5 w-3.5 text-brand-400" /> : <Brain className="h-3.5 w-3.5 text-violet-400" />}
+            <div className={`flex items-center justify-center h-7 w-7 rounded-lg shrink-0 ${doc.aiConfidence === 0 ? 'bg-blue-600/20 border border-blue-500/20' : 'bg-violet-600/20 border border-violet-500/20'}`}>
+              {doc.aiConfidence === 0 ? <ClipboardList className="h-3.5 w-3.5 text-blue-400" /> : <Brain className="h-3.5 w-3.5 text-violet-400" />}
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-semibold text-sm text-gray-900 dark:text-white leading-none">
@@ -1693,10 +1693,10 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId, jobSetup }: {
             )}
 
             {/* Patient — editable */}
-            <DPSection icon={<User className="h-3.5 w-3.5 text-brand-400" />} label="Patient">
+            <DPSection icon={<User className="h-3.5 w-3.5 text-blue-400" />} label="Patient">
               <EF label="Full Name"        value={edit.patientName}  onChange={ef('patientName')} bold required confidence={fieldConf('patient_name')} />
               <EF label="Patient ID"       value={edit.patientId}    onChange={ef('patientId')}   mono confidence={fieldConf('patient_id')} />
-              <EF label="AK / Member No."  value={edit.memberNumber} onChange={ef('memberNumber')} mono accent="text-brand-400 font-bold" required copy confidence={fieldConf('membership_number')} />
+              <EF label="AK / Member No."  value={edit.memberNumber} onChange={ef('memberNumber')} mono accent="text-blue-400 font-bold" required copy confidence={fieldConf('membership_number')} />
             </DPSection>
 
             {/* Invoice — editable */}
@@ -1792,13 +1792,13 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId, jobSetup }: {
                 <div className="space-y-1">
                   {doc.documentPages.map((pg) => {
                     const catColors: Record<string, string> = {
-                      invoice: 'bg-brand-500/15 text-brand-400 border-brand-500/30',
+                      invoice: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
                       claim_form: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
                       prescription: 'bg-green-500/15 text-green-400 border-green-500/30',
                       lab_result: 'bg-orange-500/15 text-orange-400 border-orange-500/30',
                       medical_report: 'bg-teal-500/15 text-teal-400 border-teal-500/30',
                       discharge_summary: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30',
-                      referral: 'bg-brand-700/15 text-brand-400 border-brand-700/30',
+                      referral: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30',
                       pre_auth: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
                     }
                     return (
@@ -1825,7 +1825,7 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId, jobSetup }: {
                 <div className="space-y-1">
                   {annotations.map(a => (
                     <div key={a.id} className="flex items-center gap-2 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 px-2 py-1.5">
-                      <div className={`h-2 w-2 rounded-full shrink-0 ${a.type === 'highlight' ? 'bg-amber-400' : 'bg-brand-400'}`} />
+                      <div className={`h-2 w-2 rounded-full shrink-0 ${a.type === 'highlight' ? 'bg-amber-400' : 'bg-blue-400'}`} />
                       <span className="text-[10px] text-gray-600 dark:text-gray-400 flex-1 truncate">
                         p{a.page} — {a.type === 'highlight' ? 'Highlight' : a.text || 'Note'}
                       </span>
@@ -1989,17 +1989,17 @@ function ProcessingInsightCard({
         shimmer: 'linear-gradient(90deg,#8b5cf6 0%,#a78bfa 40%,#c4b5fd 50%,#a78bfa 60%,#8b5cf6 100%)',
       }
     : {
-        pill: 'bg-brand-100 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300',
-        ring: 'ring-brand-300 dark:ring-brand-500/40',
-        scanLine: '#c22d3c', shimA: '#c22d3c', shimB: '#e2808b',
-        icon: 'text-brand-600 dark:text-brand-400',
-        cardBorder: 'border-brand-200 dark:border-brand-500/30',
-        activeBg: 'bg-brand-50 border-brand-300 dark:bg-brand-500/10 dark:border-brand-500/40',
-        insightBg: 'bg-brand-50 border-brand-200 dark:bg-brand-500/10 dark:border-brand-500/30',
-        insightText: 'text-brand-800 dark:text-brand-200',
-        insightSub: 'text-brand-600 dark:text-brand-300',
-        iconHalo: 'bg-brand-100 dark:bg-brand-500/20',
-        shimmer: 'linear-gradient(90deg,#c22d3c 0%,#d14d5c 40%,#e2808b 50%,#d14d5c 60%,#c22d3c 100%)',
+        pill: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300',
+        ring: 'ring-blue-300 dark:ring-blue-500/40',
+        scanLine: '#3b82f6', shimA: '#3b82f6', shimB: '#93c5fd',
+        icon: 'text-blue-600 dark:text-blue-400',
+        cardBorder: 'border-blue-200 dark:border-blue-500/30',
+        activeBg: 'bg-blue-50 border-blue-300 dark:bg-blue-500/10 dark:border-blue-500/40',
+        insightBg: 'bg-blue-50 border-blue-200 dark:bg-blue-500/10 dark:border-blue-500/30',
+        insightText: 'text-blue-800 dark:text-blue-200',
+        insightSub: 'text-blue-600 dark:text-blue-300',
+        iconHalo: 'bg-blue-100 dark:bg-blue-500/20',
+        shimmer: 'linear-gradient(90deg,#3b82f6 0%,#60a5fa 40%,#93c5fd 50%,#60a5fa 60%,#3b82f6 100%)',
       }
 
   return (
@@ -2195,7 +2195,7 @@ function ProcessingInsightCard({
               <div
                 key={i}
                 className={`h-1.5 rounded-full transition-all duration-300 ${
-                  i === insightIdx ? `w-4 ${isAi ? 'bg-violet-500' : 'bg-brand-500'}` : 'w-1.5 bg-gray-300 dark:bg-white/15'
+                  i === insightIdx ? `w-4 ${isAi ? 'bg-violet-500' : 'bg-blue-500'}` : 'w-1.5 bg-gray-300 dark:bg-white/15'
                 }`}
               />
             ))}
@@ -3741,7 +3741,7 @@ export default function BatchUpload() {
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Rescan
               </Button>
-              <Button onClick={handleScanApprove} className="bg-brand-600 hover:bg-brand-700 text-white">
+              <Button onClick={handleScanApprove} className="bg-violet-600 hover:bg-violet-700 text-white">
                 <CheckCircle className="h-4 w-4 mr-2" />
                 Approve &amp; Process
               </Button>
@@ -3786,12 +3786,12 @@ export default function BatchUpload() {
       )}
 
       {/* ── Premium hero header ───────────────────────────────────── */}
-      <div className="relative overflow-hidden rounded-xl sm:rounded-2xl border bg-gradient-to-br from-violet-50 via-background to-brand-50 p-4 shadow-sm dark:from-violet-950/40 dark:via-background dark:to-brand-950/40 sm:p-8">
-        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-gradient-to-br from-violet-500/20 to-brand-500/20 blur-3xl" />
+      <div className="relative overflow-hidden rounded-xl sm:rounded-2xl border bg-gradient-to-br from-violet-50 via-background to-blue-50 p-4 shadow-sm dark:from-violet-950/40 dark:via-background dark:to-blue-950/40 sm:p-8">
+        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-gradient-to-br from-violet-500/20 to-blue-500/20 blur-3xl" />
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(0,0,0,0.04)_1px,transparent_0)] [background-size:24px_24px] dark:bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.04)_1px,transparent_0)]" />
         <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-brand-600 text-white shadow-lg shadow-violet-500/30">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-blue-600 text-white shadow-lg shadow-violet-500/30">
               <CloudUpload className="h-6 w-6" />
             </div>
             <div>
@@ -3801,7 +3801,7 @@ export default function BatchUpload() {
                 <Badge variant="secondary" className="gap-1 bg-violet-500/10 text-violet-700 dark:text-violet-300 hover:bg-violet-500/10">
                   <Sparkles className="h-3 w-3" /> AI-powered
                 </Badge>
-                <Badge variant="secondary" className="gap-1 bg-brand-500/10 text-brand-700 dark:text-brand-300 hover:bg-brand-500/10">
+                <Badge variant="secondary" className="gap-1 bg-blue-500/10 text-blue-700 dark:text-blue-300 hover:bg-blue-500/10">
                   <ShieldCheck className="h-3 w-3" /> OCR + verification
                 </Badge>
                 <Badge variant="secondary" className="gap-1 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10">
@@ -3838,7 +3838,7 @@ export default function BatchUpload() {
                 <div className="flex flex-col items-center gap-1">
                   <div className={cn(
                     'relative flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-full border-2 transition-all duration-300',
-                    isActive && 'border-violet-500 bg-gradient-to-br from-violet-500 to-brand-600 text-white shadow-lg shadow-violet-500/30 scale-110',
+                    isActive && 'border-violet-500 bg-gradient-to-br from-violet-500 to-blue-600 text-white shadow-lg shadow-violet-500/30 scale-110',
                     isDone && 'border-emerald-500 bg-emerald-500 text-white',
                     !isActive && !isDone && 'border-muted bg-background text-muted-foreground'
                   )}>
@@ -3873,9 +3873,9 @@ export default function BatchUpload() {
           {/* STEP 1: UPLOAD */}
           {step === 'upload' && (
             <Card className="overflow-hidden border-violet-500/10 shadow-sm">
-              <CardHeader className="border-b bg-gradient-to-r from-violet-50/70 via-background to-brand-50/70 dark:from-violet-950/20 dark:to-brand-950/20">
+              <CardHeader className="border-b bg-gradient-to-r from-violet-50/70 via-background to-blue-50/70 dark:from-violet-950/20 dark:to-blue-950/20">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-brand-600 text-white shadow-md shadow-violet-500/30">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-blue-600 text-white shadow-md shadow-violet-500/30">
                     <Upload className="h-4 w-4" />
                   </div>
                   <div>
@@ -4023,7 +4023,7 @@ export default function BatchUpload() {
                 <Fragment>
 
                 {/* ── Input source tabs: Upload vs. Scanner ── */}
-                <div className="flex rounded-xl border-2 border-violet-100/70 dark:border-violet-900/30 bg-gradient-to-r from-violet-50/50 via-background to-brand-50/50 dark:from-violet-950/10 dark:via-background dark:to-brand-950/10 p-1.5 gap-1.5 shadow-inner">
+                <div className="flex rounded-xl border-2 border-violet-100/70 dark:border-violet-900/30 bg-gradient-to-r from-violet-50/50 via-background to-blue-50/50 dark:from-violet-950/10 dark:via-background dark:to-blue-950/10 p-1.5 gap-1.5 shadow-inner">
                   {([
                     { key: 'upload', icon: CloudUpload, label: 'Upload Files' },
                     { key: 'scanner', icon: Printer, label: 'Scan Document' },
@@ -4034,7 +4034,7 @@ export default function BatchUpload() {
                       className={cn(
                         'flex-1 relative flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold transition-all duration-200',
                         inputTab === key
-                          ? 'bg-gradient-to-r from-violet-600 to-brand-600 text-white shadow-md shadow-violet-500/30'
+                          ? 'bg-gradient-to-r from-violet-600 to-blue-600 text-white shadow-md shadow-violet-500/30'
                           : 'text-muted-foreground hover:text-violet-700 dark:hover:text-violet-300 hover:bg-white/60 dark:hover:bg-white/5',
                       )}
                     >
@@ -4136,7 +4136,7 @@ export default function BatchUpload() {
                                       <div className={cn(
                                         'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border',
                                         isNetwork
-                                          ? 'bg-brand-50 border-brand-200 text-brand-600 dark:bg-brand-950/40 dark:border-brand-800 dark:text-brand-400'
+                                          ? 'bg-blue-50 border-blue-200 text-blue-600 dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-400'
                                           : 'bg-violet-50 border-violet-200 text-violet-600 dark:bg-violet-950/40 dark:border-violet-800 dark:text-violet-400',
                                       )}>
                                         {isNetwork ? <Wifi className="h-5 w-5" /> : <Printer className="h-5 w-5" />}
@@ -4146,7 +4146,7 @@ export default function BatchUpload() {
                                         <div className="flex items-center gap-1.5 mt-0.5">
                                           <Badge variant="outline" className={cn(
                                             'text-[9px] h-4 px-1.5 shrink-0 font-mono',
-                                            isNetwork ? 'border-brand-300 text-brand-600 dark:border-brand-700 dark:text-brand-400'
+                                            isNetwork ? 'border-blue-300 text-blue-600 dark:border-blue-700 dark:text-blue-400'
                                                       : 'border-violet-300 text-violet-600 dark:border-violet-700 dark:text-violet-400',
                                           )}>
                                             {driverLabel}
@@ -4315,7 +4315,7 @@ export default function BatchUpload() {
                                   href="https://github.com/Makaly/claimsflow/releases/download/scan-agent-latest/ClaimsFlow-Scan-Agent-Setup.exe"
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="inline-flex items-center gap-2 rounded-md bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold px-3 py-1.5 transition-colors"
+                                  className="inline-flex items-center gap-2 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold px-3 py-1.5 transition-colors"
                                 >
                                   <Download className="h-3.5 w-3.5" />
                                   Download ClaimsFlow-Scan-Agent-Setup.exe
@@ -4363,7 +4363,7 @@ export default function BatchUpload() {
                             <Button
                               onClick={() => setCameraScannerOpen(true)}
                               variant="outline"
-                              className="w-full gap-2 border-brand-300 hover:bg-brand-50 dark:hover:bg-brand-950/30"
+                              className="w-full gap-2 border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/30"
                             >
                               <Camera className="h-4 w-4" />
                               Scan with Camera / Phone
@@ -4388,7 +4388,7 @@ export default function BatchUpload() {
                               </div>
                             )}
                             <Button
-                              className="w-full bg-gradient-to-r from-violet-600 to-brand-600 hover:from-violet-700 hover:to-brand-700 text-white gap-2 h-11"
+                              className="w-full bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white gap-2 h-11"
                               disabled={!selectedScanner || scanning}
                               onClick={handleScan}
                             >
@@ -4433,7 +4433,7 @@ export default function BatchUpload() {
                         <Button
                           onClick={() => setCameraScannerOpen(true)}
                           variant="outline"
-                          className="w-full gap-2 border-brand-300 hover:bg-brand-50 dark:hover:bg-brand-950/30"
+                          className="w-full gap-2 border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/30"
                         >
                           <Camera className="h-4 w-4" />
                           Scan with Camera / Phone
@@ -4464,7 +4464,7 @@ export default function BatchUpload() {
                               <div className={cn(
                                 'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border',
                                 isNetwork
-                                  ? 'bg-brand-50 border-brand-200 text-brand-600 dark:bg-brand-950/40 dark:border-brand-800 dark:text-brand-400'
+                                  ? 'bg-blue-50 border-blue-200 text-blue-600 dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-400'
                                   : 'bg-violet-50 border-violet-200 text-violet-600 dark:bg-violet-950/40 dark:border-violet-800 dark:text-violet-400',
                               )}>
                                 {isNetwork ? <Wifi className="h-5 w-5" /> : <Printer className="h-5 w-5" />}
@@ -4474,7 +4474,7 @@ export default function BatchUpload() {
                                 <div className="flex items-center gap-1.5 mt-0.5">
                                   <Badge variant="outline" className={cn(
                                     'text-[9px] h-4 px-1.5 shrink-0 font-mono',
-                                    isNetwork ? 'border-brand-300 text-brand-600 dark:border-brand-700 dark:text-brand-400'
+                                    isNetwork ? 'border-blue-300 text-blue-600 dark:border-blue-700 dark:text-blue-400'
                                               : 'border-violet-300 text-violet-600 dark:border-violet-700 dark:text-violet-400',
                                   )}>
                                     {driverLabel}
@@ -4531,7 +4531,7 @@ export default function BatchUpload() {
 
                     {scanners.length > 0 && (
                       <Button
-                        className="w-full bg-gradient-to-r from-violet-600 to-brand-600 hover:from-violet-700 hover:to-brand-700 text-white gap-2 h-11"
+                        className="w-full bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white gap-2 h-11"
                         disabled={!selectedScanner || scanning}
                         onClick={handleScan}
                       >
@@ -4555,7 +4555,7 @@ export default function BatchUpload() {
                   className={cn(
                     'group relative flex flex-col items-center justify-center overflow-hidden rounded-xl sm:rounded-2xl border-2 border-dashed p-6 sm:p-10 text-center transition-all duration-300 cursor-pointer',
                     isDragActive
-                      ? 'border-violet-500 bg-gradient-to-br from-violet-500/10 via-brand-500/5 to-violet-500/10 scale-[1.01] shadow-lg shadow-violet-500/10'
+                      ? 'border-violet-500 bg-gradient-to-br from-violet-500/10 via-blue-500/5 to-violet-500/10 scale-[1.01] shadow-lg shadow-violet-500/10'
                       : 'border-muted-foreground/20 bg-muted/20 hover:border-violet-400/60 hover:bg-violet-50/40 dark:hover:bg-violet-950/20'
                   )}
                 >
@@ -4569,21 +4569,21 @@ export default function BatchUpload() {
                     {isDragActive && (
                       <>
                         <span className="absolute inset-0 animate-ping rounded-3xl bg-violet-500/15" />
-                        <span className="absolute inset-0 animate-pulse rounded-3xl bg-brand-500/10" style={{ animationDelay: '0.3s' }} />
+                        <span className="absolute inset-0 animate-pulse rounded-3xl bg-blue-500/10" style={{ animationDelay: '0.3s' }} />
                       </>
                     )}
                     <div className={cn(
                       'relative flex h-20 w-20 items-center justify-center rounded-3xl transition-all duration-300',
                       isDragActive
-                        ? 'bg-gradient-to-br from-violet-500 to-brand-600 shadow-2xl shadow-violet-500/50 scale-110'
-                        : 'bg-gradient-to-br from-violet-50 to-brand-50/50 dark:from-violet-950/30 dark:to-brand-950/20 shadow-md ring-1 ring-violet-200/60 dark:ring-violet-700/30 group-hover:shadow-lg group-hover:ring-violet-400/40 group-hover:from-violet-100 group-hover:to-brand-100/50 dark:group-hover:from-violet-950/50 dark:group-hover:to-brand-950/30'
+                        ? 'bg-gradient-to-br from-violet-500 to-blue-600 shadow-2xl shadow-violet-500/50 scale-110'
+                        : 'bg-gradient-to-br from-violet-50 to-blue-50/50 dark:from-violet-950/30 dark:to-blue-950/20 shadow-md ring-1 ring-violet-200/60 dark:ring-violet-700/30 group-hover:shadow-lg group-hover:ring-violet-400/40 group-hover:from-violet-100 group-hover:to-blue-100/50 dark:group-hover:from-violet-950/50 dark:group-hover:to-blue-950/30'
                     )}>
                       <CloudUpload className={cn(
                         'h-9 w-9 transition-all duration-300',
                         isDragActive ? 'text-white drop-shadow-lg' : 'text-violet-500/70 dark:text-violet-400/70 group-hover:text-violet-600 group-hover:-translate-y-1'
                       )} />
                       {!isDragActive && (
-                        <div className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-brand-600 shadow-sm">
+                        <div className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-blue-600 shadow-sm">
                           <span className="text-[9px] font-bold text-white">+</span>
                         </div>
                       )}
@@ -4592,7 +4592,7 @@ export default function BatchUpload() {
 
                   {isDragActive ? (
                     <>
-                      <p className="text-xl font-bold bg-gradient-to-r from-violet-600 to-brand-600 bg-clip-text text-transparent">
+                      <p className="text-xl font-bold bg-gradient-to-r from-violet-600 to-blue-600 bg-clip-text text-transparent">
                         Release to upload
                       </p>
                       <p className="mt-1.5 text-sm text-muted-foreground">We'll start processing right away</p>
@@ -4606,7 +4606,7 @@ export default function BatchUpload() {
                       <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5">
                         {([
                           { ext: 'PDF', color: 'bg-red-500' },
-                          { ext: 'TIFF', color: 'bg-brand-500' },
+                          { ext: 'TIFF', color: 'bg-blue-500' },
                           { ext: 'JPG', color: 'bg-amber-500' },
                           { ext: 'PNG', color: 'bg-emerald-500' },
                         ]).map(({ ext, color }) => (
@@ -4626,7 +4626,7 @@ export default function BatchUpload() {
                     <div className="flex items-center justify-between px-0.5">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Queued files</span>
-                        <span className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-violet-500 to-brand-500 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm shadow-violet-500/30">
+                        <span className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-violet-500 to-blue-500 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm shadow-violet-500/30">
                           {uploadedFiles.length}
                         </span>
                       </div>
@@ -4651,8 +4651,8 @@ export default function BatchUpload() {
                         const isPdf = ext === 'PDF'
                         return (
                           <div key={i} className="group flex items-center gap-3 rounded-lg border border-border/60 bg-card/80 backdrop-blur-sm px-3 py-2.5 transition-all duration-150 hover:border-violet-300/60 hover:shadow-sm hover:bg-card">
-                            <div className="w-1 self-stretch rounded-full bg-gradient-to-b from-violet-500 to-brand-500 shrink-0 opacity-70" />
-                            <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500/15 to-brand-500/10 ring-1 ring-inset ring-violet-400/20">
+                            <div className="w-1 self-stretch rounded-full bg-gradient-to-b from-violet-500 to-blue-500 shrink-0 opacity-70" />
+                            <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500/15 to-blue-500/10 ring-1 ring-inset ring-violet-400/20">
                               <FileText className="h-4.5 w-4.5 text-violet-600 dark:text-violet-400" />
                               <span className={cn(
                                 'absolute -bottom-1 -right-1 rounded px-1 py-px text-[8px] font-bold leading-none text-white shadow-sm',
@@ -4715,7 +4715,7 @@ export default function BatchUpload() {
                             <div className={cn(
                               'flex h-7 w-7 items-center justify-center rounded-lg transition-all',
                               extractionMode === value
-                                ? 'bg-gradient-to-br from-violet-500 to-brand-600 text-white shadow-sm shadow-violet-500/30'
+                                ? 'bg-gradient-to-br from-violet-500 to-blue-600 text-white shadow-sm shadow-violet-500/30'
                                 : 'bg-muted text-muted-foreground',
                             )}>
                               <Icon className="h-3.5 w-3.5" />
@@ -4723,7 +4723,7 @@ export default function BatchUpload() {
                             <span className="font-semibold leading-none">{label}</span>
                             <span className={cn('text-[10px] leading-tight text-center', extractionMode === value ? 'opacity-70' : 'opacity-50')}>{desc}</span>
                             {extractionMode === value && (
-                              <div className="h-0.5 w-6 rounded-full bg-gradient-to-r from-violet-500 to-brand-500 mt-0.5" />
+                              <div className="h-0.5 w-6 rounded-full bg-gradient-to-r from-violet-500 to-blue-500 mt-0.5" />
                             )}
                           </button>
                         ))}
@@ -4751,7 +4751,7 @@ export default function BatchUpload() {
                                     <span>{m.label}</span>
                                     {m.tier === 'best' && <Badge variant="secondary" className="h-4 text-[9px] bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">BEST</Badge>}
                                     {m.tier === 'recommended' && <Badge variant="secondary" className="h-4 text-[9px] bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">REC</Badge>}
-                                    {m.tier === 'fast' && <Badge variant="secondary" className="h-4 text-[9px] bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300">FAST</Badge>}
+                                    {m.tier === 'fast' && <Badge variant="secondary" className="h-4 text-[9px] bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">FAST</Badge>}
                                     {m.tier === 'local' && <Badge variant="secondary" className="h-4 text-[9px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">LOCAL</Badge>}
                                     {!m.available && <Badge variant="outline" className="h-4 text-[9px]">key missing</Badge>}
                                   </div>
@@ -4770,9 +4770,9 @@ export default function BatchUpload() {
 
                     {/* Primary CTA */}
                     <div className="relative group/cta">
-                      <div className="absolute -inset-0.5 rounded-xl bg-gradient-to-r from-violet-600 to-brand-600 opacity-30 blur-sm group-hover/cta:opacity-50 transition-opacity" />
+                      <div className="absolute -inset-0.5 rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 opacity-30 blur-sm group-hover/cta:opacity-50 transition-opacity" />
                       <Button
-                        className="relative w-full bg-gradient-to-r from-violet-600 to-brand-600 text-white shadow-lg shadow-violet-500/25 hover:from-violet-500 hover:to-brand-500 hover:shadow-xl hover:shadow-violet-500/35 transition-all duration-200 h-12 text-[15px]"
+                        className="relative w-full bg-gradient-to-r from-violet-600 to-blue-600 text-white shadow-lg shadow-violet-500/25 hover:from-violet-500 hover:to-blue-500 hover:shadow-xl hover:shadow-violet-500/35 transition-all duration-200 h-12 text-[15px]"
                         size="lg"
                         onClick={startAiExtraction}
                       >
@@ -4826,7 +4826,7 @@ export default function BatchUpload() {
                 <div className="flex flex-wrap items-start gap-3">
                   <div className="flex-1 min-w-0">
                     <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-                      {step === 'review' && claims.every(c => c.aiConfidence === 0) && <><ClipboardList className="h-5 w-5 text-brand-600 shrink-0" /> Enter Claim Data</>}
+                      {step === 'review' && claims.every(c => c.aiConfidence === 0) && <><ClipboardList className="h-5 w-5 text-blue-600 shrink-0" /> Enter Claim Data</>}
                       {step === 'review' && claims.some(c => c.aiConfidence > 0) && <><ShieldCheck className="h-5 w-5 text-emerald-600 shrink-0" /> Review Extracted Claims</>}
                       {step === 'publishing' && <><Loader2 className="h-5 w-5 animate-spin shrink-0" /> Publishing Claims...</>}
                       {step === 'complete' && <><CheckCircle className="h-5 w-5 text-emerald-600 shrink-0" /> Claims Published</>}
@@ -5021,7 +5021,7 @@ export default function BatchUpload() {
                                   ? 'bg-gradient-to-r from-red-400 via-rose-500 to-red-400'
                                   : claim.status === 'published'
                                     ? 'bg-gradient-to-r from-emerald-400 via-teal-500 to-emerald-400'
-                                    : 'bg-gradient-to-r from-violet-400 via-brand-700 to-violet-400'
+                                    : 'bg-gradient-to-r from-violet-400 via-indigo-500 to-violet-400'
                               }`} />
 
                               <div className="px-4 py-3">
@@ -5309,9 +5309,9 @@ export default function BatchUpload() {
           </Card>
 
           <Card className="overflow-hidden shadow-sm">
-            <CardHeader className="border-b bg-gradient-to-r from-brand-50/70 to-transparent dark:from-brand-950/20">
+            <CardHeader className="border-b bg-gradient-to-r from-blue-50/70 to-transparent dark:from-blue-950/20">
               <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
                   <ArrowRight className="h-4 w-4" />
                 </div>
                 <CardTitle className="text-base">Process Flow</CardTitle>
@@ -5327,7 +5327,7 @@ export default function BatchUpload() {
                   { n: 5, label: 'Publish to Claims for processing',         tone: 'emerald', done: step === 'complete' },
                 ].map((s, i, arr) => {
                   const toneClasses = {
-                    violet:  'from-violet-500 to-brand-500 text-white',
+                    violet:  'from-violet-500 to-blue-500 text-white',
                     amber:   'from-amber-500 to-orange-500 text-white',
                     emerald: 'from-emerald-500 to-teal-500 text-white',
                   }[s.tone] || 'from-muted to-muted text-muted-foreground'

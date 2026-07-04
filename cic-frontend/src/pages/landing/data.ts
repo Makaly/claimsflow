@@ -1,0 +1,95 @@
+import type { ComponentType } from 'react'
+import {
+  Zap,
+  FileCheck2,
+  Users,
+  Clock,
+  Sparkles,
+  Workflow,
+  Camera,
+  WifiOff,
+  Fingerprint,
+  Bell,
+  ShieldCheck,
+  Lock,
+  Globe,
+  Stethoscope,
+  User,
+  Banknote,
+  ShieldAlert,
+} from 'lucide-react'
+
+export type Icon = ComponentType<{ className?: string }>
+
+/**
+ * Benefit-led stats — every claim here is defensible against the real platform
+ * (see Login.tsx HIGHLIGHTS and the claimsflow/ mobile docs). Do not inflate.
+ */
+export const STATS: Array<{ value: string; label: string; caption: string; icon: Icon }> = [
+  { value: '< 1 min', label: 'Claim routing', caption: 'AI-assisted triage routes every claim in under a minute.', icon: Zap },
+  { value: '100%', label: 'Audit coverage', caption: 'Maker-checker workflow with a full, tamper-evident trail.', icon: FileCheck2 },
+  { value: '7 roles', label: 'One platform', caption: 'Providers, members, officers, fraud, finance & admin — unified.', icon: Users },
+  { value: 'Real-time', label: 'Reimbursements', caption: 'Live status the moment a decision is made.', icon: Clock },
+]
+
+/** Platform capabilities — rendered as a bento grid. `span` drives the layout. */
+export const FEATURES: Array<{ title: string; body: string; icon: Icon; span: 'lg' | 'sm' }> = [
+  { title: 'AI-assisted triage', body: 'Sub-minute routing with line-item extraction and confidence scoring on every invoice.', icon: Sparkles, span: 'lg' },
+  { title: 'Maker-checker workflow', body: 'Two-line approvals with a complete audit trail — nothing is decided in the dark.', icon: Workflow, span: 'sm' },
+  { title: 'Scan with your camera', body: 'Photograph a sheaf of invoices, auto-detect blur, and combine pages into a clean PDF.', icon: Camera, span: 'sm' },
+  { title: 'Works offline', body: 'Submissions queue on spotty connections and replay automatically — no claim is ever lost.', icon: WifiOff, span: 'sm' },
+  { title: 'Biometric sign-in', body: 'Fingerprint or face unlock on mobile. Sign in once, resume securely in a tap.', icon: Fingerprint, span: 'sm' },
+  { title: 'Real-time alerts', body: 'Push notifications and a live notification centre the instant a claim status changes.', icon: Bell, span: 'lg' },
+]
+
+/** Hero "I am a…" path-selection — routes a visitor straight to the right door. */
+export const ROLE_PATHS: Array<{ label: string; blurb: string; to: string; icon: Icon }> = [
+  { label: "I'm a Provider", blurb: 'Submit & track claims, scan invoices, watch reimbursements.', to: '/provider-register', icon: Stethoscope },
+  { label: "I'm a Member", blurb: 'Check your cover, file a claim, follow it in real time.', to: '/register', icon: User },
+  { label: "I'm an Insurer", blurb: 'Triage, approve, flag fraud and reconcile finance.', to: '/login', icon: ShieldCheck },
+]
+
+/** Solutions by role — the Enterprise Gateway "who is this for" band. */
+export const SOLUTIONS: Array<{ role: string; body: string; points: string[]; icon: Icon }> = [
+  {
+    role: 'Providers & billing clerks',
+    body: 'Get paid faster with less paperwork.',
+    points: ['Camera scan & batch upload', 'Auto invoice line-item extraction', 'Live reimbursement status'],
+    icon: Stethoscope,
+  },
+  {
+    role: 'Members & insured',
+    body: 'Submit and follow a claim from your phone.',
+    points: ['File a claim in minutes', 'Real-time status & alerts', 'Biometric, secure sign-in'],
+    icon: User,
+  },
+  {
+    role: 'Claims officers',
+    body: 'Clear the queue with confidence.',
+    points: ['Sub-minute AI triage', 'Two-line maker-checker approvals', 'Complete audit trail'],
+    icon: Workflow,
+  },
+  {
+    role: 'Fraud & finance',
+    body: 'Catch anomalies, settle accurately.',
+    points: ['Anomaly flags & holds', 'Bank reconciliation', 'Real-time payouts'],
+    icon: Banknote,
+  },
+]
+
+/** Security/compliance trust signals — real, defensible (no fabricated logos). */
+export const TRUST_CHIPS: Array<{ label: string; icon: Icon }> = [
+  { label: 'Full audit trail', icon: FileCheck2 },
+  { label: 'Two-factor authentication', icon: Lock },
+  { label: 'GDPR-aligned controls', icon: ShieldCheck },
+  { label: 'Encryption at rest', icon: Lock },
+  { label: 'Fraud monitoring', icon: ShieldAlert },
+  { label: 'Swahili & English', icon: Globe },
+]
+
+/** Mobile-app selling points. */
+export const MOBILE_FEATURES: Array<{ text: string; icon: Icon }> = [
+  { text: 'Scan & batch-upload invoices with on-device OCR', icon: Camera },
+  { text: 'Offline-safe submissions that replay when you reconnect', icon: WifiOff },
+  { text: 'Biometric sign-in and two-factor security', icon: Fingerprint },
+]
