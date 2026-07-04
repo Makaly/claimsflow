@@ -59,11 +59,11 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: process.env.BACKEND_URL || 'http://localhost:4000',
+        target: process.env.BACKEND_URL || 'http://localhost:4001',
         changeOrigin: true,
       },
       '/socket.io': {
-        target: process.env.BACKEND_URL || 'http://localhost:4000',
+        target: process.env.BACKEND_URL || 'http://localhost:4001',
         changeOrigin: true,
         ws: true,
       },
@@ -74,11 +74,11 @@ export default defineConfig({
   preview: {
     proxy: {
       '/api': {
-        target: process.env.BACKEND_URL || 'http://localhost:4000',
+        target: process.env.BACKEND_URL || 'http://localhost:4001',
         changeOrigin: true,
       },
       '/socket.io': {
-        target: process.env.BACKEND_URL || 'http://localhost:4000',
+        target: process.env.BACKEND_URL || 'http://localhost:4001',
         changeOrigin: true,
         ws: true,
       },
