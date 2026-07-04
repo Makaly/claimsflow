@@ -285,7 +285,7 @@ export default function WorkflowDashboard() {
                 <Tooltip
                   contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
                 />
-                <Bar dataKey="claims" fill="hsl(220,70%,50%)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="claims" fill="hsl(354,69%,40%)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>

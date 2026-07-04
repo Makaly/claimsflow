@@ -111,7 +111,7 @@ export default function Documents() {
   const [thumbsLoading, setThumbsLoading] = useState(false)
   const splitPdfDocRef = useRef<any>(null)
 
-  const SEGMENT_COLORS = ['#c22d3c','#10b981','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#f97316','#6366f1']
+  const SEGMENT_COLORS = ['#c22d3c','#10b981','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#f97316','#ac202d']
   const getPageSegmentIdx = (page: number) =>
     splitRanges.findIndex(r => r.start <= page && page <= r.end)
 

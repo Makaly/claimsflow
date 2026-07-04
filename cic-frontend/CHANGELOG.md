@@ -16,6 +16,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
   does not inherit `server.proxy` there) so `vite preview` builds can reach
   the backend locally. Getting-started docs updated to match.
 
+- **Residual indigo accents recolored to the CIC maroon ramp** — a final
+  sweep replaced the leftover indigo (`#6366f1`) and blue accents that the
+  initial rebrand missed: comment/annotation avatars, badges and tab counters
+  in `DocumentViewer`, the active-annotation highlight in `InlinePdfViewer`,
+  zone-drawing outlines and segment colours in `DocumentClassifierEditor` and
+  `Documents`, chart series colours in `Dashboard`, `Reports` and
+  `WorkflowDashboard`, and the signature-pad ink in `BatchUpload` (now a deep
+  brand maroon `#5c1118`). Semantic status colours remain untouched.
+
 - **CIC Group corporate rebrand** — the whole UI now carries the CIC Insurance
   Group identity. Design tokens (`--primary`, `--ring`, charts) and the
   Tailwind `brand`/`cta` ramps switched from the blue/indigo palette to the

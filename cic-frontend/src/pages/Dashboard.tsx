@@ -28,8 +28,8 @@ import api from '@/services/api'
 const STATUS_COLORS: Record<string, string> = {
   approved:     'hsl(160,60%,45%)',
   paid:         'hsl(160,80%,35%)',
-  under_review: 'hsl(220,70%,55%)',
-  submitted:    'hsl(220,60%,65%)',
+  under_review: 'hsl(354,65%,48%)',
+  submitted:    'hsl(354,50%,60%)',
   incomplete:   'hsl(30,80%,55%)',
   rejected:     'hsl(0,72%,55%)',
 }
@@ -43,7 +43,7 @@ const STATUS_LABELS: Record<string, string> = {
   rejected:     'Rejected',
 }
 
-const CHART_COLORS = ['hsl(220,70%,50%)', 'hsl(160,60%,45%)', 'hsl(30,80%,55%)', 'hsl(280,65%,60%)', 'hsl(340,75%,55%)', 'hsl(190,70%,45%)']
+const CHART_COLORS = ['hsl(354,69%,40%)', 'hsl(160,60%,45%)', 'hsl(30,80%,55%)', 'hsl(280,65%,60%)', 'hsl(340,75%,55%)', 'hsl(190,70%,45%)']
 
 interface ServerStats {
   total: number
@@ -491,7 +491,7 @@ function CICDashboard() {
                         <div key={status} className="flex items-center gap-2 text-xs">
                           <span
                             className="h-2.5 w-2.5 rounded-sm"
-                            style={{ background: STATUS_COLORS[status] || 'hsl(220,60%,60%)' }}
+                            style={{ background: STATUS_COLORS[status] || 'hsl(354,55%,55%)' }}
                           />
                           <span className="font-medium text-foreground">
                             {STATUS_LABELS[status] || status}
@@ -547,7 +547,7 @@ function CICDashboard() {
                             key={status}
                             dataKey={status}
                             stackId="providers"
-                            fill={STATUS_COLORS[status] || 'hsl(220,60%,60%)'}
+                            fill={STATUS_COLORS[status] || 'hsl(354,55%,55%)'}
                             name={STATUS_LABELS[status] || status}
                             radius={
                               isFirst && isLast

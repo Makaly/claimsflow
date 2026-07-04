@@ -489,7 +489,7 @@ function AddCommentForm({ users, currentUser, onAdd, onCancel }: {
               const u = users.find(x => x.id === id)
               return (
                 <span key={id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, background: '#f6d5d9', color: '#8e1a25', borderRadius: 20, padding: '2px 8px 2px 6px', border: '1px solid #bfdbfe' }}>
-                  <span style={{ width: 16, height: 16, borderRadius: '50%', background: '#6366f1', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: 'white' }}>
+                  <span style={{ width: 16, height: 16, borderRadius: '50%', background: '#ac202d', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: 'white' }}>
                     {(u?.name || u?.email || '?')[0].toUpperCase()}
                   </span>
                   {u?.name || u?.email}
@@ -538,7 +538,7 @@ function AddCommentForm({ users, currentUser, onAdd, onCancel }: {
                     cursor: 'pointer', textAlign: 'left', transition: 'background 0.1s',
                   }}
                 >
-                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: assigned.includes(u.id) ? '#c22d3c' : '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'white', flexShrink: 0, transition: 'background 0.15s' }}>
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: assigned.includes(u.id) ? '#c22d3c' : '#ac202d', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'white', flexShrink: 0, transition: 'background 0.15s' }}>
                     {(u.name || u.email || '?')[0].toUpperCase()}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -1640,7 +1640,7 @@ export function DocumentViewer({ bytes, url, ready = true, filename = 'document'
                   style={{ flex: 1, padding: '9px 0', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer', background: tab===t ? 'var(--background)' : 'var(--card)', borderBottom: tab===t ? '2px solid #c22d3c' : '2px solid transparent', color: tab===t ? '#c22d3c' : 'var(--muted-foreground)', transition: 'all 0.15s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
                   {t === 'annotations' ? <Highlighter size={12}/> : <MessageSquare size={12}/>}
                   {t.charAt(0).toUpperCase()+t.slice(1)}
-                  {t==='annotations' && annotations.length>0 && <span style={{ background:'#6366f1',color:'white',borderRadius:10,fontSize:9,padding:'0 5px' }}>{annotations.length}</span>}
+                  {t==='annotations' && annotations.length>0 && <span style={{ background:'#ac202d',color:'white',borderRadius:10,fontSize:9,padding:'0 5px' }}>{annotations.length}</span>}
                   {t==='comments' && notes.length>0 && <span style={{ background:'#c22d3c',color:'white',borderRadius:10,fontSize:9,padding:'0 5px' }}>{notes.length}</span>}
                 </button>
               ))}
@@ -1704,11 +1704,11 @@ export function DocumentViewer({ bytes, url, ready = true, filename = 'document'
                   )}
                   {notes.map(note => (
                     <div key={note.id} data-note-id={note.id} onClick={() => setActiveNote(id=>id===note.id?null:note.id)}
-                      style={{ borderRadius:10, marginBottom:10, border:`1px solid ${note.id===activeNote?'#c22d3c':'var(--border)'}`, borderLeft:'4px solid #6366f1', background:'var(--card)', cursor:'pointer', overflow:'hidden', boxShadow: note.id===activeNote ? '0 2px 12px rgba(99,102,241,0.15)' : 'none' }}>
+                      style={{ borderRadius:10, marginBottom:10, border:`1px solid ${note.id===activeNote?'#c22d3c':'var(--border)'}`, borderLeft:'4px solid #ac202d', background:'var(--card)', cursor:'pointer', overflow:'hidden', boxShadow: note.id===activeNote ? '0 2px 12px rgba(99,102,241,0.15)' : 'none' }}>
                       <div style={{ padding:'10px 12px' }}>
                         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
                           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                            <div style={{ width:22, height:22, borderRadius:'50%', background:'#6366f1', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, color:'white' }}>{(note.authorName||'?')[0].toUpperCase()}</div>
+                            <div style={{ width:22, height:22, borderRadius:'50%', background:'#ac202d', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, color:'white' }}>{(note.authorName||'?')[0].toUpperCase()}</div>
                             <span style={{ fontSize:11, fontWeight:600 }}>{note.authorName}</span>
                           </div>
                           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
@@ -1720,7 +1720,7 @@ export function DocumentViewer({ bytes, url, ready = true, filename = 'document'
                         <div style={{ display:'flex', flexWrap:'wrap', gap:5, alignItems:'center' }}>
                           {note.pageRef && <span style={{ fontSize:10, background:'var(--muted)', color:'var(--muted-foreground)', borderRadius:5, padding:'1px 6px', border:'1px solid var(--border)' }}>Page {note.pageRef}</span>}
                           {note.assignedNames.map((n,i) => <span key={i} style={{ fontSize:10, background:'#eff6ff', color:'#8e1a25', borderRadius:5, padding:'1px 6px', border:'1px solid #bfdbfe', display:'flex', alignItems:'center', gap:2 }}><AtSign size={8}/>{n}</span>)}
-                          {note.comments.length>0 && <span style={{ fontSize:10, color:'#6366f1', marginLeft:'auto' }}>{note.comments.length} repl{note.comments.length===1?'y':'ies'}</span>}
+                          {note.comments.length>0 && <span style={{ fontSize:10, color:'#ac202d', marginLeft:'auto' }}>{note.comments.length} repl{note.comments.length===1?'y':'ies'}</span>}
                         </div>
                       </div>
                       {note.id===activeNote && (
@@ -1728,7 +1728,7 @@ export function DocumentViewer({ bytes, url, ready = true, filename = 'document'
                           {note.comments.map(c=>(
                             <div key={c.id} style={{ marginBottom:8, paddingBottom:8, borderBottom:'1px solid var(--border)' }}>
                               <div style={{ display:'flex', alignItems:'center', gap:5, marginBottom:2 }}>
-                                <div style={{ width:18,height:18,borderRadius:'50%',background:'#6366f1',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,color:'white' }}>{(c.authorName||'?')[0].toUpperCase()}</div>
+                                <div style={{ width:18,height:18,borderRadius:'50%',background:'#ac202d',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,color:'white' }}>{(c.authorName||'?')[0].toUpperCase()}</div>
                                 <span style={{ fontSize:11, fontWeight:600, color:'#c22d3c' }}>{c.authorName}</span>
                                 <span style={{ fontSize:10, color:'#94a3b8', marginLeft:'auto' }}>{fmt(c.createdAt)}</span>
                               </div>

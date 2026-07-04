@@ -388,7 +388,7 @@ export function InlinePdfViewer({
                   const isActive = gIdx === activeAnnotIdx
                   const bx = a.bbox!.x * canvasDims.w; const by = a.bbox!.y * canvasDims.h
                   const bw = a.bbox!.w * canvasDims.w; const bh = a.bbox!.h * canvasDims.h
-                  const color = a.anomaly ? '#ef4444' : isActive ? '#6366f1' : '#c22d3c'
+                  const color = a.anomaly ? '#ef4444' : isActive ? '#ac202d' : '#c22d3c'
                   const fillOpacity = isActive ? 0.28 : a.anomaly ? 0.18 : 0.12
                   const labelW = a.label.length * 5.5 + 8
                   const labelY = by > 16 ? by - 14 : by + bh + 2

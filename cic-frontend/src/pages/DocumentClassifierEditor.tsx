@@ -154,7 +154,7 @@ const ZONE_COLORS: Record<string, { bg: string; border: string }> = {
   membership_number:  { bg: 'rgba(139,92,246,0.18)',  border: '#8b5cf6' },
   provider_name:      { bg: 'rgba(236,72,153,0.18)',  border: '#ec4899' },
   diagnosis:          { bg: 'rgba(20,184,166,0.18)',  border: '#14b8a6' },
-  diagnosis_code:     { bg: 'rgba(99,102,241,0.18)',  border: '#6366f1' },
+  diagnosis_code:     { bg: 'rgba(99,102,241,0.18)',  border: '#ac202d' },
   treatment:          { bg: 'rgba(249,115,22,0.18)',  border: '#f97316' },
   service_date:       { bg: 'rgba(234,179,8,0.18)',   border: '#eab308' },
   insurance_company:  { bg: 'rgba(168,85,247,0.18)',  border: '#a855f7' },
@@ -163,7 +163,7 @@ const ZONE_COLORS: Record<string, { bg: string; border: string }> = {
   provider_branch:    { bg: 'rgba(236,72,153,0.18)',  border: '#ec4899' },
   sponsor_coverage:   { bg: 'rgba(16,185,129,0.18)',  border: '#10b981' },
   patient_payable:    { bg: 'rgba(245,158,11,0.18)',  border: '#f59e0b' },
-  admission_date:     { bg: 'rgba(99,102,241,0.18)',  border: '#6366f1' },
+  admission_date:     { bg: 'rgba(99,102,241,0.18)',  border: '#ac202d' },
   discharge_date:     { bg: 'rgba(234,179,8,0.18)',   border: '#eab308' },
   default:            { bg: 'rgba(107,114,128,0.18)', border: '#6b7280' },
 }
@@ -462,7 +462,7 @@ export default function DocumentClassifierEditor() {
   const [splitResult, setSplitResult]           = useState<Array<{ id: string; originalName: string; documentType: string | null }> | null>(null)
   const [openingEditorForDoc, setOpeningEditorForDoc] = useState<string | null>(null)
 
-  const SEGMENT_COLORS = ['#c22d3c','#10b981','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#f97316','#6366f1']
+  const SEGMENT_COLORS = ['#c22d3c','#10b981','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#f97316','#ac202d']
 
   const generateThumbnails = async (doc: pdfjsLib.PDFDocumentProxy, total: number) => {
     setThumbsLoading(true)
@@ -1272,7 +1272,7 @@ export default function DocumentClassifierEditor() {
                       position: 'absolute',
                       left: drawRectStyle.left, top: drawRectStyle.top,
                       width: drawRectStyle.width, height: drawRectStyle.height,
-                      border: '2px dashed #6366f1',
+                      border: '2px dashed #ac202d',
                       backgroundColor: 'rgba(99,102,241,0.12)',
                       pointerEvents: 'none',
                       boxShadow: '0 0 0 1px rgba(99,102,241,0.3)',
@@ -1364,7 +1364,7 @@ export default function DocumentClassifierEditor() {
                       position: 'absolute',
                       left: `${pendingZone.xPercent}%`, top: `${pendingZone.yPercent}%`,
                       width: `${pendingZone.widthPercent}%`, height: `${pendingZone.heightPercent}%`,
-                      border: '2px solid #6366f1',
+                      border: '2px solid #ac202d',
                       backgroundColor: 'rgba(99,102,241,0.15)',
                       pointerEvents: 'none',
                       animation: 'pulse 1s ease-in-out infinite',

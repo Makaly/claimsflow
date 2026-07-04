@@ -29,7 +29,7 @@ import { Pagination } from '@/components/Pagination'
 import { formatCurrency, formatDate, getStatusColor, plural } from '@/lib/utils'
 import { useReportData } from '@/hooks/useReportData'
 
-const COLORS = ['hsl(160,60%,45%)', 'hsl(30,80%,55%)', 'hsl(340,75%,55%)', 'hsl(220,70%,50%)', 'hsl(280,65%,60%)', 'hsl(170,60%,45%)']
+const COLORS = ['hsl(160,60%,45%)', 'hsl(30,80%,55%)', 'hsl(340,75%,55%)', 'hsl(354,69%,40%)', 'hsl(280,65%,60%)', 'hsl(170,60%,45%)']
 
 function fmtAmount(n: number) {
   return `KES ${n.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`

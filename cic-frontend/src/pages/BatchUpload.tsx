@@ -1407,7 +1407,7 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId, jobSetup }: {
                     const p = { x: (e.clientX - r.left) * (sigCanvasRef.current!.width / r.width), y: (e.clientY - r.top) * (sigCanvasRef.current!.height / r.height) }
                     sigPointsRef.current.push(p)
                     const ctx = sigCanvasRef.current!.getContext('2d')!
-                    ctx.strokeStyle = '#1e3a8a'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+                    ctx.strokeStyle = '#5c1118'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'
                     ctx.lineTo(p.x, p.y); ctx.stroke()
                   }}
                   onMouseUp={() => { sigDrawingRef.current = false }}
@@ -1424,7 +1424,7 @@ function DocPreviewModal({ doc, onClose, onSave, sessionId, jobSetup }: {
                     const p = { x: (t.clientX - r.left) * (sigCanvasRef.current!.width / r.width), y: (t.clientY - r.top) * (sigCanvasRef.current!.height / r.height) }
                     sigPointsRef.current.push(p)
                     const ctx = sigCanvasRef.current!.getContext('2d')!
-                    ctx.strokeStyle = '#1e3a8a'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+                    ctx.strokeStyle = '#5c1118'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'
                     ctx.lineTo(p.x, p.y); ctx.stroke()
                   }}
                   onTouchEnd={e => { e.preventDefault(); sigDrawingRef.current = false }}
