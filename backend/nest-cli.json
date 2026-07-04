@@ -5,7 +5,7 @@
   "compilerOptions": {
     "deleteOutDir": true,
     "assets": [
-      { "include": "pbm/assets/**", "watchAssets": true }
+      { "include": "pbm/assets/**" }
     ]
   }
 }
