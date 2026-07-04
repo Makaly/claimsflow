@@ -302,7 +302,11 @@ VITE_API_BASE_URL=http://localhost:4001
 
 > All client-side variables **must** be prefixed with `VITE_` to be included in the browser bundle.
 
-During development, Vite proxies `/api/*` to `http://localhost:4001` (see `vite.config.ts`), so no CORS configuration is needed locally. The same proxy is mirrored under `preview` so `npm run preview` can also reach the backend.
+During development, Vite proxies `/api/*` to `http://localhost:4001` (see `vite.config.ts`), so no CORS configuration is needed locally. The same proxy is mirrored under `preview` so `npm run preview` can also reach the backend. To point the proxy at a different backend, set `BACKEND_URL` when starting the server:
+
+```bash
+BACKEND_URL=http://localhost:5000 npm run dev
+```
 
 ---
 
