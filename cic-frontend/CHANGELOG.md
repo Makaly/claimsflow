@@ -13,9 +13,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 - **Human photography across the landing and login surfaces** — the marketing
   pages now lead with people instead of abstract art, mirroring the imagery
   language of ke.cicinsurancegroup.com ("We keep our word" / "Walking with
-  you"). CIC Group's own hero photography (family, couple, retirees, pharmacy
-  team, Nairobi skyline) was mirrored locally as optimised WebP under
-  `public/images/` and used in: a new hero composition (family photo with the
+  you"). Licensed stock photography in that visual language (family, couple,
+  retirees, pharmacy team, Nairobi skyline) is hosted locally as optimised
+  WebP under `public/images/` (see `docs/branding.md` § Imagery for sourcing
+  and licence notes) and used in: a new hero composition (family photo with the
   dashboard art and a "claim settled" chip floating over it), a photo strip in
   the Solutions band, a new "Walking with you" people section with persona
   testimonial cards, a clinician-with-phone backdrop in the mobile section, a

@@ -82,6 +82,12 @@ same visual language as [ke.cicinsurancegroup.com](https://ke.cicinsurancegroup.
 - The quotes in `TESTIMONIALS` are representative personas for the demo
   surface; replace them with sourced customer quotes before production
   marketing use (see the note in `landing/data.ts`).
+- **Sourcing & licence** — the current set is licensed stock photography,
+  sourced via the Unsplash CDN under the
+  [Unsplash License](https://unsplash.com/license) (free for commercial use,
+  no attribution required). It is a placeholder in CIC's visual language, not
+  CIC-owned photography: have brand/legal sign off on final imagery rights
+  before production marketing use.
 
 | File | Subject | Used in |
 |------|---------|---------|
