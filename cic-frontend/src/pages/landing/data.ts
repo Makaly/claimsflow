@@ -103,19 +103,19 @@ export const MOBILE_FEATURES: Array<{ text: string; icon: Icon }> = [
 export const PEOPLE: Array<{ img: string; alt: string; title: string; body: string }> = [
   {
     img: '/images/provider-pharmacists.webp',
-    alt: 'Two smiling pharmacists in white coats reviewing a tablet at a pharmacy counter',
+    alt: 'A pharmacist in a white coat at his dispensary counter, ready to help',
     title: 'Providers & care teams',
     body: 'Clinics, hospitals and pharmacies submit before the queue clears — and get paid without chasing paper.',
   },
   {
-    img: '/images/members-couple.webp',
-    alt: 'A couple at their kitchen table smiling while going through paperwork together',
+    img: '/images/members-family.webp',
+    alt: 'A family relaxing on their sofa, checking a tablet together',
     title: 'Members & families',
     body: 'Members see exactly where a claim stands, in plain language — no phone calls, no guesswork.',
   },
   {
-    img: '/images/retired-couple.webp',
-    alt: 'An older couple embracing and laughing at sunset',
+    img: '/images/life-stages.webp',
+    alt: 'A grandmother laughing as her grandson hugs her from behind',
     title: 'Every stage of life',
     body: 'From a first payslip to the sunset years — cover that keeps its word when it matters most.',
   },

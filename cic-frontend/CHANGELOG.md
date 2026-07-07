@@ -27,6 +27,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 
 ### Changed
 
+- **Marketing photography re-curated toward candid, authentically African
+  imagery** — the five stock-looking photos (beach family, staged kitchen
+  couple, sunset retirees, posed pharmacy duo, US-style clinic scene) were
+  replaced with candid, editorial-style shots of African subjects: a laughing
+  family in a park (hero), a family checking a tablet on their sofa
+  (`members-family.webp`, was `members-couple.webp`), a grandmother embraced
+  by her grandson (`life-stages.webp`, was `retired-couple.webp`), a
+  pharmacist at his dispensary counter, and a nurse in scrubs at a clinic.
+  Alt text and the branding guide's imagery table updated to match.
+
 - **Dev/preview API proxy retargeted to port 4001** — the Vite `server.proxy`
   for `/api/*` and `/socket.io` now points at `http://localhost:4001` to match
   the backend's port, and the same proxy is mirrored under `preview` (Vite

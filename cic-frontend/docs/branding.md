@@ -85,13 +85,17 @@ same visual language as [ke.cicinsurancegroup.com](https://ke.cicinsurancegroup.
 
 | File | Subject | Used in |
 |------|---------|---------|
-| `hero-family.webp` | Family on the beach | Landing hero |
+| `hero-family.webp` | Young family laughing in a park | Landing hero |
 | `team-claims.webp` | Claims operations team | Solutions strip |
 | `hero-care-team.webp` | Clinicians reviewing scans | Solutions strip |
-| `provider-pharmacists.webp` | Pharmacy team | People card · Login panel |
-| `members-couple.webp` | Couple reviewing paperwork | People card |
-| `retired-couple.webp` | Retirees at sunset | People card |
+| `provider-pharmacists.webp` | Pharmacist at his dispensary counter | People card · Login panel |
+| `members-family.webp` | Family on a sofa with a tablet | People card |
+| `life-stages.webp` | Grandmother laughing with her grandson | People card |
 | `portrait-nurse.webp` / `portrait-doctor.webp` | Persona portraits | Testimonial avatars |
 | `doctor-mobile.webp` | Clinician on a phone | Mobile section backdrop |
-| `member-care.webp` | Nurse with an older member | Trust band |
+| `member-care.webp` | Nurse in scrubs at a clinic | Trust band |
 | `nairobi-skyline.webp` | Nairobi at dusk | Final CTA backdrop |
+
+Curation bar: prefer candid, editorial-style photographs of African subjects
+in natural light over posed studio stock — the surfaces should feel like
+Kenya, not like a photo shoot.

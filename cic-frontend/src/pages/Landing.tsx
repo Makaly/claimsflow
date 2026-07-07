@@ -195,9 +195,9 @@ export default function Landing() {
             <figure className="relative overflow-hidden rounded-[2rem] border border-slate-200 shadow-2xl shadow-brand-950/20 dark:border-white/10">
               <img
                 src="/images/hero-family.webp"
-                alt="A young family walking hand in hand along a beach"
-                width={900}
-                height={702}
+                alt="A young Kenyan family laughing together in a park"
+                width={1100}
+                height={732}
                 fetchPriority="high"
                 className="h-full w-full object-cover"
               />
@@ -522,10 +522,10 @@ export default function Landing() {
           <Reveal className="relative overflow-hidden rounded-3xl border border-slate-200 shadow-xl dark:border-white/10">
             <img
               src="/images/member-care.webp"
-              alt="A nurse gently giving an older member her vaccination"
+              alt="A smiling nurse in scrubs standing in a bright clinic"
               loading="lazy"
               width={1000}
-              height={661}
+              height={666}
               className="h-full w-full object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-brand-950/70 via-transparent to-transparent" />
