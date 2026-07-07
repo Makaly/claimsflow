@@ -8,6 +8,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- **Human photography across the landing and login surfaces** — the marketing
+  pages now lead with people instead of abstract art, mirroring the imagery
+  language of ke.cicinsurancegroup.com ("We keep our word" / "Walking with
+  you"). CIC Group's own hero photography (family, couple, retirees, pharmacy
+  team, Nairobi skyline) was mirrored locally as optimised WebP under
+  `public/images/` and used in: a new hero composition (family photo with the
+  dashboard art and a "claim settled" chip floating over it), a photo strip in
+  the Solutions band, a new "Walking with you" people section with persona
+  testimonial cards, a clinician-with-phone backdrop in the mobile section, a
+  care photo beside the trust band, and a Nairobi-at-dusk backdrop under the
+  final CTA. The login brand panel now sits over the pharmacy-team photo
+  behind a dark wash. All imagery is centralised in `landing/data.ts`
+  (`PEOPLE`, `TESTIMONIALS`) so it can be re-themed by swapping files in
+  `public/images/` without touching layout code.
+
 ### Changed
 
 - **Dev/preview API proxy retargeted to port 4001** — the Vite `server.proxy`

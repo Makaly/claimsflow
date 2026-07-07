@@ -61,3 +61,37 @@ Primary action buttons use the **gold** ramp, not maroon: the shared
 use a `from-cta-500 to-cta-600` gradient with `text-brand-950`. Maroon
 remains the identity colour for links, focus rings, nav states and
 decorative accents.
+
+## Imagery
+
+The marketing surfaces (landing + login) lead with human photography in the
+same visual language as [ke.cicinsurancegroup.com](https://ke.cicinsurancegroup.com/)
+— families, care teams and members, under the "We keep our word" /
+"Walking with you" promise.
+
+- All photos live in `public/images/` as optimised WebP (24–200 KB,
+  pre-cropped to their display aspect ratios).
+- Hero, solutions-strip, mobile and trust images are referenced directly in
+  `src/pages/Landing.tsx`; the people cards and persona quotes are data-driven
+  via `PEOPLE` and `TESTIMONIALS` in `src/pages/landing/data.ts`.
+- To re-theme, replace the files in `public/images/` (keeping the same
+  aspect ratios) and adjust the alt text in `landing/data.ts` — no layout
+  changes needed.
+- Legibility over photos always comes from a maroon/slate gradient scrim
+  (`from-brand-950/70+`), never from darkening the source asset.
+- The quotes in `TESTIMONIALS` are representative personas for the demo
+  surface; replace them with sourced customer quotes before production
+  marketing use (see the note in `landing/data.ts`).
+
+| File | Subject | Used in |
+|------|---------|---------|
+| `hero-family.webp` | Family on the beach | Landing hero |
+| `team-claims.webp` | Claims operations team | Solutions strip |
+| `hero-care-team.webp` | Clinicians reviewing scans | Solutions strip |
+| `provider-pharmacists.webp` | Pharmacy team | People card · Login panel |
+| `members-couple.webp` | Couple reviewing paperwork | People card |
+| `retired-couple.webp` | Retirees at sunset | People card |
+| `portrait-nurse.webp` / `portrait-doctor.webp` | Persona portraits | Testimonial avatars |
+| `doctor-mobile.webp` | Clinician on a phone | Mobile section backdrop |
+| `member-care.webp` | Nurse with an older member | Trust band |
+| `nairobi-skyline.webp` | Nairobi at dusk | Final CTA backdrop |
