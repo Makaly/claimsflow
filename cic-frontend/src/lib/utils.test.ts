@@ -50,7 +50,8 @@ describe('getStatusColor', () => {
   it('returns distinct classes for known statuses', () => {
     expect(getStatusColor('approved')).toMatch(/green/)
     expect(getStatusColor('rejected')).toMatch(/red/)
-    expect(getStatusColor('submitted')).toMatch(/blue/)
+    // "submitted" moved from blue to the CIC brand maroon ramp in the rebrand
+    expect(getStatusColor('submitted')).toMatch(/brand/)
   })
 
   it('returns a fallback for unknown statuses without throwing', () => {
