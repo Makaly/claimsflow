@@ -25,6 +25,8 @@ import {
   SOLUTIONS,
   TRUST_CHIPS,
   MOBILE_FEATURES,
+  PEOPLE,
+  TESTIMONIALS,
 } from './landing/data'
 import { HeroArt, PhoneMock } from './landing/art'
 
@@ -109,6 +111,7 @@ export default function Landing() {
           <nav className="hidden items-center gap-8 text-sm text-slate-600 dark:text-slate-300 md:flex">
             <a href="#solutions" className="transition-colors hover:text-brand-600 dark:hover:text-white">Solutions</a>
             <a href="#platform" className="transition-colors hover:text-brand-600 dark:hover:text-white">Platform</a>
+            <a href="#people" className="transition-colors hover:text-brand-600 dark:hover:text-white">People</a>
             <a href="#mobile" className="transition-colors hover:text-brand-600 dark:hover:text-white">Mobile</a>
             <a href="#trust" className="transition-colors hover:text-brand-600 dark:hover:text-white">Trust</a>
           </nav>
@@ -185,10 +188,36 @@ export default function Landing() {
             </div>
           </div>
 
-          {/* Product visual — dark "screenshot" that floats over a breathing glow */}
-          <div className="relative animate-fade-in [animation-delay:300ms]">
+          {/* Hero visual — CIC's own "protect who you value" photography with the
+              product dashboard floating over it. People first, software second. */}
+          <div className="relative animate-fade-in pb-14 [animation-delay:300ms] sm:pb-20">
             <div className="absolute -inset-6 animate-pulse-glow rounded-[2rem] bg-gradient-to-tr from-brand-500/20 to-brand-700/10 blur-2xl" />
-            <div className="animate-float">
+            <figure className="relative overflow-hidden rounded-[2rem] border border-slate-200 shadow-2xl shadow-brand-950/20 dark:border-white/10">
+              <img
+                src="/images/hero-family.webp"
+                alt="A young family walking hand in hand along a beach"
+                width={900}
+                height={702}
+                fetchPriority="high"
+                className="h-full w-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-brand-950/85 via-brand-950/15 to-transparent" />
+              {/* Floating claim-settled chip — ties the human moment to the product */}
+              <div className="absolute right-4 top-4 flex items-center gap-2 rounded-full border border-white/20 bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-800 shadow-lg backdrop-blur dark:bg-slate-900/80 dark:text-slate-100">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                Claim settled — same day
+              </div>
+              {/* On sm+ the dashboard art overlaps the bottom-left, so the caption
+                  sits bottom-right; on mobile the art is hidden and it spans full width */}
+              <figcaption className="absolute inset-x-0 bottom-0 p-6 sm:left-auto sm:right-0 sm:w-[48%] sm:p-7 sm:text-right">
+                <p className="font-heading text-xl font-bold text-white sm:text-2xl">We keep our word.</p>
+                <p className="mt-1 text-sm leading-relaxed text-white/80">
+                  Behind every claim is a family counting on it. ClaimsFlow makes sure the promise is kept — fast.
+                </p>
+              </figcaption>
+            </figure>
+            {/* Product dashboard overlapping the photo */}
+            <div className="absolute -bottom-2 -left-4 hidden w-[58%] animate-float sm:block lg:-left-8">
               <HeroArt />
             </div>
           </div>
@@ -219,6 +248,44 @@ export default function Landing() {
             title="One platform, every seat at the table"
             body="From the clinic floor to the finance desk — each role gets exactly the tools they need, on the same source of truth."
           />
+          {/* Both sides of a claim, in real rooms — before the role cards */}
+          <div className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {[
+              {
+                img: '/images/team-claims.webp',
+                alt: 'A claims operations team working together at their computers',
+                caption: 'On the claims floor',
+                width: 1600,
+                height: 1067,
+              },
+              {
+                img: '/images/hero-care-team.webp',
+                alt: 'Two clinicians reviewing medical scans together at a workstation',
+                caption: 'In the consulting room',
+                width: 1100,
+                height: 733,
+              },
+            ].map(({ img, alt, caption, width, height }, i) => (
+              <Reveal
+                key={caption}
+                delay={i * 90}
+                className="group relative aspect-[16/9] overflow-hidden rounded-2xl border border-slate-200 shadow-sm dark:border-white/10"
+              >
+                <img
+                  src={img}
+                  alt={alt}
+                  loading="lazy"
+                  width={width}
+                  height={height}
+                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-brand-950/70 via-transparent to-transparent" />
+                <p className="absolute bottom-3 left-4 font-heading text-sm font-semibold text-white drop-shadow">
+                  {caption}
+                </p>
+              </Reveal>
+            ))}
+          </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {SOLUTIONS.map(({ role, body, points, icon: Icon }, i) => (
               <Reveal
@@ -267,6 +334,64 @@ export default function Landing() {
                 </div>
                 <h3 className="font-heading text-base font-semibold text-slate-900 dark:text-white">{title}</h3>
                 <p className="mt-2 max-w-md text-sm leading-relaxed text-slate-500 dark:text-slate-400">{body}</p>
+              </Reveal>
+            ))}
+          </div>
+        </section>
+
+        {/* ── People band — CIC's "Walking with you" promise, in faces ────── */}
+        <section id="people" className="pb-20">
+          <SectionHeading
+            eyebrow="Walking with you"
+            title="Built for the people behind every claim"
+            body="A claim is never just a form — it's a pharmacist closing out the day, a family at the kitchen table, a promise kept over a lifetime."
+          />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {PEOPLE.map(({ img, alt, title, body }, i) => (
+              <Reveal
+                key={title}
+                delay={i * 90}
+                className={cn(
+                  CARD,
+                  'group overflow-hidden hover:-translate-y-1 hover:border-brand-300 hover:shadow-lg dark:hover:border-brand-500/30',
+                )}
+              >
+                <div className="relative aspect-[4/3] overflow-hidden">
+                  <img
+                    src={img}
+                    alt={alt}
+                    loading="lazy"
+                    width={960}
+                    height={720}
+                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-brand-950/60 via-transparent to-transparent" />
+                  <p className="absolute bottom-3 left-4 right-4 font-heading text-base font-semibold text-white drop-shadow">
+                    {title}
+                  </p>
+                </div>
+                <p className="p-5 text-sm leading-relaxed text-slate-600 dark:text-slate-400">{body}</p>
+              </Reveal>
+            ))}
+          </div>
+
+          {/* Field voices — persona quotes (see TESTIMONIALS note in data.ts) */}
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {TESTIMONIALS.map(({ img, alt, quote, name, role }, i) => (
+              <Reveal key={name} delay={i * 90} className={cn(CARD, 'flex items-start gap-4 p-6')}>
+                <img
+                  src={img}
+                  alt={alt}
+                  loading="lazy"
+                  width={112}
+                  height={112}
+                  className="h-14 w-14 flex-shrink-0 rounded-full object-cover object-top ring-2 ring-brand-100 dark:ring-brand-500/30"
+                />
+                <div>
+                  <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">&ldquo;{quote}&rdquo;</p>
+                  <p className="mt-3 font-heading text-sm font-semibold text-slate-900 dark:text-white">{name}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{role}</p>
+                </div>
               </Reveal>
             ))}
           </div>
@@ -345,46 +470,87 @@ export default function Landing() {
             </form>
           </Reveal>
 
-          {/* Inline SVG phone mockup — floats above a breathing glow */}
-          <div className="relative flex justify-center">
+          {/* Clinician-with-phone photo, app mockup floating over it */}
+          <div className="relative">
             <div className="absolute inset-0 animate-pulse-glow rounded-full bg-brand-500/20 blur-3xl" />
-            <div className="animate-float-slow">
+            <figure className="relative hidden overflow-hidden rounded-3xl border border-slate-200 shadow-xl dark:border-white/10 sm:block">
+              <img
+                src="/images/doctor-mobile.webp"
+                alt="A clinician in a white coat using a phone"
+                loading="lazy"
+                width={900}
+                height={600}
+                className="h-full w-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-brand-950/75 via-transparent to-transparent" />
+              <figcaption className="absolute bottom-0 max-w-[55%] p-5 text-sm leading-snug text-white/90">
+                Every action in the field hits the same backend as the desk.
+              </figcaption>
+            </figure>
+            <div className="relative z-10 flex justify-center animate-float-slow sm:-mt-36 sm:justify-end sm:pr-6">
               <PhoneMock />
             </div>
           </div>
         </section>
 
         {/* ── Trust band ──────────────────────────────────────────────────── */}
-        <section id="trust" className="py-20 text-center">
-          <Reveal>
-            <p className="font-heading text-sm font-semibold uppercase tracking-widest text-brand-600 dark:text-brand-400">Built on trust</p>
-            <h2 className="mx-auto mt-3 max-w-2xl font-heading text-3xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-4xl">
-              Enterprise-grade security, from a name Kenya knows
-            </h2>
-            <p className="mx-auto mt-4 max-w-2xl text-base text-slate-600 dark:text-slate-400">
-              ClaimsFlow is built by CIC Insurance Group PLC — backed by an independently reviewed security
-              and GDPR-alignment programme, so your members&rsquo; data is protected at every step.
+        <section id="trust" className="grid grid-cols-1 items-center gap-10 py-20 lg:grid-cols-2">
+          <div>
+            <Reveal>
+              <p className="font-heading text-sm font-semibold uppercase tracking-widest text-brand-600 dark:text-brand-400">Built on trust</p>
+              <h2 className="mt-3 max-w-xl font-heading text-3xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-4xl">
+                Enterprise-grade security, from a name Kenya knows
+              </h2>
+              <p className="mt-4 max-w-xl text-base text-slate-600 dark:text-slate-400">
+                ClaimsFlow is built by CIC Insurance Group PLC — backed by an independently reviewed security
+                and GDPR-alignment programme, so your members&rsquo; data is protected at every step.
+              </p>
+            </Reveal>
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              {TRUST_CHIPS.map(({ label, icon: Icon }, i) => (
+                <Reveal
+                  key={label}
+                  delay={i * 60}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-400/50 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300 dark:hover:border-emerald-400/30 dark:hover:text-white"
+                >
+                  <Icon className="h-4 w-4 text-emerald-500" />
+                  {label}
+                </Reveal>
+              ))}
+            </div>
+          </div>
+          <Reveal className="relative overflow-hidden rounded-3xl border border-slate-200 shadow-xl dark:border-white/10">
+            <img
+              src="/images/member-care.webp"
+              alt="A nurse gently giving an older member her vaccination"
+              loading="lazy"
+              width={1000}
+              height={661}
+              className="h-full w-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-brand-950/70 via-transparent to-transparent" />
+            <p className="absolute bottom-4 left-5 right-5 font-heading text-sm font-semibold text-white drop-shadow">
+              Care first — the paperwork is our job, not your members&rsquo;.
             </p>
           </Reveal>
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-            {TRUST_CHIPS.map(({ label, icon: Icon }, i) => (
-              <Reveal
-                key={label}
-                delay={i * 60}
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-400/50 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300 dark:hover:border-emerald-400/30 dark:hover:text-white"
-              >
-                <Icon className="h-4 w-4 text-emerald-500" />
-                {label}
-              </Reveal>
-            ))}
-          </div>
         </section>
 
         {/* ── Final CTA ───────────────────────────────────────────────────── */}
         <Reveal
           as="section"
-          className="group relative my-8 overflow-hidden rounded-3xl border border-brand-500/20 bg-gradient-to-br from-brand-600 to-brand-700 p-10 text-center shadow-2xl shadow-brand-600/20 lg:p-16"
+          className="group relative my-8 overflow-hidden rounded-3xl border border-brand-500/20 bg-brand-900 p-10 text-center shadow-2xl shadow-brand-600/20 lg:p-16"
         >
+          {/* Nairobi at dusk — home turf, under a maroon wash that keeps text legible */}
+          <img
+            src="/images/nairobi-skyline.webp"
+            alt=""
+            aria-hidden="true"
+            loading="lazy"
+            width={1600}
+            height={719}
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-br from-brand-950/90 via-brand-900/75 to-brand-800/60" />
           {/* Sheen that sweeps across on hover */}
           <div className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/10 to-transparent transition-transform duration-1000 group-hover:translate-x-full" />
           <h2 className="relative mx-auto max-w-2xl font-heading text-3xl font-bold tracking-tight text-white sm:text-4xl">

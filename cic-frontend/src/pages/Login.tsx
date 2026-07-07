@@ -150,9 +150,18 @@ export default function Login() {
       </div>
 
       <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col lg:flex-row">
-        {/* Brand panel */}
-        <aside className="hidden flex-1 flex-col justify-between p-10 lg:flex xl:p-14">
-          <div className="flex items-center gap-3">
+        {/* Brand panel — CIC's own pharmacy-team photography behind a dark wash,
+            so the people who use ClaimsFlow every day greet the person signing in */}
+        <aside className="relative hidden flex-1 flex-col justify-between overflow-hidden p-10 lg:flex xl:p-14">
+          <img
+            src="/images/provider-pharmacists.webp"
+            alt=""
+            aria-hidden="true"
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+          <div className="absolute inset-0 bg-slate-950/80" />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-brand-950/50" />
+          <div className="relative flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white p-1 shadow-lg shadow-brand-900/20 ring-1 ring-brand-100"><img src="/cic-logo.png" alt="CIC Group" className="h-full w-full object-contain" /></div>
             <div>
               <p className="text-sm font-semibold tracking-wide text-slate-100">ClaimsFlow</p>
@@ -160,7 +169,7 @@ export default function Login() {
             </div>
           </div>
 
-          <div className="space-y-8">
+          <div className="relative space-y-8">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-slate-300 backdrop-blur">
               <Sparkles className="h-3.5 w-3.5 text-brand-400" />
               Enterprise claims, simplified
@@ -182,8 +191,8 @@ export default function Login() {
             </ul>
           </div>
 
-          <p className="text-xs text-slate-500">
-            © {new Date().getFullYear()} ClaimsFlow. All rights reserved.
+          <p className="relative text-xs text-slate-400">
+            © {new Date().getFullYear()} ClaimsFlow · CIC Insurance Group PLC — we keep our word.
           </p>
         </aside>
 

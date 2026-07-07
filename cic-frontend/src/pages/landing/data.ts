@@ -93,3 +93,54 @@ export const MOBILE_FEATURES: Array<{ text: string; icon: Icon }> = [
   { text: 'Offline-safe submissions that replay when you reconnect', icon: WifiOff },
   { text: 'Biometric sign-in and two-factor security', icon: Fingerprint },
 ]
+
+/**
+ * Human imagery — CIC Group's own marketing photography, mirrored locally from
+ * ke.cicinsurancegroup.com (the same assets behind "We keep our word" /
+ * "Walking with you"). Swap the files in /public/images to re-theme the
+ * landing surface without touching layout code.
+ */
+export const PEOPLE: Array<{ img: string; alt: string; title: string; body: string }> = [
+  {
+    img: '/images/provider-pharmacists.webp',
+    alt: 'Two smiling pharmacists in white coats reviewing a tablet at a pharmacy counter',
+    title: 'Providers & care teams',
+    body: 'Clinics, hospitals and pharmacies submit before the queue clears — and get paid without chasing paper.',
+  },
+  {
+    img: '/images/members-couple.webp',
+    alt: 'A couple at their kitchen table smiling while going through paperwork together',
+    title: 'Members & families',
+    body: 'Members see exactly where a claim stands, in plain language — no phone calls, no guesswork.',
+  },
+  {
+    img: '/images/retired-couple.webp',
+    alt: 'An older couple embracing and laughing at sunset',
+    title: 'Every stage of life',
+    body: 'From a first payslip to the sunset years — cover that keeps its word when it matters most.',
+  },
+]
+
+/**
+ * Field voices — illustrative quotes for the demo surface, paired with local
+ * portrait photography in /public/images. Names are representative personas,
+ * not real customers; replace with sourced quotes before production marketing.
+ */
+export const TESTIMONIALS: Array<{ img: string; alt: string; quote: string; name: string; role: string }> = [
+  {
+    img: '/images/portrait-nurse.webp',
+    alt: 'A smiling nurse in blue scrubs with a stethoscope, arms crossed',
+    quote:
+      'I photograph a stack of invoices before lunch, and by the time I sit down every line item is already extracted and priced.',
+    name: 'Brian O.',
+    role: 'Provider billing lead · Kisumu',
+  },
+  {
+    img: '/images/portrait-doctor.webp',
+    alt: 'A smiling clinician in a cream suit with a stethoscope, seated',
+    quote:
+      'The maker-checker queue means nothing slips through — and members stopped calling to ask where their claim is.',
+    name: 'Achieng W.',
+    role: 'Claims team lead · Nairobi',
+  },
+]
