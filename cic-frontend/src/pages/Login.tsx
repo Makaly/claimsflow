@@ -230,8 +230,6 @@ export default function Login({ showDemo = false }: LoginProps) {
                 </div>
               )}
 
-              {/* noValidate: zod owns validation so errors render as styled
-                  messages instead of the browser's native bubble */}
               <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="space-y-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="login-email" className="text-slate-200">Email</Label>
