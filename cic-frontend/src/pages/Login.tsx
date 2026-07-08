@@ -69,7 +69,12 @@ const HIGHLIGHTS = [
   'Provider portal with real-time reimbursement status',
 ]
 
-export default function Login() {
+interface LoginProps {
+  /** When true (the /testlogin route), the demo-account quick-login grid is shown. */
+  showDemo?: boolean
+}
+
+export default function Login({ showDemo = false }: LoginProps) {
   const navigate = useNavigate()
   const { login } = useAuthStore()
   const [showPassword, setShowPassword] = useState(false)
@@ -206,6 +211,12 @@ export default function Login() {
 
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 shadow-2xl backdrop-blur-xl sm:p-8">
               <div className="mb-6 space-y-1.5">
+                {showDemo && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-widest text-amber-300">
+                    <Sparkles className="h-3 w-3" />
+                    Test environment
+                  </span>
+                )}
                 <h2 className="text-2xl font-semibold tracking-tight text-white">Welcome back</h2>
                 <p className="text-sm text-slate-400">
                   Sign in to continue to your claims workspace.
@@ -219,7 +230,9 @@ export default function Login() {
                 </div>
               )}
 
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              {/* noValidate: zod owns validation so errors render as styled
+                  messages instead of the browser's native bubble */}
+              <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="space-y-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="login-email" className="text-slate-200">Email</Label>
                   <div className="relative">
@@ -296,57 +309,61 @@ export default function Login() {
                 </Button>
               </form>
 
-              <div className="my-6 flex items-center gap-3">
-                <Separator className="flex-1 bg-white/10" />
-                <span className="text-[11px] font-medium uppercase tracking-widest text-slate-500">
-                  Demo accounts
-                </span>
-                <Separator className="flex-1 bg-white/10" />
-              </div>
+              {showDemo && (
+                <>
+                  <div className="my-6 flex items-center gap-3">
+                    <Separator className="flex-1 bg-white/10" />
+                    <span className="text-[11px] font-medium uppercase tracking-widest text-slate-500">
+                      Demo accounts
+                    </span>
+                    <Separator className="flex-1 bg-white/10" />
+                  </div>
 
-              <div className="grid grid-cols-4 gap-2">
-                {DEMO_ROLES.map(({ key, label, sub, icon: Icon }) => {
-                  const isLoading = demoLoading === key
-                  const isWorkflowRole = key === 'claims_officer' || key === 'maker_checker'
-                  const isFraud = key === 'fraud_officer'
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => handleDemoLogin(key)}
-                      disabled={demoLoading !== null || loading}
-                      className={cn(
-                        'group flex flex-col items-center gap-1 rounded-lg border px-2 py-3 text-xs font-medium transition-all',
-                        isWorkflowRole
-                          ? 'border-brand-500/30 bg-brand-500/5 text-slate-200 hover:border-brand-400/60 hover:bg-brand-500/15 hover:text-white'
-                          : isFraud
-                            ? 'border-red-500/30 bg-red-500/5 text-slate-200 hover:border-red-400/60 hover:bg-red-500/15 hover:text-white'
-                            : 'border-white/10 bg-white/[0.02] text-slate-300 hover:border-brand-500/40 hover:bg-brand-500/10 hover:text-white',
-                        'disabled:cursor-not-allowed disabled:opacity-50'
-                      )}
-                    >
-                      {isLoading ? (
-                        <Loader2 className="h-4 w-4 animate-spin text-brand-400" />
-                      ) : (
-                        <Icon
+                  <div className="grid grid-cols-4 gap-2">
+                    {DEMO_ROLES.map(({ key, label, sub, icon: Icon }) => {
+                      const isLoading = demoLoading === key
+                      const isWorkflowRole = key === 'claims_officer' || key === 'maker_checker'
+                      const isFraud = key === 'fraud_officer'
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => handleDemoLogin(key)}
+                          disabled={demoLoading !== null || loading}
                           className={cn(
-                            'h-4 w-4 transition-colors',
-                            isWorkflowRole ? 'text-brand-400 group-hover:text-brand-300'
-                            : isFraud ? 'text-red-400 group-hover:text-red-300'
-                            : 'text-slate-400 group-hover:text-brand-400',
+                            'group flex flex-col items-center gap-1 rounded-lg border px-2 py-3 text-xs font-medium transition-all',
+                            isWorkflowRole
+                              ? 'border-brand-500/30 bg-brand-500/5 text-slate-200 hover:border-brand-400/60 hover:bg-brand-500/15 hover:text-white'
+                              : isFraud
+                                ? 'border-red-500/30 bg-red-500/5 text-slate-200 hover:border-red-400/60 hover:bg-red-500/15 hover:text-white'
+                                : 'border-white/10 bg-white/[0.02] text-slate-300 hover:border-brand-500/40 hover:bg-brand-500/10 hover:text-white',
+                            'disabled:cursor-not-allowed disabled:opacity-50'
                           )}
-                        />
-                      )}
-                      <span>{label}</span>
-                      {sub && (
-                        <span className="text-[9px] font-normal text-slate-500 group-hover:text-slate-300">
-                          {sub}
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
+                        >
+                          {isLoading ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-brand-400" />
+                          ) : (
+                            <Icon
+                              className={cn(
+                                'h-4 w-4 transition-colors',
+                                isWorkflowRole ? 'text-brand-400 group-hover:text-brand-300'
+                                : isFraud ? 'text-red-400 group-hover:text-red-300'
+                                : 'text-slate-400 group-hover:text-brand-400',
+                              )}
+                            />
+                          )}
+                          <span>{label}</span>
+                          {sub && (
+                            <span className="text-[9px] font-normal text-slate-500 group-hover:text-slate-300">
+                              {sub}
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
 
               <p className="mt-6 text-center text-sm text-slate-400">
                 Don't have an account?{' '}

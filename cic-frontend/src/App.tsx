@@ -159,6 +159,11 @@ function AppRoutes() {
         path="/login"
         element={sessionLive ? <Navigate to="/" replace /> : <Login />}
       />
+      {/* Internal test entry point — same page with the demo-account grid enabled. */}
+      <Route
+        path="/testlogin"
+        element={sessionLive ? <Navigate to="/" replace /> : <Login showDemo />}
+      />
       <Route
         path="/register"
         element={sessionLive ? <Navigate to="/" replace /> : <Register />}
