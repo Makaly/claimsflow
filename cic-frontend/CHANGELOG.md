@@ -76,6 +76,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
   colours (red/amber/emerald) and the violet AI accents are unchanged. See
   `docs/branding.md`.
 
+### Fixed
+
+- **Login validation messages were swallowed by the browser** — the sign-in
+  form now sets `noValidate`, so an invalid email renders the styled zod
+  message ("Invalid email address") instead of being intercepted by the
+  native `type="email"` bubble, which bypassed react-hook-form entirely.
+
+- **Stale smoke tests for the root route** — the e2e suite still expected
+  unauthenticated visits to `/` to redirect to `/login`, which broke when the
+  public landing page took over the root route. The suite now asserts the
+  landing page renders at `/` and that protected routes (e.g. `/claims`)
+  redirect to `/login`.
+
 ### Added
 
 - **Job Setup user assignments** — admins can now restrict which users or providers see a given job setup via a new **Assigned Users** tab in the setup editor. A searchable dropdown (opens on focus, filters by name / email) lists all available users; assigned users are displayed with a badge chip and can be removed inline. Job setup cards show the assigned user count (`N users` / `all users`). Setups with no assignments remain visible to everyone for backwards compatibility.
