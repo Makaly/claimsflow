@@ -95,10 +95,11 @@ export const MOBILE_FEATURES: Array<{ text: string; icon: Icon }> = [
 ]
 
 /**
- * Human imagery — CIC Group's own marketing photography, mirrored locally from
- * ke.cicinsurancegroup.com (the same assets behind "We keep our word" /
- * "Walking with you"). Swap the files in /public/images to re-theme the
- * landing surface without touching layout code.
+ * Human imagery — locally hosted, licensed stock photography chosen to match
+ * the visual language of ke.cicinsurancegroup.com ("We keep our word" /
+ * "Walking with you"). See docs/branding.md § Imagery for sourcing and
+ * licence notes. Swap the files in /public/images to re-theme the landing
+ * surface without touching layout code.
  */
 export const PEOPLE: Array<{ img: string; alt: string; title: string; body: string }> = [
   {
