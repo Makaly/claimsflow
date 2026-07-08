@@ -35,7 +35,10 @@ Routes are defined in `src/App.tsx`. All authenticated routes are wrapped in a `
 4. Renders a 403 screen if the role is not permitted
 
 Public routes (no auth required):
-- `/login`
+- `/login` — production sign-in (email/password only)
+- `/testlogin` — same page with the one-click demo-account chooser enabled
+  (`<Login showDemo />`); intended for seeded dev/test environments and never
+  linked from the UI
 - `/register`
 - `/forgot-password`
 - `/terms`
