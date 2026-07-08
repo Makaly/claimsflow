@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 
 test.describe('app smoke', () => {
-  test('shows the public landing page at / when unauthenticated', async ({ page }) => {
+  test('renders the public landing page at the root route', async ({ page }) => {
     await page.goto('/')
     await expect(page).toHaveURL(/\/$/)
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
