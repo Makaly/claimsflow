@@ -10,6 +10,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 
 ### Added
 
+- **Dedicated `/testlogin` route for demo sign-in** — the demo-account role
+  chooser (Admin, Claims Officer, Maker-Checker, Finance, Fraud Officer,
+  Provider Admin, Provider User) moved off the production login onto a new
+  `/testlogin` route. The page reuses the same `Login` component behind a
+  `showDemo` prop and is visibly badged "Test environment" so demo sessions
+  are never mistaken for production sign-ins.
+
 - **Human photography across the landing and login surfaces** — the marketing
   pages now lead with people instead of abstract art, mirroring the imagery
   language of ke.cicinsurancegroup.com ("We keep our word" / "Walking with
@@ -26,6 +33,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
   `public/images/` without touching layout code.
 
 ### Changed
+
+- **`/login` is now a clean production sign-in** — email, password,
+  remember-me, and the registration links only; no demo credentials are
+  rendered on the route users reach from the landing page. The e2e smoke
+  suite asserts both behaviours: the demo chooser is absent on `/login` and
+  present on `/testlogin`.
 
 - **Marketing photography re-curated toward candid, authentically African
   imagery** — the five stock-looking photos (beach family, staged kitchen

@@ -194,6 +194,20 @@ npm run dev
 
 The app will be available at **http://localhost:3000**.
 
+### Signing In
+
+The application exposes two sign-in routes:
+
+| Route | Purpose |
+|---|---|
+| `/login` | Production sign-in — email and password only. This is the route all in-app links point to. |
+| `/testlogin` | Test/demo sign-in — the same form plus a one-click role chooser (Admin, Claims Officer, Maker-Checker, Finance, Fraud Officer, Provider Admin, Provider User) backed by the seeded demo accounts. The page is clearly badged as a test environment. |
+
+The demo role chooser on `/testlogin` requires the backend database to be
+seeded (`npx prisma db seed` in the backend project). `/testlogin` is intended
+for local development, QA, and demos only — nothing in the production UI links
+to it.
+
 ---
 
 ## Project Structure
