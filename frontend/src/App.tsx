@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { Toaster } from 'sonner'
 import { lazy, Suspense, useEffect } from 'react'
 import { Layout } from '@/components/Layout'
 import { useAuthStore } from '@/store/authStore'
@@ -34,6 +35,8 @@ const DocumentClassifierEditor = lazy(() => import('@/pages/DocumentClassifierEd
 const UnknownDocuments      = lazy(() => import('@/pages/UnknownDocuments'))
 const UnknownDocumentReview = lazy(() => import('@/pages/UnknownDocumentReview'))
 const FeatureFlagsAdmin     = lazy(() => import('@/pages/FeatureFlagsAdmin'))
+const UsageLicense          = lazy(() => import('@/pages/UsageLicense'))
+const InstallationLicense   = lazy(() => import('@/pages/InstallationLicense'))
 
 // Finance chunk
 const Payment               = lazy(() => import('@/pages/Payment'))
@@ -221,6 +224,8 @@ function AppRoutes() {
         <Route path="/pbm" element={<ProtectedRoute allowedRoles={['admin','claims_officer','fraud_officer']}><PBMLookup /></ProtectedRoute>} />
         <Route path="/reports/chronic-cohorts" element={<ProtectedRoute allowedRoles={['admin','claims_officer','fraud_officer']}><ChronicCohorts /></ProtectedRoute>} />
         <Route path="/feature-flags" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><FeatureFlagsAdmin /></ProtectedRoute>} />
+        <Route path="/usage-license" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><UsageLicense /></ProtectedRoute>} />
+        <Route path="/installation-license" element={<ProtectedRoute allowedRoles={ADMIN_ONLY}><InstallationLicense /></ProtectedRoute>} />
         <Route path="/cases" element={<ProtectedRoute allowedRoles={CIC_STAFF}><CaseList /></ProtectedRoute>} />
         <Route path="/cases/:id" element={<ProtectedRoute allowedRoles={CIC_STAFF}><CaseDetail /></ProtectedRoute>} />
         <Route path="/letter-templates" element={<ProtectedRoute allowedRoles={['admin','claims_officer']}><LetterTemplates /></ProtectedRoute>} />
@@ -239,6 +244,7 @@ export default function App() {
       <BrowserRouter>
         <AppRoutes />
       </BrowserRouter>
+      <Toaster richColors position="top-right" />
     </QueryClientProvider>
   )
 }

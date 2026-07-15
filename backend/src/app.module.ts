@@ -50,6 +50,9 @@ import { PbmModule } from './pbm/pbm.module';
 import { ChronicDiseaseModule } from './chronic-disease/chronic-disease.module';
 import { DrModule } from './dr/dr.module';
 import { FeatureFlagsModule } from './feature-flags/feature-flags.module';
+import { LicensingModule } from './licensing/licensing.module';
+import { LicenseServerModule } from './license-server/license-server.module';
+import { InstallationModule } from './installation/installation.module';
 import { TenantModule } from './tenant/tenant.module';
 import { CasesModule } from './cases/cases.module';
 import { CorrespondenceModule } from './correspondence/correspondence.module';
@@ -118,6 +121,9 @@ import { JobSetupModule } from './job-setup/job-setup.module';
     ChronicDiseaseModule,
     DrModule,
     FeatureFlagsModule,
+    LicensingModule,
+    LicenseServerModule,
+    InstallationModule,
     TenantModule,
     CasesModule,
     CorrespondenceModule,

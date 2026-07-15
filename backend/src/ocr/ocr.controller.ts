@@ -1,11 +1,13 @@
 import {
   Controller, Get, Post, UseInterceptors, UploadedFile, UploadedFiles,
-  BadRequestException, Body,
+  BadRequestException, Body, Req,
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { OcrService } from './ocr.service';
 import { VisionRouterService } from './vision-router.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { MeteringService } from '../licensing/metering.service';
+import { METRICS } from '../licensing/plans';
 import * as multer from 'multer';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -18,6 +20,7 @@ export class OcrController {
     private readonly ocrService: OcrService,
     private readonly visionRouter: VisionRouterService,
     private readonly prisma: PrismaService,
+    private readonly metering: MeteringService,
   ) {}
 
   /**
@@ -62,11 +65,16 @@ export class OcrController {
   async extractSingle(
     @UploadedFile() file: Express.Multer.File,
     @Body('model') model?: string,
+    @Req() req?: any,
   ) {
     if (!file) throw new BadRequestException('No file uploaded');
 
+    // tenantId is null until this route sits behind JwtAuthGuard — null is the
+    // internal/single-tenant bucket, which is correct for the phased rollout.
+    const tenantId = req?.user?.tenantId ?? null;
     try {
       const result = await this.ocrService.extractAndParseInvoice(file.path, file.mimetype, model);
+      await this.metering.recordUsage(tenantId, METRICS.EXTRACTIONS, 1).catch(() => undefined);
       return {
         success: true,
         fileName: file.originalname,
@@ -101,9 +109,11 @@ export class OcrController {
   async extractBatch(
     @UploadedFiles() files: Express.Multer.File[],
     @Body('model') model?: string,
+    @Req() req?: any,
   ) {
     if (!files || files.length === 0) throw new BadRequestException('No files uploaded');
 
+    const tenantId = req?.user?.tenantId ?? null;
     const results = [];
     for (const file of files) {
       try {
@@ -125,6 +135,12 @@ export class OcrController {
       } finally {
         try { fs.unlinkSync(file.path); } catch {}
       }
+    }
+
+    // Meter only the extractions that actually ran (failed files don't count).
+    const succeeded = results.filter((r) => r.success).length;
+    if (succeeded > 0) {
+      await this.metering.recordUsage(tenantId, METRICS.EXTRACTIONS, succeeded).catch(() => undefined);
     }
 
     return { results };

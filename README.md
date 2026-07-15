@@ -39,6 +39,7 @@ ClaimsFlow digitises the full medical claims lifecycle — from provider intake 
 - **Diagnosis-vs-billing AI validation** — Gemini LLM scores every line item for clinical appropriateness against the stated diagnosis, flagging mismatches per item and surfacing an overall correspondence verdict to the claims officer
 - **Hardened security** — HttpOnly JWT cookies, Helmet CSP, HSTS, global rate limiting, magic-byte file verification, SSRF guards, centralised password policy (10 chars, 3+ classes), CSPRNG credential generation, startup env validation, AES-256-GCM field-level encryption for special-category data
 - **GDPR / KDPA compliance** — data-subject rights (access, portability, erasure, objection), consent ledger, structured request-ID tracing
+- **Licensing & activation** — subscription tiers (Core / Professional / Enterprise) with metered usage and feature gating, plus installation-based phone-home activation that signs short-lived Ed25519 leases and locks a deployment after ~7 days offline. See [docs/LICENSING.md](docs/LICENSING.md)
 
 ---
 
@@ -200,6 +201,9 @@ The backend reads configuration from `.env`. See [backend/.env.example](backend/
 | `DATA_ENCRYPTION_KEY` | 32-byte hex key for AES-256-GCM field encryption (GDPR Art. 9). Generate with `openssl rand -hex 32` and store in the deployment secret store — **never commit this value**. |
 | `ML_SIDECAR_URL`      | Base URL of the Python ML scoring sidecar (e.g. `http://localhost:8000`). If unset, the backend falls back to a built-in heuristic scorer. |
 | `STORAGE_BACKEND` + `S3_*` | Document storage backend. Defaults to `local` (filesystem). **Set `STORAGE_BACKEND=s3` plus the four `S3_*` keys in any deployment with a non-persistent disk** — see the warning below. Works with AWS S3, Cloudflare R2 and Backblaze B2. |
+| `LICENSE_PUBLIC_KEY`  | Ed25519 public key (PEM) used to verify licence tokens and installation leases offline. Ships with every deployment. See [docs/LICENSING.md](docs/LICENSING.md). |
+| `LICENSE_PRIVATE_KEY` | Ed25519 private key (PEM) that signs licence tokens and leases. **Issuer / license-server node only — never deploy to customer installs.** |
+| `LICENSE_SERVER_URL`  | _(installations only)_ URL of the central license server. When set, the install phones home and locks if it cannot validate for longer than its lease window (~7 days); unset = standalone (never locks). |
 
 > **Never commit `.env`.** Rotate API keys immediately if exposed. See [SECURITY.md](SECURITY.md).
 >
@@ -256,6 +260,7 @@ npm run depcruise       # dependency-cruiser layering rules
 | Architecture / SRD | [docs/architecture/](docs/architecture/)                 |
 | Frontend / landing | [docs/frontend/landing-page.md](docs/frontend/landing-page.md) |
 | GDPR / compliance  | [docs/gdpr/](docs/gdpr/)                                 |
+| Licensing & activation | [docs/LICENSING.md](docs/LICENSING.md)               |
 | Changelog         | [CHANGELOG.md](CHANGELOG.md)                             |
 | Security policy   | [SECURITY.md](SECURITY.md)                               |
 
@@ -274,6 +279,39 @@ npm run depcruise       # dependency-cruiser layering rules
 | `provider_user`  | Provider User          | Provider branch staff — uploads invoices, views own claim status             |
 
 > **v1.7 migration note:** `supervisor` was merged into `claims_officer` and `checker` into `maker_checker`. Existing users were migrated automatically via the `20260514000000_maker_checker_workflow_refactor` migration.
+
+---
+
+## Licensing & activation
+
+ClaimsFlow ships with two complementary licensing models that can be used
+independently or together. Both verify offline against a single Ed25519
+key-pair — the private key stays on the issuing node, the public key ships with
+every deployment.
+
+| Model | Unit | Enforcement | Use case |
+| ----- | ---- | ----------- | -------- |
+| **Subscription** | a tenant | feature gating + monthly usage quotas (`report` or `enforce`) | multi-tenant / cloud |
+| **Installation** | a deployed instance | online activation key + phone-home heartbeat with offline lockout | on-prem / self-hosted |
+
+- **Subscription** — Core / Professional / Enterprise tiers with a published
+  catalog, signed-token activation, per-feature route gating, metered usage
+  (claims, extractions, seats), the full lifecycle (trial → active → expired →
+  read-only, plus paused), a branded PDF certificate, lifecycle emails, a
+  pause/resume workflow, and per-seat billing invoices. Managed from the
+  **Usage & License** admin page.
+- **Installation** — a central license server mints activation keys and signs a
+  short-lived (default 7-day) lease on every check-in. Each install caches and
+  verifies the lease offline; if it cannot reach the server for longer than its
+  lease window (~7 days offline), the lease lapses and the system enters
+  **full lockout** until it reconnects and re-validates. Managed from the
+  **Installation & Licence** admin page. Nodes without `LICENSE_SERVER_URL`
+  configured run standalone and never lock.
+
+Configure with `LICENSE_PUBLIC_KEY` (everywhere), `LICENSE_PRIVATE_KEY`
+(issuer / license-server only) and, for managed installs, `LICENSE_SERVER_URL`.
+Full reference — tiers, lifecycle, API surface, the lease mechanism and the
+issuer CLI — in **[docs/LICENSING.md](docs/LICENSING.md)**.
 
 ---
 

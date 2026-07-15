@@ -21,6 +21,7 @@ import { DocumentsModule } from '../documents/documents.module';
 import { AssignmentModule } from '../assignment/assignment.module';
 import { DocumentClassifierModule } from '../document-classifier/document-classifier.module';
 import { AssistantModule } from '../assistant/assistant.module';
+import { LicensingModule } from '../licensing/licensing.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { AssistantModule } from '../assistant/assistant.module';
     AssignmentModule,
     DocumentClassifierModule,
     AssistantModule,
+    LicensingModule,
   ],
   controllers: [ClaimsController, ClaimLabelsController, ProviderFraudThresholdsController, SignalLiftController],
   providers: [

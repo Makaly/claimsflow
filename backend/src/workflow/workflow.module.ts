@@ -5,8 +5,6 @@ import { CompletenessValidationService } from './completeness-validation.service
 import { AssignmentService } from './assignment.service';
 import { SlaService } from './sla.service';
 import { WorkflowController } from './workflow.controller';
-import { GreenLaneService } from './green-lane.service';
-import { GreenLaneController } from './green-lane.controller';
 import { BulkOperationsController } from './bulk-operations.controller';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PrismaModule } from '../prisma/prisma.module';
@@ -14,15 +12,14 @@ import { AssignmentModule } from '../assignment/assignment.module';
 
 @Module({
   imports: [NotificationsModule, PrismaModule, AssignmentModule],
-  controllers: [WorkflowController, GreenLaneController, BulkOperationsController],
+  controllers: [WorkflowController, BulkOperationsController],
   providers: [
     WorkflowService,
     MakerCheckerService,
     CompletenessValidationService,
     AssignmentService,
     SlaService,
-    GreenLaneService,
   ],
-  exports: [WorkflowService, MakerCheckerService, SlaService, GreenLaneService],
+  exports: [WorkflowService, MakerCheckerService, SlaService],
 })
 export class WorkflowModule {}
