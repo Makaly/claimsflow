@@ -36,6 +36,26 @@ export class PreAuthController {
     });
   }
 
+  @Get('letters')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'claims_officer', 'maker_checker', 'provider_admin', 'provider_user')
+  getLetters(
+    @Request() req: any,
+    @Query('memberNumber') memberNumber?: string,
+    @Query('search') search?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    const isProvider = ['provider_admin', 'provider_user'].includes(req.user.role);
+    return this.preAuthService.getLetters({
+      memberNumber,
+      search,
+      providerId: isProvider ? req.user.providerId : undefined,
+      limit: limit ? parseInt(limit) : undefined,
+      offset: offset ? parseInt(offset) : undefined,
+    });
+  }
+
   @Patch(':id/review')
   @UseGuards(RolesGuard)
   @Roles('admin', 'claims_officer')
