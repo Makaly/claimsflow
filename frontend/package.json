@@ -105,7 +105,7 @@
     "autoprefixer": "^10.5.4",
     "dependency-cruiser": "^17.4.3",
     "eslint": "^10.8.1",
-    "jest-axe": "^10.0.0",
+    "jest-axe": "^11.0.0",
     "jsdom": "^29.1.1",
     "postcss": "^8.5.26",
     "storybook": "^8.6.18",
