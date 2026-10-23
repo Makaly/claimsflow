@@ -9,6 +9,32 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **Installation licensing — phone-home activation & heartbeat leases**
+  (`backend/src/license-server/`, `backend/src/installation/`,
+  `frontend/src/pages/InstallationLicense.tsx`) — deployment-based licensing that
+  tracks each installed instance of the system. A central license server issues
+  online **activation keys** and, on every check-in, signs a short-lived
+  (default 7-day) Ed25519 **lease** that the installation caches and verifies
+  offline. A scheduled heartbeat refreshes the lease; if an installation cannot
+  reach the server for longer than its lease window (~7 days offline) the lease
+  lapses and a global guard puts the system into **full lockout** (HTTP 403
+  `INSTALLATION_LOCKED`) until it reconnects and re-validates. Admins manage the
+  fleet — generate/revoke keys, suspend/resume/revoke installations, view
+  last-seen status — from the **Installation & Licence** admin page. Nodes with
+  no `LICENSE_SERVER_URL` configured run standalone and never lock. See
+  [docs/LICENSING.md](docs/LICENSING.md).
+- **Subscription licensing — plans, entitlements & metered usage**
+  (`backend/src/licensing/`, `frontend/src/pages/UsageLicense.tsx`) — tenant
+  subscription model with a published tier catalog (Core / Professional /
+  Enterprise), Ed25519 signed-token verification, per-feature route gating, and
+  monthly metered usage (claims, extractions, seats) in `report` or `enforce`
+  mode. Includes the full licence lifecycle (trial → active → expired →
+  read-only, plus suspended/paused), a branded PDF licence certificate,
+  activation/expiry-reminder emails, a pause/resume workflow that credits back
+  paused days, and per-seat billing invoices. Admins issue, renew, pause, resume
+  and revoke licences from the **Usage & License** page. See
+  [docs/LICENSING.md](docs/LICENSING.md).
+
 - **Non-blocking billing audit with background caching**
   (`backend/src/claims/diagnosis-billing.service.ts`,
   `backend/src/claims/claims.controller.ts`,

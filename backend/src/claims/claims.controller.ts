@@ -31,6 +31,11 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { ProviderApprovedGuard } from '../auth/guards/provider-approved.guard';
 import { EmailService } from '../notifications/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { EntitlementGuard } from '../licensing/entitlement.guard';
+import { LicenseGuard } from '../licensing/license.guard';
+import { UsageMeterInterceptor } from '../licensing/usage-meter.interceptor';
+import { RequiresEntitlement, Meter } from '../licensing/decorators';
+import { FEATURES, METRICS } from '../licensing/plans';
 
 // Allowed MIME signatures (magic bytes) for uploaded files
 const MAGIC_BYTES: Record<string, Buffer[]> = {
@@ -51,7 +56,7 @@ function verifyMagicBytes(filePath: string, ext: string): boolean {
 }
 
 @Controller('claims')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, EntitlementGuard, LicenseGuard)
 export class ClaimsController {
   private readonly logger = new Logger(ClaimsController.name);
 
@@ -66,7 +71,9 @@ export class ClaimsController {
 
   @Post()
   @UseGuards(ProviderApprovedGuard)
+  @Meter(METRICS.CLAIMS)
   @UseInterceptors(
+    UsageMeterInterceptor,
     FileInterceptor('file', {
       storage: diskStorage({
         destination: './uploads/claims',
@@ -230,6 +237,7 @@ export class ClaimsController {
 
   @Post(':id/fraud/escalate')
   @Roles('admin', 'claims_officer', 'fraud_officer')
+  @RequiresEntitlement(FEATURES.FRAUD_SCORING)
   escalateToFraud(
     @Param('id') id: string,
     @Body() body: { reason: string },
@@ -240,6 +248,7 @@ export class ClaimsController {
 
   @Post(':id/fraud/clear')
   @Roles('admin', 'fraud_officer')
+  @RequiresEntitlement(FEATURES.FRAUD_SCORING)
   clearFraud(
     @Param('id') id: string,
     @Body() body: { notes?: string },
@@ -250,6 +259,7 @@ export class ClaimsController {
 
   @Post(':id/fraud/confirm')
   @Roles('admin', 'fraud_officer')
+  @RequiresEntitlement(FEATURES.FRAUD_SCORING)
   confirmFraud(
     @Param('id') id: string,
     @Body() body: { notes?: string },
@@ -375,6 +385,7 @@ export class ClaimsController {
 
   /** Fill in the gaps for one billing line (missing amount / code / verdict). */
   @Post('billing-validation/enrich-item')
+  @RequiresEntitlement(FEATURES.BILLING_AUDIT)
   enrichBillingItem(@Body() body: {
     claimId?: string;
     itemName: string;
@@ -389,6 +400,7 @@ export class ClaimsController {
   /** Vision billing validation — reads the invoice image/PDF directly. Used in
    *  the upload stage when text extraction found no line items. */
   @Post('billing-validation/assess-vision')
+  @RequiresEntitlement(FEATURES.BILLING_AUDIT)
   @UseInterceptors(FileInterceptor('file', {
     limits: { fileSize: parseInt(process.env.MAX_FILE_SIZE) || 12_582_912 },
   }))
@@ -406,6 +418,7 @@ export class ClaimsController {
 
   /** Inline billing validation — accepts raw data directly (no DB claim required). */
   @Post('billing-validation/assess')
+  @RequiresEntitlement(FEATURES.BILLING_AUDIT)
   assessBillingInline(@Body() body: {
     diagnosis?: string;
     treatment?: string;

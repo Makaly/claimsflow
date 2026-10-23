@@ -1440,6 +1440,26 @@ model Tenant {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  // ── Licensing (E6 → E7 rebuild). The tenant row IS the live license record;
+  // the `licenses` history table keeps every issued/retired token. These
+  // denormalised columns are the fast path read on every request by the
+  // LicenseGuard/FeatureGate without re-parsing a token.
+  //   plan:          core | pro | enterprise   (the entitlement tier)
+  //   licenseType:   TRIAL | CORE | PRO | ENTERPRISE | ON_PREM
+  //   licenseStatus: ACTIVE | EXPIRED | SUSPENDED | REVOKED
+  //   max* : seat / monthly-claim / monthly-extraction caps (999999 = unlimited)
+  plan                   String    @default("core")
+  licenseKey             String?   @unique
+  licenseType            String    @default("TRIAL")
+  licenseStartDate       DateTime  @default(now())
+  licenseExpiryDate      DateTime?
+  licenseStatus          String    @default("ACTIVE")
+  licensePausedAt        DateTime?
+  maxSeats               Int       @default(10)
+  maxClaimsPerMonth      Int       @default(5000)
+  maxExtractionsPerMonth Int       @default(10000)
+  enabledFeaturesJsonb   Json      @default("[]")
+
   users            User[]
   providers        Provider[]
   claims           Claim[]
@@ -1449,10 +1469,260 @@ model Tenant {
   ocrExtractions           OcrExtraction[]
   batchSubmissions         BatchSubmission[]
   providerExtractionProfiles ProviderExtractionProfile[]
+  licenses         License[]
+  entitlements     Entitlement[]
+  usageCounters    UsageCounter[]
+  pauseRequests    LicensePauseRequest[]
+  billingInvoices  LicenseBillingInvoice[]
 
   @@index([slug])
   @@index([active])
+  @@index([licenseStatus])
+  @@index([licenseExpiryDate])
   @@map("tenants")
+}
+
+/// Licensing (E6). A signed, offline-verifiable license token scoped to one
+/// tenant. The raw `token` is an Ed25519-signed payload (base64url(payload).
+/// base64url(sig)); `featuresJsonb`/`limitsJsonb`/`plan` are the VERIFIED
+/// snapshot decoded from it, denormalised so we never re-parse the token on
+/// every request. Renewals INSERT a new row; the previous row is set to
+/// status='expired' or 'revoked' — keep history, never UPDATE the token in place.
+///   plan:        core | pro | enterprise
+///   enforcement: report | enforce  (report = meter only, never block — used
+///                for internal CIC rollout and trials)
+///   status:      active | grace | expired | revoked
+///   limitsJsonb: { claims?: number, extractions?: number, seats?: number }
+///                (a metric absent or null = unlimited)
+model License {
+  id             String    @id @default(uuid())
+  tenantId       String?
+  plan           String    @default("core")
+  token          String    @db.Text
+  featuresJsonb  Json      @default("[]")
+  limitsJsonb    Json      @default("{}")
+  enforcement    String    @default("report")
+  issuedAt       DateTime
+  expiresAt      DateTime?
+  graceDays      Int       @default(14)
+  status         String    @default("active")
+  issuedTo       String?
+  lastVerifiedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status])
+  @@index([status])
+  @@map("licenses")
+}
+
+/// Per-tenant feature override (E6). Layered ON TOP of the active License's
+/// featuresJsonb so an admin can grant/deny a single capability without
+/// re-issuing a token (handy for the internal/phased period). `allowed=false`
+/// always wins over a license grant; `allowed=true` adds a feature the license
+/// didn't include. source: license | override (manual).
+model Entitlement {
+  id        String   @id @default(uuid())
+  tenantId  String?
+  feature   String
+  allowed   Boolean  @default(true)
+  source    String   @default("override")
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, feature])
+  @@index([tenantId])
+  @@map("entitlements")
+}
+
+/// Metered usage counter (E6). One row per (tenant, metric, period). `period`
+/// is a monthly bucket "YYYY-MM"; `limit` is the snapshot of the license limit
+/// at period start (null = unlimited) so a mid-month plan change doesn't
+/// retroactively breach. metric: claims | extractions | seats.
+model UsageCounter {
+  id        String   @id @default(uuid())
+  tenantId  String?
+  metric    String
+  period    String
+  used      Int      @default(0)
+  limit     Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, metric, period])
+  @@index([tenantId, period])
+  @@map("usage_counters")
+}
+
+/// Subscription pause/resume workflow (E7). A tenant admin requests a PAUSE
+/// (with proof) or RESUME; an admin approves/rejects. On approval the tenant's
+/// licenseStatus flips SUSPENDED↔ACTIVE and, on resume, the days the licence sat
+/// paused are credited back onto licenseExpiryDate so paid time isn't lost.
+///   type:   PAUSE | RESUME
+///   status: PENDING | APPROVED | REJECTED
+model LicensePauseRequest {
+  id          String    @id @default(uuid())
+  tenantId    String
+  type        String    @default("PAUSE")
+  status      String    @default("PENDING")
+  reason      String?
+  proofUrl    String?
+  ticketRef   String?
+  daysPaused  Int?
+  requestedBy String?
+  reviewedBy  String?
+  reviewedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([status])
+  @@map("license_pause_requests")
+}
+
+/// Subscription billing invoice (E7). Per-seat priced, VAT-inclusive, may be
+/// settled in installments via LicenseBillingPayment. When fully paid the
+/// licence is applied with expiry = periodTo so the term matches what was paid.
+///   status: DRAFT | SENT | PAID | VOID
+model LicenseBillingInvoice {
+  id            String    @id @default(uuid())
+  tenantId      String
+  invoiceNumber String    @unique
+  plan          String
+  seats         Int       @default(1)
+  unitPrice     Decimal   @default(0) @db.Decimal(12, 2)
+  subtotal      Decimal   @default(0) @db.Decimal(12, 2)
+  vatRate       Decimal   @default(0) @db.Decimal(5, 4)
+  vatAmount     Decimal   @default(0) @db.Decimal(12, 2)
+  total         Decimal   @default(0) @db.Decimal(12, 2)
+  amountPaid    Decimal   @default(0) @db.Decimal(12, 2)
+  currency      String    @default("KES")
+  periodFrom    DateTime
+  periodTo      DateTime
+  status        String    @default("DRAFT")
+  licenseApplied Boolean  @default(false)
+  integrityHash String?
+  issuedTo      String?
+  notes         String?
+  createdBy     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  tenant   Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payments LicenseBillingPayment[]
+
+  @@index([tenantId, status])
+  @@index([status])
+  @@map("license_billing_invoices")
+}
+
+/// A single payment posted against a LicenseBillingInvoice (full or partial).
+model LicenseBillingPayment {
+  id        String   @id @default(uuid())
+  invoiceId String
+  amount    Decimal  @default(0) @db.Decimal(12, 2)
+  method    String   @default("BANK_TRANSFER")
+  reference String?
+  paidAt    DateTime @default(now())
+  recordedBy String?
+  createdAt DateTime @default(now())
+
+  invoice LicenseBillingInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("license_billing_payments")
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Installation-based licensing (E8) — phone-home / heartbeat model.
+//
+// Independent of the tenant-based model above (both are kept). Here the unit is
+// a DEPLOYED INSTALLATION of the system. Each install activates with an online
+// key, then phones home to the central LICENSE SERVER on a schedule. The server
+// signs a short-lived (default 7-day) Ed25519 *lease*; the install caches and
+// verifies it offline. If the install can't refresh the lease before it expires
+// (i.e. ~7 days with no internet), it goes inactive → full lockout until it
+// reconnects. `Installation` + `ActivationKey` live on the SERVER; the
+// singleton `SystemInstallation` is the CLIENT's local identity + cached lease.
+// ════════════════════════════════════════════════════════════════════════════
+
+/// License-server side: registry of every deployed install that has activated.
+/// status: PENDING | ACTIVE | SUSPENDED | REVOKED | EXPIRED
+model Installation {
+  id             String    @id @default(uuid()) // = the installationId the client generated
+  label          String?
+  hostname       String?
+  version        String?
+  plan           String    @default("core")
+  status         String    @default("ACTIVE")
+  featuresJsonb  Json      @default("[]")
+  limitsJsonb    Json      @default("{}")
+  secretHash     String? // sha256 of the install secret (machine-to-machine auth)
+  activationKey  String?
+  registeredAt   DateTime  @default(now())
+  lastSeenAt     DateTime?
+  lastSeenIp     String?
+  leaseTtlHours  Int       @default(168) // 7 days — the offline cutoff
+  expiresAt      DateTime? // licence term end (separate from lease TTL)
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([status])
+  @@index([lastSeenAt])
+  @@map("installations")
+}
+
+/// License-server side: activation keys an admin mints. An install presents one
+/// to activate; on success it's bound to that installation.
+/// status: UNUSED | USED | REVOKED
+model ActivationKey {
+  id                  String    @id @default(uuid())
+  key                 String    @unique
+  plan                String    @default("core")
+  status              String    @default("UNUSED")
+  maxActivations      Int       @default(1)
+  usedCount           Int       @default(0)
+  boundInstallationId String?
+  issuedTo            String?
+  termDays            Int       @default(365) // licence term granted on activation
+  expiresAt           DateTime? // key usable-until (not the licence term)
+  createdBy           String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([status])
+  @@map("activation_keys")
+}
+
+/// Client side: this deployment's local identity + cached lease. Singleton (one
+/// row, enforced by the unique `singleton` flag).
+/// status: UNLICENSED | ACTIVE | LOCKED | SUSPENDED | REVOKED
+model SystemInstallation {
+  id              String    @id @default(uuid()) // the installationId
+  singleton       Boolean   @default(true) @unique // forces a single row
+  label           String?
+  installSecret   String? // local-only secret used to authenticate heartbeats
+  activationKey   String?
+  plan            String?
+  status          String    @default("UNLICENSED")
+  leaseToken      String?   @db.Text // latest Ed25519-signed lease
+  leaseExpiresAt  DateTime?
+  lastValidatedAt DateTime?
+  lastError       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("system_installation")
 }
 
 /// Workflow definition for the visual designer (F4).
@@ -1677,27 +1947,9 @@ model AssistantInteraction {
   @@map("assistant_interactions")
 }
 
-// ─── C3: Green-lane auto-triage ──────────────────────────────────────────────
-
-/// Policy rule governing automatic approval of low-risk claims.
-model GreenLaneRule {
-  id                  String   @id @default(uuid())
-  name                String
-  minValue            Float?
-  maxValue            Float?
-  minScorecardQuality Float?
-  minOcrConfidence    Float?
-  maxFraudScore       Float?
-  requireNoSignals    Boolean  @default(true)
-  isActive            Boolean  @default(true)
-  providerId          String? // null = applies globally
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  @@index([isActive])
-  @@index([providerId])
-  @@map("green_lane_rules")
-}
+// ─── C3: Green-lane auto-triage — REMOVED ────────────────────────────────────
+// The GreenLaneRule model and its `green_lane_rules` table were dropped: claims
+// must never be auto-approved. See migration 20260622150000_drop_green_lane.
 
 // ─── D1: HL7 / FHIR connector ────────────────────────────────────────────────
 

@@ -5,7 +5,7 @@ import {
   UserCheck, UserCog, Users, Activity, BarChart3, Shield,
   Settings, ChevronLeft, ChevronRight, Network, AlertOctagon,
   KeyRound, ShieldCheck, FileQuestion, Scale, CreditCard, Clock, SlidersHorizontal,
-  ScanLine, Database, ScanBarcode, Layers,
+  ScanLine, Database, ScanBarcode, Layers, ServerCog,
 } from 'lucide-react'
 import { useUnknownDocCount } from '@/hooks/useUnknownDocCount'
 import { cn } from '@/lib/utils'
@@ -57,6 +57,8 @@ const navigation: NavItem[] = [
   { name: 'Bank Reconciliation', href: '/bank-reconciliation', icon: CreditCard, roles: ['admin', 'finance'] as Role[] },
   { name: 'NPS Dashboard',      href: '/nps', icon: BarChart3, roles: ['admin', 'finance', 'claims_officer'] as Role[] },
   { type: 'separator', name: 'Admin', roles: ['admin'] },
+  { name: 'Usage & License', href: '/usage-license', icon: KeyRound, roles: ['admin'] },
+  { name: 'Installation & Licence', href: '/installation-license', icon: ServerCog, roles: ['admin'] },
   { name: 'Users', href: '/users', icon: Users, roles: ['admin'] },
   { name: 'Roles', href: '/roles', icon: ShieldCheck, roles: ['admin'] },
   { name: 'Permissions', href: '/permissions', icon: KeyRound, roles: ['admin'] },
