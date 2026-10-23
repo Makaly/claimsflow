@@ -26,6 +26,10 @@ class UpdateSettingsDto {
   enabled?: boolean;
 
   @IsOptional()
+  @IsBoolean()
+  billingExempt?: boolean;
+
+  @IsOptional()
   @IsNumber()
   @Min(0)
   @Max(100000)
@@ -39,8 +43,8 @@ class UpdateSettingsDto {
 
 class RecordEventDto {
   @IsString()
-  @IsIn(['desktop', 'mobile', 'camera'])
-  deviceClass!: 'desktop' | 'mobile' | 'camera';
+  @IsIn(['desktop', 'mobile', 'camera', 'web'])
+  deviceClass!: 'desktop' | 'mobile' | 'camera' | 'web';
 
   @IsOptional()
   @IsString()

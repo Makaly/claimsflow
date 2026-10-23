@@ -9,6 +9,50 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **Scan metering — provider billing exemption & waived-revenue tracking**
+  (`backend/prisma/schema.prisma`,
+  `backend/prisma/migrations/20260630000000_add_scan_billing_exempt_and_list_cost/`,
+  `backend/src/scan-metering/`) — a provider can be flagged `billingExempt` so it
+  keeps scanning and uploading without being charged. Each `ScanEvent` now stores
+  `listCostAtScan` (the notional list price) alongside `costAtScan` (what was
+  actually billed, `0` when exempt or failed), so summary and per-provider
+  aggregates can report the **foregone (waived)** revenue (`list − billed`). A
+  `'web'` device class is added for uploads. The migration backfills existing
+  events `listCostAtScan = costAtScan`.
+
+- **Document uploads metered as billable web scans**
+  (`backend/src/documents/documents.controller.ts`,
+  `backend/src/documents/documents.module.ts`) — a document uploaded through the
+  web app is recorded on the Scan Metering dashboard like a physical scan, under
+  the `'web'` device class. Metering is best-effort and post-persistence: a
+  metering failure or a disabled/exempt provider never blocks the upload.
+
+- **NPS — full feedback loop** (`backend/src/nps/`) — `submit` enriches each
+  response from its claim (provider, rejection reason, member, facility type) and
+  is idempotent per `(claim, member)` so re-rating updates rather than
+  double-counts. The dashboard now returns a promoter/passive/detractor
+  breakdown, a 0–10 distribution, a daily NPS trend, per-segment NPS (provider
+  UUIDs resolved to names), and recent verbatim comments. New `GET /nps/status`
+  (already responded?) and `GET /nps/export` (CSV) endpoints.
+
+- **Appeals — analytics, filtering, and message attachments**
+  (`backend/src/appeals/`, `backend/prisma/seed-appeals.sql`,
+  `backend/prisma/seed-appealable-claims.sql`, `docs/appeals.md`) — `getAppeals`
+  gains outcome/search/date-range filters, whitelisted sort keys, and per-appeal
+  message metadata for unread badges. A new `GET /appeals/analytics` returns
+  status/outcome splits, upheld rate, average resolution time, SLA-overdue count
+  (14-day target), a 6-month trend, and top providers. Appeal messages can carry
+  file attachments, served through an auth-guarded, path-traversal-safe handler.
+  Two SQL seeds populate a working demo, and `docs/appeals.md` documents the
+  module end to end.
+
+- **Pre-auth — surface claims carrying classified authorization letters**
+  (`backend/src/preauth/`) — a new `GET /preauth/letters` reads the OCR page
+  classification and lists every claim whose document packet contains a page
+  categorised as a pre-auth / authorization letter (matching both the Claude
+  vision `authorization_letter` and Gemini `pre_auth` dialects), with member /
+  search filters and provider scoping.
+
 - **Non-blocking billing audit with background caching**
   (`backend/src/claims/diagnosis-billing.service.ts`,
   `backend/src/claims/claims.controller.ts`,

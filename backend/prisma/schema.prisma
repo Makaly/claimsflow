@@ -1631,6 +1631,10 @@ model NpsResponse {
 model ScanMeteringSettings {
   providerId      String   @id
   enabled         Boolean  @default(true)
+  /// When true the provider keeps scanning/uploading but is NOT charged —
+  /// each event still records its list price so dashboards can show the
+  /// foregone (waived) revenue. Distinct from `enabled`, which blocks scans.
+  billingExempt   Boolean  @default(false)
   costPerScan     Decimal  @default(5.00) @db.Decimal(10, 2)
   currency        String   @default("KES")
   updatedByUserId String?
@@ -1799,7 +1803,7 @@ model ScanEvent {
   userId          String
   providerId      String?
   branchId        String?
-  deviceClass     String // 'desktop' | 'mobile' | 'camera'
+  deviceClass     String // 'desktop' | 'mobile' | 'camera' | 'web'
   os              String? // 'linux' | 'windows' | 'darwin' | 'android' | 'ios' | 'web'
   machineHostname String?
   userAgent       String?
@@ -1808,6 +1812,10 @@ model ScanEvent {
   mode            String?
   pages           Int?
   costAtScan      Decimal  @default(0) @db.Decimal(10, 2)
+  /// Standard list price this event would have cost at scan time, regardless
+  /// of exemption. `costAtScan` is what was actually billed (0 when the
+  /// provider is billing-exempt); the difference is foregone revenue.
+  listCostAtScan  Decimal  @default(0) @db.Decimal(10, 2)
   currency        String   @default("KES")
   success         Boolean  @default(true)
   errorMessage    String?

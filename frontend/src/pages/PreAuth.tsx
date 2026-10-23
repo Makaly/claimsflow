@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, type JSX } from 'react'
-import { ShieldCheck, RefreshCw, CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react'
+import { ShieldCheck, RefreshCw, CheckCircle, XCircle, Clock, AlertCircle, FileText, Eye, Loader2 } from 'lucide-react'
+import { DocumentViewer } from '@/components/DocumentViewer'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -40,6 +41,37 @@ interface PreAuth {
   createdAt: string
   updatedAt: string
 }
+
+// Invoice/claim whose uploaded document packet was OCR-classified as containing
+// a pre-authorisation letter. Sourced from GET /pre-auth/letters.
+interface LetterPage {
+  pageNumber: number
+  categoryLabel: string
+  confidence?: number | null
+  summary?: string | null
+}
+interface PreAuthLetter {
+  claimId: string
+  claimNumber: string
+  barcode: string
+  providerId: string
+  providerName?: string | null
+  memberNumber?: string | null
+  memberName?: string | null
+  invoiceNumber?: string | null
+  invoiceAmount?: number | null
+  dateOfService?: string | null
+  status: string
+  workflowStage: string
+  submittedAt: string
+  documentId?: string | null
+  documentName?: string | null
+  mimeType?: string | null
+  letterPages: LetterPage[]
+}
+
+interface DocPage { pageNumber: number; category: string; categoryLabel: string; confidence?: number; summary?: string }
+interface OcrFieldChip { page: number; label: string; value: string; confidence?: number; anomaly?: boolean }
 
 // ─── Status helpers ───────────────────────────────────────────────────────────
 
@@ -105,6 +137,26 @@ export default function PreAuth() {
   })
   const [submitting, setSubmitting] = useState(false)
 
+  // Pre-Auth Letters (invoices whose document packet contains a pre-auth letter)
+  const [letters, setLetters]             = useState<PreAuthLetter[]>([])
+  const [lettersTotal, setLettersTotal]   = useState(0)
+  const [lettersLoading, setLettersLoading] = useState(false)
+  const [letterSearch, setLetterSearch]   = useState('')
+
+  // Embedded document viewer state
+  const [viewer, setViewer] = useState<{
+    open: boolean
+    ready: boolean
+    bytes: Uint8Array | null
+    url: string | null
+    filename: string
+    mimeType?: string
+    claimId?: string
+    barcode?: string
+    documentPages: DocPage[]
+    ocrFields: OcrFieldChip[]
+  } | null>(null)
+
   const isStaff    = ['admin', 'claims_officer', 'maker_checker'].includes(user?.role ?? '')
   const isProvider = ['provider_admin', 'provider_user'].includes(user?.role ?? '')
 
@@ -127,6 +179,71 @@ export default function PreAuth() {
   }, [statusFilter, memberSearch])
 
   useEffect(() => { load() }, [load])
+
+  // ── Pre-Auth Letters ──────────────────────────────────────────────────────────
+
+  const loadLetters = useCallback(async () => {
+    setLettersLoading(true)
+    try {
+      const params = new URLSearchParams()
+      if (letterSearch.trim()) params.set('search', letterSearch.trim())
+      const { data } = await api.get(`/pre-auth/letters?${params}`)
+      setLetters(data.items ?? [])
+      setLettersTotal(data.total ?? 0)
+    } catch {
+      toast.error('Failed to load pre-authorisation letters')
+    } finally {
+      setLettersLoading(false)
+    }
+  }, [letterSearch])
+
+  // Load letters the first time the tab is opened (and on demand via Refresh).
+  useEffect(() => {
+    if (activeTab === 'letters') loadLetters()
+  }, [activeTab, loadLetters])
+
+  // Open a claim's document packet in the full-screen viewer, with the page
+  // categorisation strip and OCR field chips, focused on the pre-auth letter.
+  async function openLetter(letter: PreAuthLetter) {
+    if (!letter.documentId) {
+      toast.error('No document is attached to this claim')
+      return
+    }
+    setViewer({
+      open: true, ready: false, bytes: null, url: null,
+      filename: letter.documentName ?? `${letter.claimNumber}.pdf`,
+      mimeType: letter.mimeType ?? undefined,
+      claimId: letter.claimId, barcode: letter.barcode,
+      documentPages: [], ocrFields: [],
+    })
+    try {
+      // Full page classification + OCR field chips for the whole packet.
+      const ocrPromise = api.get(`/claims/${letter.claimId}/ocr-fields`)
+        .then(({ data }) => data)
+        .catch(() => null)
+      // Document bytes (JWT-authenticated; pdfjs can't send our token itself).
+      const bytesPromise = api.get(`/documents/${letter.documentId}/preview`, { responseType: 'arraybuffer' })
+        .then(({ data }) => new Uint8Array(data))
+        .catch(() => null)
+
+      const [ocr, bytes] = await Promise.all([ocrPromise, bytesPromise])
+      if (!bytes) {
+        toast.error('Failed to load document')
+        setViewer(null)
+        return
+      }
+      setViewer(prev => prev && ({
+        ...prev,
+        ready: true,
+        bytes,
+        documentPages: ocr?.documentPages ?? [],
+        ocrFields: ocr?.fields ?? [],
+      }))
+    } catch {
+      toast.error('Failed to open document')
+      setViewer(null)
+    }
+  }
 
   // ── Review dialog ───────────────────────────────────────────────────────────
 
@@ -258,6 +375,10 @@ export default function PreAuth() {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="requests">Requests</TabsTrigger>
+          <TabsTrigger value="letters">
+            <FileText className="h-3.5 w-3.5 mr-1.5" />
+            Pre-Auth Letters
+          </TabsTrigger>
           <TabsTrigger value="new">New Request</TabsTrigger>
         </TabsList>
 
@@ -365,11 +486,121 @@ export default function PreAuth() {
           </Card>
         </TabsContent>
 
+        {/* ── Pre-Auth Letters tab ── */}
+        <TabsContent value="letters" className="mt-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex-1">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-amber-500" />
+                    Invoices with Pre-Authorisation Letters
+                  </CardTitle>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {lettersTotal} invoice{lettersTotal === 1 ? '' : 's'} whose uploaded documents were
+                    classified as containing a pre-auth / authorization letter.
+                  </p>
+                </div>
+                <Input
+                  className="h-8 w-52 text-xs"
+                  placeholder="Search claim / invoice / member"
+                  value={letterSearch}
+                  onChange={e => setLetterSearch(e.target.value)}
+                />
+                <Button variant="outline" size="sm" onClick={loadLetters} disabled={lettersLoading}>
+                  <RefreshCw className={`h-4 w-4 mr-1 ${lettersLoading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Claim #</TableHead>
+                    <TableHead>Provider</TableHead>
+                    <TableHead>Member</TableHead>
+                    <TableHead>Invoice #</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Letter Pages</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Document</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {lettersLoading && (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center text-gray-400 py-8">
+                        <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+                        Loading…
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {!lettersLoading && letters.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center text-gray-400 py-8">
+                        No invoices with pre-authorisation letters found
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {!lettersLoading && letters.map(l => (
+                    <TableRow key={l.claimId}>
+                      <TableCell className="font-mono text-xs font-medium">{l.claimNumber}</TableCell>
+                      <TableCell className="text-xs text-gray-600 max-w-[140px] truncate" title={l.providerName ?? l.providerId}>
+                        {l.providerName ?? l.providerId}
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm font-medium">{l.memberNumber ?? '—'}</div>
+                        {l.memberName && <div className="text-xs text-gray-500">{l.memberName}</div>}
+                      </TableCell>
+                      <TableCell className="text-xs">{l.invoiceNumber ?? '—'}</TableCell>
+                      <TableCell className="text-sm">{l.invoiceAmount != null ? fmtKES(l.invoiceAmount) : '—'}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {l.letterPages.map(p => (
+                            <Badge
+                              key={p.pageNumber}
+                              variant="outline"
+                              className="text-[10px] border-amber-300 bg-amber-50 text-amber-700"
+                              title={p.summary ?? p.categoryLabel}
+                            >
+                              p.{p.pageNumber}
+                              {p.confidence != null && ` · ${Math.round(p.confidence * 100)}%`}
+                            </Badge>
+                          ))}
+                        </div>
+                      </TableCell>
+                      <TableCell><StatusBadge status={l.status} /></TableCell>
+                      <TableCell>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          disabled={!l.documentId}
+                          onClick={() => openLetter(l)}
+                        >
+                          <Eye className="h-3.5 w-3.5 mr-1" />
+                          View Letter
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* ── New Request tab ── */}
         <TabsContent value="new" className="mt-4">
           <Card className="max-w-xl">
             <CardHeader>
               <CardTitle className="text-base">Submit New Pre-Authorisation Request</CardTitle>
+              <p className="text-xs text-gray-500 mt-1">
+                {isProvider
+                  ? 'Submitted under your facility. A claims officer will review and respond.'
+                  : 'Submitted on behalf of the member; the requesting provider is recorded from your account.'}
+              </p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -533,6 +764,23 @@ export default function PreAuth() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* ── Document viewer — full-screen portal with page categorisation strip ── */}
+      {viewer?.open && (
+        <DocumentViewer
+          key={viewer.claimId}
+          bytes={viewer.bytes}
+          url={viewer.url}
+          ready={viewer.ready}
+          filename={viewer.filename}
+          mimeType={viewer.mimeType}
+          claimId={viewer.claimId}
+          barcode={viewer.barcode}
+          ocrFields={viewer.ocrFields}
+          documentPages={viewer.documentPages}
+          onClose={() => setViewer(null)}
+        />
+      )}
     </div>
   )
 }

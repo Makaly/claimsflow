@@ -54,6 +54,7 @@ import LineItemsTable from '@/components/LineItemsTable'
 import InvoiceBillingAudit from '@/components/InvoiceBillingAudit'
 import AnomalyScoreBadge from '@/components/AnomalyScoreBadge'
 import { Pagination } from '@/components/Pagination'
+import { NpsTrigger } from '@/components/NpsTrigger'
 import {
   Annotation as UserAnnotation,
   loadSigImage,
@@ -2790,6 +2791,13 @@ export default function Claims() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Member experience survey — appears once when a finalised claim is open */}
+      <NpsTrigger
+        claimId={selectedClaim?.id}
+        status={selectedClaim?.status}
+        memberId={selectedClaim?.memberNumber}
+      />
     </div>
   )
 }

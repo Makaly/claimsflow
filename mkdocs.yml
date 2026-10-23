@@ -43,6 +43,8 @@ nav:
       - Overview: architecture/overview.md
       - SRD analysis: architecture/SRD_ANALYSIS_SUMMARY.md
       - SRD roadmap: architecture/SRD_IMPLEMENTATION_ROADMAP.md
+  - Features:
+      - Appeals workflow: appeals.md
   - Testing: testing.md
   - API reference: api.md
   - Security: security.md

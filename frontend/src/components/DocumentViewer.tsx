@@ -91,6 +91,10 @@ const THUMB_CAT_COLORS: Record<string, string> = {
   discharge_summary:'bg-cyan-500/80 text-white',
   referral:         'bg-indigo-500/80 text-white',
   pre_auth:         'bg-amber-500/80 text-white',
+  // Claude vision backend tags pre-auth letters as `authorization_letter`
+  // (Gemini uses `pre_auth`); both must render the same amber badge.
+  authorization_letter: 'bg-amber-500/80 text-white',
+  inpatient_invoice:    'bg-blue-500/80 text-white',
 }
 
 // Module-level sets that persist across React Strict Mode double-mounts.

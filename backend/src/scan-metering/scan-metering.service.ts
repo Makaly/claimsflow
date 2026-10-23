@@ -8,7 +8,7 @@ export interface RecordEventInput {
   userId: string;
   providerId: string | null;
   branchId: string | null;
-  deviceClass: 'desktop' | 'mobile' | 'camera';
+  deviceClass: 'desktop' | 'mobile' | 'camera' | 'web';
   os?: string | null;
   machineHostname?: string | null;
   userAgent?: string | null;
@@ -75,6 +75,7 @@ export class ScanMeteringService {
       providerName: r.provider.name,
       providerType: r.provider.type,
       enabled: r.enabled,
+      billingExempt: r.billingExempt,
       costPerScan: Number(r.costPerScan),
       currency: r.currency,
       updatedAt: r.updatedAt,
@@ -84,7 +85,7 @@ export class ScanMeteringService {
   async updateSettings(
     providerId: string,
     actor: { userId: string },
-    patch: { enabled?: boolean; costPerScan?: number; currency?: string },
+    patch: { enabled?: boolean; billingExempt?: boolean; costPerScan?: number; currency?: string },
   ) {
     const provider = await this.prisma.provider.findUnique({ where: { id: providerId } });
     if (!provider) throw new NotFoundException('Provider not found');
@@ -94,12 +95,14 @@ export class ScanMeteringService {
       create: {
         providerId,
         enabled: patch.enabled ?? true,
+        billingExempt: patch.billingExempt ?? false,
         costPerScan: patch.costPerScan ?? DEFAULT_COST,
         currency: patch.currency ?? DEFAULT_CURRENCY,
         updatedByUserId: actor.userId,
       },
       update: {
         ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
+        ...(patch.billingExempt !== undefined ? { billingExempt: patch.billingExempt } : {}),
         ...(patch.costPerScan !== undefined ? { costPerScan: patch.costPerScan } : {}),
         ...(patch.currency !== undefined ? { currency: patch.currency } : {}),
         updatedByUserId: actor.userId,
@@ -112,18 +115,24 @@ export class ScanMeteringService {
   /** Records a scan event. Stamps the cost from the *current* org settings,
    *  so future price changes don't retroactively alter historical charges. */
   async recordEvent(input: RecordEventInput) {
-    let costAtScan = 0;
+    const success = input.success ?? true;
+    let listCostAtScan = 0; // what it would cost at the standard rate
+    let costAtScan = 0; // what we actually bill (0 when exempt / failed)
     let currency = DEFAULT_CURRENCY;
 
     if (input.providerId) {
       const s = await this.getOrCreateSettings(input.providerId);
-      if (!s.enabled && (input.success ?? true)) {
+      if (!s.enabled && success) {
         // Defensive: a disabled provider should never have produced a success=true scan
         // — the controller's pre-check blocks that. But if a stale browser still posts
         // one, refuse to charge (and refuse to record as billable).
         throw new ForbiddenException('Scanning is disabled for your organization');
       }
-      costAtScan = (input.success ?? true) ? Number(s.costPerScan) : 0;
+      // Failed attempts never cost anything. Successful ones cost the list price,
+      // but billing-exempt providers are charged 0 while we still keep the list
+      // price on the row so the dashboard can surface the foregone (waived) amount.
+      listCostAtScan = success ? Number(s.costPerScan) : 0;
+      costAtScan = success && !s.billingExempt ? listCostAtScan : 0;
       currency = s.currency;
     }
 
@@ -141,8 +150,9 @@ export class ScanMeteringService {
         mode: input.mode ?? null,
         pages: input.pages ?? null,
         costAtScan,
+        listCostAtScan,
         currency,
-        success: input.success ?? true,
+        success,
         errorMessage: input.errorMessage ?? null,
       },
     });
@@ -166,17 +176,17 @@ export class ScanMeteringService {
     const [today, week, month, recent] = await Promise.all([
       this.prisma.scanEvent.aggregate({
         _count: { _all: true },
-        _sum: { costAtScan: true },
+        _sum: { costAtScan: true, listCostAtScan: true },
         where: where(startOfDay),
       }),
       this.prisma.scanEvent.aggregate({
         _count: { _all: true },
-        _sum: { costAtScan: true },
+        _sum: { costAtScan: true, listCostAtScan: true },
         where: where(startOfWeek),
       }),
       this.prisma.scanEvent.aggregate({
         _count: { _all: true },
-        _sum: { costAtScan: true },
+        _sum: { costAtScan: true, listCostAtScan: true },
         where: where(startOfMonth),
       }),
       this.prisma.scanEvent.findMany({
@@ -207,6 +217,7 @@ export class ScanMeteringService {
       providerName: string;
       scansThisMonth: number;
       chargesThisMonth: number;
+      foregoneThisMonth: number;
       currency: string;
     }> = [];
     if (!providerScope) {
@@ -214,7 +225,7 @@ export class ScanMeteringService {
         by: ['providerId', 'currency'],
         where: { createdAt: { gte: startOfMonth }, success: true, providerId: { not: null } },
         _count: { _all: true },
-        _sum: { costAtScan: true },
+        _sum: { costAtScan: true, listCostAtScan: true },
       });
       const ids = grouped.map((g) => g.providerId!).filter(Boolean);
       const providers = ids.length
@@ -224,20 +235,32 @@ export class ScanMeteringService {
           })
         : [];
       const nameById = new Map(providers.map((p) => [p.id, p.name]));
-      perProvider = grouped.map((g) => ({
-        providerId: g.providerId!,
-        providerName: nameById.get(g.providerId!) ?? 'Unknown',
-        scansThisMonth: g._count._all,
-        chargesThisMonth: Number(g._sum.costAtScan ?? 0),
-        currency: g.currency,
-      }));
+      perProvider = grouped.map((g) => {
+        const charges = Number(g._sum.costAtScan ?? 0);
+        const list = Number(g._sum.listCostAtScan ?? 0);
+        return {
+          providerId: g.providerId!,
+          providerName: nameById.get(g.providerId!) ?? 'Unknown',
+          scansThisMonth: g._count._all,
+          chargesThisMonth: charges,
+          // What we'd have billed at list rate but didn't (exempt orgs) — the loss.
+          foregoneThisMonth: Math.max(0, list - charges),
+          currency: g.currency,
+        };
+      });
       perProvider.sort((a, b) => b.chargesThisMonth - a.chargesThisMonth);
     }
 
-    const norm = (a: { _count: { _all: number }; _sum: { costAtScan: any } }) => ({
-      scans: a._count._all,
-      charges: Number(a._sum.costAtScan ?? 0),
-    });
+    const norm = (a: { _count: { _all: number }; _sum: { costAtScan: any; listCostAtScan: any } }) => {
+      const charges = Number(a._sum.costAtScan ?? 0);
+      const list = Number(a._sum.listCostAtScan ?? 0);
+      return {
+        scans: a._count._all,
+        charges,
+        // Revenue waived because the org is billing-exempt (list price - billed).
+        foregone: Math.max(0, list - charges),
+      };
+    };
 
     return {
       today: norm(today),
